@@ -1,0 +1,1048 @@
+diff --git a/.gitignore b/.gitignore
+index 4d3e1305d7f96c9b8e5842c71eab65b0ee7d36f5..9e57ce7298090f118765d2cc6a88a28ad6fb93bd 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,11 @@
+ CLAUDE.local.md
+ .env
+ node_modules/
++# Test fixtures that must mimic an installed package tree.
++!packages/cordis/cordis-fabric/tests/fixtures/node_modules/
++!packages/cordis/cordis-fabric/tests/fixtures/node_modules/**
++!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/
++!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/**
+ lib/
+ *.tsbuildinfo
+ pnpm-debug.log
+diff --git a/apps/cli/config/web.cordis.yml b/apps/cli/config/web.cordis.yml
+index daf597916ebe721303cdbf98b73b87bef24463a9..bab1333e2144cf8fc1bc215f4e35da5a3dcc35e4 100644
+--- a/apps/cli/config/web.cordis.yml
++++ b/apps/cli/config/web.cordis.yml
+@@ -179,3 +179,18 @@
+ 
+     - id: ui-trajectory
+       name: '@deepseek-ai/dsh-client-ui-trajectory'
++
++    # The browser Fabric runtime (bridge + ctx.fabric). Disabled by default:
++    # the Fabric/Mixin extension layer is opt-in, and enabling it mounts the
++    # FabricService in the browser Cordis tree so client plugins can register
++    # patches against other client plugins' build-time-transformed functions.
++    - id: cordis-fabric
++      name: '@deepseek-ai/dsh-cordis-fabric'
++      disabled: true
++
++    # The cooperative Fabric API client module (ctx.fabricClient). Disabled by
++    # default: the Fabric API library is opt-in, and enabling it mounts the
++    # browser command/slot facade for client Mods.
++    - id: cordis-fabric-api
++      name: '@deepseek-ai/dsh-cordis-fabric-api'
++      disabled: true
+diff --git a/apps/cli/package.json b/apps/cli/package.json
+index 4ba1da7e8651165250b8151ae3aed8d9366586a3..548a5d5639c54e4e9bdf7708d96b60c20365dd35 100644
+--- a/apps/cli/package.json
++++ b/apps/cli/package.json
+@@ -45,6 +45,8 @@
+     "@deepseek-ai/dsh-client-ui-subagent": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
++    "@deepseek-ai/dsh-cordis-fabric": "workspace:^",
++    "@deepseek-ai/dsh-cordis-fabric-api": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
+     "@deepseek-ai/dsh-code-runtime-worker": "workspace:^",
+     "@deepseek-ai/dsh-command-compact": "workspace:^",
+diff --git a/apps/cli/src/app-cli-entry.ts b/apps/cli/src/app-cli-entry.ts
+index 651dbca3f73c56f01881a5f448193c52f986adfe..58632a3768fb227e0582ef0f7fecc46abb725003 100644
+--- a/apps/cli/src/app-cli-entry.ts
++++ b/apps/cli/src/app-cli-entry.ts
+@@ -15,6 +15,7 @@ import { networkInterfaces } from 'node:os'
+ import { join, resolve } from 'node:path'
+ import { Context } from 'cordis'
+ import type { PatchOptions } from '@cordisjs/plugin-include'
++import type { FabricPatchStub } from '@deepseek-ai/dsh-cordis-fabric'
+ import yaml from 'js-yaml'
+ import {
+   boot,
+@@ -278,6 +279,7 @@ export class AppCLIEntry {
+     )
+     this.ctx = await boot('dsh', resolve(this.options.configPath), patches, async (ctx) => {
+       await this.options.prepare?.(ctx)
++      await installFabricBootstrap(patches)
+       // Config-only HMR for the personal overlay: module reload stays off for
+       // this surface (web.cordis.yml disables the shared `hmr` row until its
+       // reload lifecycle is tested), so this row watches no module roots.
+@@ -352,4 +354,28 @@ export class AppCLIEntry {
+       throw new Error('dsh: frontend dist not built; run pnpm run build from the repository root first')
+     }
+   }
++
++
++}
++/**
++ * Install the Fabric transformation hooks from the composed configuration.
++ *
++ * The optional `cordis-fabric` row may carry static patch descriptors under
++ * `config.patches` (id/target/operation — handlers are trusted code bound at
++ * registration). The hooks must exist before any target plugin module is
++ * imported, so this runs in `boot()`'s prepare phase, before the config tree
++ * mounts. The row's `disabled` flag governs mounting the plugin (the browser
++ * roster keeps the row disabled by default); it does not suppress the
++ * load-time bootstrap — patches from the composed row apply whenever the row
++ * carries them. When the row is absent or carries no patches, nothing is
++ * installed.
++ * @param patches - the fully composed patch list for this invocation.
++ */
++export async function installFabricBootstrap(patches: readonly PatchOptions[]): Promise<void> {
++  const fabricRow = patches.find(patch => patch.id === 'cordis-fabric')
++  const rowConfig = fabricRow?.config as { patches?: unknown } | undefined
++  const descriptors = rowConfig?.patches
++  if (!Array.isArray(descriptors) || descriptors.length === 0) return
++  const { bootstrapFabric } = await import('@deepseek-ai/dsh-cordis-fabric')
++  bootstrapFabric(descriptors as FabricPatchStub[])
+ }
+diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..65278aaceb3b452180e0ee794302c17e827954a3
+--- /dev/null
++++ b/apps/cli/tests/fabric-bootstrap.spec.ts
+@@ -0,0 +1,47 @@
++import { beforeEach, describe, expect, it } from 'vitest'
++import { installFabricBootstrap } from '../src/app-cli-entry.ts'
++import { GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/bridge.ts'
++
++const stub = {
++  id: 'launcher/before-add',
++  target: {
++    module: 'fabric-target-fixture',
++    versionRange: '^1.0.0',
++    filePath: 'index.mjs',
++    functionQuery: { functionName: 'add', kind: 'Sync' },
++  },
++  operation: 'before',
++}
++
++describe('installFabricBootstrap', () => {
++  beforeEach(() => {
++    Reflect.deleteProperty(globalThis, GLOBAL_BRIDGE_KEY)
++  })
++
++  it('installs the Fabric hooks when the cordis-fabric row carries patches', async () => {
++    await installFabricBootstrap([
++      { id: 'cordis-fabric', name: '@deepseek-ai/dsh-cordis-fabric', config: { patches: [stub] } },
++    ])
++    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toHaveProperty('publish')
++  })
++
++  it('installs nothing when the row is absent', async () => {
++    await installFabricBootstrap([{ id: 'other', name: '@deepseek-ai/dsh-other' }])
++    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toBeUndefined()
++  })
++
++  it('installs nothing when the row has no patches', async () => {
++    await installFabricBootstrap([{ id: 'cordis-fabric', name: '@deepseek-ai/dsh-cordis-fabric', disabled: true }])
++    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toBeUndefined()
++  })
++
++  it('fails loud on a malformed patch from configuration', async () => {
++    await expect(installFabricBootstrap([
++      {
++        id: 'cordis-fabric',
++        name: '@deepseek-ai/dsh-cordis-fabric',
++        config: { patches: [{ ...stub, target: { ...stub.target, module: '' } }] },
++      },
++    ])).rejects.toThrow(/module/)
++  })
++})
+diff --git a/apps/cli/tsconfig.json b/apps/cli/tsconfig.json
+index 44730e9f37bd67d9b9c437140161fda97db3bb6d..1ad162bc59d2833bf9487c98de1aaabd37f96229 100644
+--- a/apps/cli/tsconfig.json
++++ b/apps/cli/tsconfig.json
+@@ -32,6 +32,9 @@
+     {
+       "path": "../../packages/util/paths"
+     },
++    {
++      "path": "../../packages/cordis/cordis-fabric"
++    },
+     {
+       "path": "../../packages/session-query/session-query-sqlite"
+     },
+diff --git a/docs/capability-seams.md b/docs/capability-seams.md
+index cb24cee7d5843318cfb1860813361a0f8a3b8571..902fdf119cf4be609c67d6261ed51985517248ca 100644
+--- a/docs/capability-seams.md
++++ b/docs/capability-seams.md
+@@ -161,6 +161,14 @@ flowchart LR
+   pkg_modules["modules"]
+   pkg_hmr["hmr"]
+   svc_clientModuleHost["ctx.clientModuleHost<br/>Client plugin graph host"]
++  pkg_cordis_fabric["cordis-fabric"]
++  svc_fabric["ctx.fabric<br/>Fabric patch registry"]
++  pkg_cordis_fabric_api["cordis-fabric-api"]
++  svc_fabricAgent["ctx.fabricAgent<br/>Fabric Agent API"]
++  svc_fabricTools["ctx.fabricTools<br/>Fabric Tool API"]
++  svc_fabricPrompt["ctx.fabricPrompt<br/>Fabric Prompt API"]
++  svc_fabricCommands["ctx.fabricCommands<br/>Fabric Command API"]
++  svc_fabricClient["ctx.fabricClient<br/>Fabric Client API"]
+   pkg_workflow["workflow"]
+   svc_workflows["ctx.workflows<br/>Workflow script engine"]
+   pkg_workflow_workerthread["workflow-workerthread"]
+@@ -179,6 +187,12 @@ flowchart LR
+   pkg_compact --> svc_compact
+   pkg_compact_basic --> svc_compact
+   pkg_compact_tool_result_prune --> svc_toolResultPrune
++  pkg_cordis_fabric --> svc_fabric
++  pkg_cordis_fabric_api --> svc_fabricAgent
++  pkg_cordis_fabric_api --> svc_fabricClient
++  pkg_cordis_fabric_api --> svc_fabricCommands
++  pkg_cordis_fabric_api --> svc_fabricPrompt
++  pkg_cordis_fabric_api --> svc_fabricTools
+   pkg_credentials --> svc_credentials
+   pkg_credentials_local --> svc_credentials
+   pkg_directory_picker --> svc_directoryPicker
+@@ -395,6 +409,12 @@ flowchart LR
+ | `ctx.directoryPicker` | `seam` | `directory-picker` | `directory-picker-native`, `directory-picker-browse` | `apiproxy` | - | Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement). |
+ | `ctx.httpServer` | `core` | `webserver` | - | `connection`, `modules`, `hmr` | - | Plain node:http carrier: named-route registry, index transform taps, and the static dist fallback; web-transport plugins register their own routes. |
+ | `ctx.clientModuleHost` | `core` | `modules` | - | `hmr` | - | Composes the __DSH_BOOT__ entry graph from an incremental dshClient scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers. |
++| `ctx.fabric` | `core` | [`cordis-fabric`](../packages/cordis/cordis-fabric) | - | - | - | Load-time transformation layer: trusted patches register handlers against target module functions; transformed code publishes to a shared bridge the registry dispatches. |
++| `ctx.fabricAgent` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing agent lifecycle observation and logged context injection over the authoritative agent events. |
++| `ctx.fabricTools` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing tool registration and execution listeners over the authoritative tool registry. |
++| `ctx.fabricPrompt` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing system-prompt contributions over the authoritative prompt registry. |
++| `ctx.fabricCommands` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing human command registration over the authoritative command registry. |
++| `ctx.fabricClient` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing browser command and UI-slot registration over the authoritative client services. |
+ | `ctx.workflows` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-workerthread`](../packages/workflow/workflow-workerthread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | One engine per context (bash shape, no named-provider registry); the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents. |
+ 
+ Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.
+diff --git a/docs/config-catalog.md b/docs/config-catalog.md
+index b381d1e3da2fcc912c82c28327ba5f5a187f0fd7..2b5967f6270f6b12ec6a8773eac0910e681b685a 100644
+--- a/docs/config-catalog.md
++++ b/docs/config-catalog.md
+@@ -2346,6 +2346,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
+ - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compact` ([`packages/compact/command-compact/src/index.ts`](../packages/compact/command-compact/src/index.ts))
+ - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
+ - `@deepseek-ai/dsh-commands` ([`packages/ui/commands/src/index.ts`](../packages/ui/commands/src/index.ts))
++- `@deepseek-ai/dsh-cordis-fabric-api` — requires `tools` · `systemPrompt` · `commands` ([`packages/cordis/cordis-fabric-api/src/index.ts`](../packages/cordis/cordis-fabric-api/src/index.ts))
+ - `@deepseek-ai/dsh-fs-policy` ([`packages/fs/fs-policy/src/index.ts`](../packages/fs/fs-policy/src/index.ts))
+ - `@deepseek-ai/dsh-goal-session` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-session/src/index.ts`](../packages/goal/goal-session/src/index.ts))
+ - `@deepseek-ai/dsh-host-directory-picker-auto` — requires `httpServer` · `loader` ([`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts))
+@@ -2403,6 +2404,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
+ - `@deepseek-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))
+ - `@deepseek-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
+ - `@deepseek-ai/dsh-client-web-react` ([`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts))
++- `@deepseek-ai/dsh-cordis-fabric` ([`packages/cordis/cordis-fabric/src/index.ts`](../packages/cordis/cordis-fabric/src/index.ts))
+ - `@deepseek-ai/dsh-helper` ([`packages/sdk/helper/src/index.ts`](../packages/sdk/helper/src/index.ts))
+ - `@deepseek-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))
+ - `@deepseek-ai/dsh-jsonrpc-demo` ([`packages/examples/jsonrpc-demo/src/index.ts`](../packages/examples/jsonrpc-demo/src/index.ts))
+diff --git a/docs/cordis-catalog/services.md b/docs/cordis-catalog/services.md
+index 36446f39c31315a8f5bf9ea74d131dd058e26189..75ff946e39b78563880f8ed4653bd4bc32012bec 100644
+--- a/docs/cordis-catalog/services.md
++++ b/docs/cordis-catalog/services.md
+@@ -568,6 +568,224 @@ abstract capability(): DirectoryPickerCapability
+ 
+ Source: [`packages/host/directory-picker/src/index.ts:131`](../../packages/host/directory-picker/src/index.ts)
+ 
++## `ctx.fabric` — `FabricService`
++
++The Fabric registry service. Keeps patch metadata and handler state in the process-local runtime and ties every registration to the owning fiber's lifecycle.
++
++```ts cordis-catalog
++/**
++ * Register a patch and enable its handler for the current fiber.
++ *
++ * The registration is an effect: disposing the fiber disables and removes
++ * the patch, so transformed code falls back to the original body. The
++ * effect attaches on the first registration of an id only; a later
++ * re-registration from another fiber updates metadata and handler without
++ * changing disposal ownership.
++ * @param patch - validated patch descriptor.
++ * @returns the registered patch id.
++ */
++register(patch: FabricPatch): PatchId
++
++/**
++ * Ordered diagnostic snapshot of all registered patches.
++ * @returns the patch infos sorted by priority then id.
++ */
++list(): FabricPatchInfo[]
++
++/**
++ * Disable a patch's handler; transformed code delegates to the original
++ * body until the patch is enabled again.
++ * @param id - the patch id.
++ */
++disable(id: string): void
++
++/**
++ * Enable a previously disabled patch with a fresh handler binding.
++ * @param id - the patch id.
++ * @param handler - the trusted runtime handler.
++ */
++enable(id: string, handler: FabricHandler): void
++```
++
++Source: [`packages/cordis/cordis-fabric/src/service.ts:32`](../../packages/cordis/cordis-fabric/src/service.ts)
++
++## `ctx.fabricAgent` — `FabricAgentService`
++
++Cooperative Mod-facing Agent lifecycle API.
++
++The service is thin by design: it selects a stable subset of the authoritative agent events and the logged injection path, and passes the underlying disposer through untouched. A listener or injected message is owned by the calling fiber and removed with it.
++
++```ts cordis-catalog
++/**
++ * Observe a live agent being created.
++ * @param listener - called with the created agent.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onCreated(listener: (agent: Agent) => void): () => boolean
++
++/**
++ * Observe a live agent being disposed.
++ * @param listener - called with the disposed agent.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onDisposed(listener: (agent: Agent) => void): () => boolean
++
++/**
++ * Observe an agent's idle/running status transitions.
++ * @param listener - called with the agent and its new status.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean
++
++/**
++ * Observe a turn settling (completed, aborted, disposed, or failed).
++ * @param listener - called with the agent, the settled turn, and the reason.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onSettled(listener: (agent: Agent, turn: number, reason: SettleReason) => void): () => boolean
++
++/**
++ * Inject a logged, model-visible user message into one agent's context.
++ *
++ * The message goes through `agent.inject()`, the Agent's own durable
++ * injection path: anything this API contributes to a model request is
++ * reconstructable from the session log. No provider request is assembled
++ * here.
++ * @param agent - the live agent to inject into.
++ * @param message - the sourced user message to append.
++ */
++inject(agent: Agent, message: UserMessage): void
++```
++
++Types: [Agent](../core-data-structures/core.md) · [AgentStatus](../core-data-structures/core.md) · [SettleReason](../core-data-structures/core.md) · [UserMessage](../core-data-structures/session.md)
++
++Source: [`packages/cordis/cordis-fabric-api/src/agent.ts:34`](../../packages/cordis/cordis-fabric-api/src/agent.ts)
++
++## `ctx.fabricClient` — `FabricClientService`
++
++Cooperative Mod-facing browser API.
++
++Every registration returns the exact disposer of the underlying service and keeps its conflict and disposal semantics. The service never stores a parallel copy of command or slot state.
++
++```ts cordis-catalog
++/**
++ * Register one client command contribution.
++ * @param contribution - slash-menu entry whose behavior lives entirely on the client.
++ * @returns the exact effect disposer that unregisters it.
++ */
++registerCommand(contribution: CommandContribution): () => void
++
++/**
++ * Contribute a component to a declared slot and optionally declare child slots.
++ * @param options - the narrow registration face (see {@link FabricSlotOptions}).
++ * @param component - component honoring the composed-props contract of the declared slot.
++ * @returns the disposer removing the registration and its declarations.
++ */
++registerSlot(options: FabricSlotOptions, component: unknown): () => void
++```
++
++Source: [`packages/cordis/cordis-fabric-api/src/client/index.ts:68`](../../packages/cordis/cordis-fabric-api/src/client/index.ts)
++
++## `ctx.fabricCommands` — `FabricCommandsService`
++
++Cooperative Mod-facing command registry API.
++
++Registrations return the exact effect disposer of the owning registry and keep its conflict and disposal semantics. The service never stores a parallel copy of command state.
++
++```ts cordis-catalog
++/**
++ * Register one human command through the authoritative registry.
++ * @param definition - discovery metadata and direct UI handler.
++ * @returns the exact effect disposer that unregisters this definition.
++ */
++register(definition: CommandDefinition): () => void
++
++/**
++ * List the effective immutable command descriptors for one agent.
++ * @param agent - exact receiving agent and scoped-layer key.
++ * @returns name-sorted descriptors after scoped shadowing.
++ */
++list(agent: Agent): readonly CommandDescriptor[]
++```
++
++Types: [Agent](../core-data-structures/core.md) · [CommandDefinition](../core-data-structures/commands.md) · [CommandDescriptor](../core-data-structures/commands.md)
++
++Source: [`packages/cordis/cordis-fabric-api/src/commands.ts:31`](../../packages/cordis/cordis-fabric-api/src/commands.ts)
++
++## `ctx.fabricPrompt` — `FabricPromptService`
++
++Cooperative Mod-facing system-prompt registry API.
++
++Each method registers in the calling context's scope through the owning registry, so duplicate names, ordering, shadowing, and disposal follow the authoritative contract. The service never holds a parallel copy of prompt state.
++
++```ts cordis-catalog
++/**
++ * Register an ordered system section.
++ * @param section - the section to register.
++ * @returns the exact effect disposer that unregisters it.
++ */
++section(section: PromptSection): () => void
++
++/**
++ * Register an ordered, cache-safe dynamic context contribution.
++ * @param context - the context contribution to register.
++ * @returns the exact effect disposer that unregisters it.
++ */
++context(context: PromptContext): () => void
++
++/**
++ * Register a tool-schema provider.
++ * @param provider - evaluated for each assembly with its context.
++ * @returns the exact effect disposer that unregisters it.
++ */
++tools(provider: (context: AssembleContext) => ToolProviderResult): () => void
++
++/**
++ * Register a prompt variable.
++ * @param name - the `[a-z][a-z0-9_]*` reference name.
++ * @param provider - evaluated for each assembly; returning `undefined` makes a referencing section fail.
++ * @returns the exact effect disposer that unregisters it.
++ */
++variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void
++```
++
++Types: [AssembleContext](../core-data-structures/system-prompt.md) · [PromptContext](../core-data-structures/system-prompt.md) · [PromptSection](../core-data-structures/system-prompt.md) · [ToolProviderResult](../core-data-structures/system-prompt.md)
++
++Source: [`packages/cordis/cordis-fabric-api/src/prompt.ts:38`](../../packages/cordis/cordis-fabric-api/src/prompt.ts)
++
++## `ctx.fabricTools` — `FabricToolsService`
++
++Cooperative Mod-facing tool registry API.
++
++Every registration returns the exact disposer of the underlying registry or `ctx.on()` effect and keeps the authoritative owner's ordering, cancellation, and disposal semantics. The service never stores a parallel copy of tool state.
++
++```ts cordis-catalog
++/**
++ * Register one tool through the authoritative registry.
++ * @param definition - tool schema, execution, and optional finalization/presentation callbacks.
++ * @returns the exact disposer that unregisters the tool.
++ */
++register(definition: ToolDefinition): () => void
++
++/**
++ * Observe or gate dispatch through `tools/pre-execute`.
++ * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onPreExecute(listener: (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>): () => boolean
++
++/**
++ * Observe or shape a normalized dispatch outcome through `tools/post-execute`.
++ * @param listener - the waterfall listener; call `next()` to accept the result unchanged.
++ * @returns the exact `ctx.on()` disposer removing this listener.
++ */
++onPostExecute( listener: ( exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>, ) => Promise<PostToolDecision>, ): () => boolean
++```
++
++Types: [PostToolDecision](../core-data-structures/tools.md) · [PreToolDecision](../core-data-structures/tools.md) · [ToolDefinition](../core-data-structures/tools.md) · [ToolExecution](../core-data-structures/tools.md) · [ToolExecutionResult](../core-data-structures/tools.md)
++
++Source: [`packages/cordis/cordis-fabric-api/src/tools.ts:40`](../../packages/cordis/cordis-fabric-api/src/tools.ts)
++
+ ## `ctx.fs` — `FileSystem` (abstract seam)
+ 
+ Abstract filesystem provider. Targets must preserve identity across aliases; reads expose regular UTF-8 text or typed errors, listings are stable and content-free, and mutations are atomic. Optional guards add stale protection without changing the unguarded provider contract.
+diff --git a/docs/event-producer-consumer.md b/docs/event-producer-consumer.md
+index cd53931df378ea24f5bdcf85f07ca1fa0128bc42..fb371d14fb8319f13760565c69be304accaa7e94 100644
+--- a/docs/event-producer-consumer.md
++++ b/docs/event-producer-consumer.md
+@@ -9,8 +9,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | --- | --- | --- | --- | --- |
+ | `agent-loop/config-start-failed` | `emit` | [`packages/core/agent-loop/src/index.ts:158`](../packages/core/agent-loop/src/index.ts) | [`agent-loop`](../packages/core/agent-loop) (`events.dispatch`) | - |
+ | `agent/cancel-requested` | `emit` | [`packages/core/agent/src/types.ts:353`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`goal-session`](../packages/goal/goal-session) |
+-| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:284`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`goal-session`](../packages/goal/goal-session) |
+-| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:293`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
++| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:284`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session) |
++| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:293`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
+ | `agent/error` | `emit` | [`packages/core/agent/src/types.ts:467`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | `apiproxy`, [`goal-session`](../packages/goal/goal-session), [`session-telemetry`](../packages/telemetry/session-telemetry) |
+ | `agent/inbox/dequeue` | `emit` | [`packages/core/agent/src/types.ts:331`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`subagent`](../packages/subagent/subagent) |
+ | `agent/inbox/discard` | `emit` | [`packages/core/agent/src/types.ts:343`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`subagent`](../packages/subagent/subagent) |
+@@ -20,8 +20,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | `agent/request` | `waterfall` | [`packages/core/agent/src/types.ts:406`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`agent`](../packages/core/agent) |
+ | `agent/request-error` | `waterfall` | [`packages/core/agent/src/types.ts:425`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`compact-basic`](../packages/compact/compact-basic), [`llm-retry`](../packages/llm/llm-retry) |
+ | `agent/session-start` | `emit` | [`packages/core/agent/src/types.ts:366`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`goal`](../packages/goal/goal), [`goal-session`](../packages/goal/goal-session), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`workspace-context`](../packages/context/workspace-context) |
+-| `agent/settled` | `emit` | [`packages/core/agent/src/types.ts:454`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`compact-basic`](../packages/compact/compact-basic) |
+-| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:302`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`goal-session`](../packages/goal/goal-session) |
++| `agent/settled` | `emit` | [`packages/core/agent/src/types.ts:454`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`compact-basic`](../packages/compact/compact-basic), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) |
++| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:302`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session) |
+ | `agent/step` | `serial` | [`packages/core/agent/src/types.ts:393`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`compact-basic`](../packages/compact/compact-basic), [`plan-mode`](../packages/plan/plan-mode), [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`time-context`](../packages/context/time-context), [`tmux-context`](../packages/context/tmux-context), [`tool-skill`](../packages/skill/tool-skill), [`workspace-context`](../packages/context/workspace-context) |
+ | `agent/turn-stopping` | `serial` | [`packages/core/agent/src/types.ts:440`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex) |
+ | `approval/request` | `waterfall` | [`packages/ui/user-approval/src/index.ts:30`](../packages/ui/user-approval/src/index.ts) | [`user-approval`](../packages/ui/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `apiproxy` |
+@@ -51,8 +51,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | `tools/change` | `emit` | [`packages/core/tools/src/index.ts:167`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`emit`) | - |
+ | `tools/code-dispatch-log` | `waterfall` | [`packages/core/tools/src/index.ts:149`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`spill-policy`](../packages/spill/spill-policy) |
+ | `tools/execute` | `waterfall` | [`packages/core/tools/src/index.ts:124`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`timeout-policy`](../packages/timeout/timeout-policy) |
+-| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search), [`workspace-context`](../packages/context/workspace-context) |
+-| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
++| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search), [`workspace-context`](../packages/context/workspace-context) |
++| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
+ | `tools/result` | `emit` | [`packages/core/tools/src/index.ts:157`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`events.dispatch`) | [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`workspace-context`](../packages/context/workspace-context) |
+ | `workflow/agent-end` | `emit` | [`packages/workflow/workflow/src/index.ts:81`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
+ | `workflow/agent-start` | `emit` | [`packages/workflow/workflow/src/index.ts:70`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
+diff --git a/docs/module-graph.md b/docs/module-graph.md
+index aae611eff5d20f5448cb2fb9bb0ae784fabb85ea..eacbc4501a8464fe9a5ef789b9e3c747d8190203 100644
+--- a/docs/module-graph.md
++++ b/docs/module-graph.md
+@@ -99,6 +99,7 @@ flowchart TD
+     pkg_plan_mode["plan-mode"]
+   end
+   subgraph group_cordis["packages/cordis"]
++    pkg_cordis_fabric["cordis-fabric"]
+     pkg_repository_plugin["repository-plugin"]
+     pkg_tool_cordis["tool-cordis"]
+   end
+@@ -281,6 +282,7 @@ flowchart TD
+   pkg_timeout --> pkg_invariants
+   pkg_scope --> pkg_invariants
+   pkg_skill --> pkg_invariants
++  pkg_cordis_fabric --> pkg_invariants
+   pkg_acp_snapshot --> pkg_invariants
+   pkg_llm_mock_server --> pkg_invariants
+   pkg_loader_smoke --> pkg_invariants
+@@ -1084,6 +1086,7 @@ flowchart TD
+ | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
+ | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |
+ | [`skill`](../packages/skill/skill) | `skill` | [`invariants`](../packages/support/invariants) |
++| [`cordis-fabric`](../packages/cordis/cordis-fabric) | `cordis` | [`invariants`](../packages/support/invariants) |
+ | [`acp-snapshot`](../packages/support/acp-snapshot) | `support` | [`invariants`](../packages/support/invariants) |
+ | [`llm-mock-server`](../packages/support/llm-mock-server) | `support` | [`invariants`](../packages/support/invariants) |
+ | [`loader-smoke`](../packages/support/loader-smoke) | `support` | [`invariants`](../packages/support/invariants) |
+diff --git a/knip.json b/knip.json
+index 22e2b09fdb58b1dd46779dc01823ffd53748415d..5e966b234f4f64b389f4c486f8185493d5fb46dc 100644
+--- a/knip.json
++++ b/knip.json
+@@ -168,6 +168,32 @@
+         "tests/**/*.ts"
+       ]
+     },
++    "packages/cordis/cordis-fabric": {
++      "entry": [
++        "tests/**/*.spec.ts"
++      ],
++      "project": [
++        "src/**/*.ts",
++        "tests/**/*.ts"
++      ],
++      "ignoreDependencies": [
++        "fabric-target-fixture"
++      ]
++    },
++    "packages/cordis/cordis-fabric-api": {
++      "entry": [
++        "tests/**/*.spec.ts"
++      ],
++      "project": [
++        "src/**/*.ts",
++        "tests/**/*.ts"
++      ],
++      "ignoreDependencies": [
++        "fabric-api-fixture-mod",
++        "fabric-client-fixture-mod",
++        "fabric-compat-target"
++      ]
++    },
+     "packages/core/tools": {
+       "entry": [
+         "tests/**/*.spec.ts"
+diff --git a/package.json b/package.json
+index 905c39f33b7e195745553c7cb9607ec9642b6b03..848729377d48cda96a58a7b1c80ad018553d3583 100644
+--- a/package.json
++++ b/package.json
+@@ -152,6 +152,7 @@
+     "tsdown": "^0.22.2",
+     "tsx": "^4.22.4",
+     "typescript": "^6.0.3",
++    "unrun": "^0.3.1",
+     "vite-tsconfig-paths": "^6.1.1",
+     "vitest": "^4.1.8"
+   }
+diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
+index aa7110f86bdc158c88e139123295371ff925f59d..490eaddb37d100ec71cff78aa8c35fd661178e35 100644
+--- a/packages/client/tsdown.client.ts
++++ b/packages/client/tsdown.client.ts
+@@ -56,6 +56,18 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
+   return repositoryPath.startsWith('packages/') ? `../../../${repositoryPath}` : source
+ }
+ 
++/**
++ * Optional build hooks a UI plugin package may pass to {@link clientBundle}.
++ */
++export interface ClientBundleOptions {
++  /**
++   * Source transform applied to every bundled module (e.g. the Fabric
++   * browser transform). Returns rewritten source, or `null` to leave the
++   * module untouched.
++   */
++  transform?: (code: string, id: string) => { code: string; map?: string } | null
++}
++
+ /**
+  * Build the tsdown config for one UI plugin package: the node-half lib build
+  * plus the browser client bundle. A package-level tsdown.config.ts REPLACES
+@@ -67,9 +79,10 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
+  * @param libEntry - node-half entries, spelled at the call site so the
+  * package-invariants gate can see `lib/types/invariant.js` in each package's
+  * own tsdown.config.ts (a preset-side glob hides it from the mechanical check).
++ * @param options - optional build hooks (see {@link ClientBundleOptions}).
+  * @returns tsdown user configs emitting lib/*.js and lib/client.js.
+  */
+-export function clientBundle(id: string, libEntry: readonly string[]): [UserConfig, UserConfig] {
++export function clientBundle(id: string, libEntry: readonly string[], options: ClientBundleOptions = {}): [UserConfig, UserConfig] {
+   return [{
+     entry: [...libEntry],
+     outDir: 'lib',
+@@ -167,7 +180,20 @@ export function clientBundle(id: string, libEntry: readonly string[]): [UserConf
+           `export default ${JSON.stringify(classMap)};`,
+         ].join('\n')
+       },
+-    }],
++    }, ...(options.transform
++      ? [{
++        // Opt-in source transform (e.g. the Fabric browser transform):
++        // rewrites matching modules before bundling. The filter keeps the
++        // hook off non-source ids; the handler delegates to the caller.
++        name: 'dsh-client-source-transform',
++        transform: {
++          filter: { id: /\.(?:[cm]?js|mjs|ts|tsx)$/ },
++          handler(code: string, id: string) {
++            return options.transform!(code, id) ?? null
++          },
++        },
++      }]
++      : [])],
+     outputOptions: {
+       entryFileNames: 'client.js',
+       // The map is served from /plugins/<scoped-package>/client.js.map. The
+diff --git a/packages/cordis/README.i18n.yaml b/packages/cordis/README.i18n.yaml
+index 2eacddb52c5dd06a293657f70acc7d696d8c085a..73064b5ece35be7c484a3b6110396c23109b285e 100644
+--- a/packages/cordis/README.i18n.yaml
++++ b/packages/cordis/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/cordis/README.md
+-README.md: e8b0790f911d1acc1216d412191ca967e0e1ac27
+-README.zh.md: c452f9a7ef69e7f5af8900153271d500f19f9e47
++README.md: 454dfbacfa426c761ee3d728eda62d2c895c78c9
++README.zh.md: 459160c222ed3ab63328b74967554e6a19255d63
+diff --git a/packages/cordis/README.md b/packages/cordis/README.md
+index e8b0790f911d1acc1216d412191ca967e0e1ac27..454dfbacfa426c761ee3d728eda62d2c895c78c9 100644
+--- a/packages/cordis/README.md
++++ b/packages/cordis/README.md
+@@ -8,3 +8,5 @@ Plugins that integrate Harness-owned formats with the Cordis runtime: the self-r
+ |---|---|---|
+ | [`tool-cordis/`](tool-cordis/README.md) | Model-facing runtime inspection and temporary-plugin tools | registers on `ctx.tools` |
+ | [`repository-plugin/`](repository-plugin/README.md) | Repository skill and MCP composition | registers a Loader builtin |
++| [`cordis-fabric/`](cordis-fabric/README.md) | Fabric/Mixin-style load-time transformation and patch registry | registers `ctx.fabric` |
++| [`cordis-fabric-api/`](cordis-fabric-api/README.md) | Cooperative Mod-facing Fabric API modules | registers `ctx.fabricAgent`, `ctx.fabricTools`, `ctx.fabricPrompt`, `ctx.fabricCommands`, and (web) `ctx.fabricClient` |
+diff --git a/packages/cordis/README.zh.md b/packages/cordis/README.zh.md
+index c452f9a7ef69e7f5af8900153271d500f19f9e47..459160c222ed3ab63328b74967554e6a19255d63 100644
+--- a/packages/cordis/README.zh.md
++++ b/packages/cordis/README.zh.md
+@@ -8,3 +8,5 @@
+ |---|---|---|
+ | [`tool-cordis/`](tool-cordis/README.md) | 面向模型的运行时检查和临时插件工具 | 注册到 `ctx.tools` |
+ | [`repository-plugin/`](repository-plugin/README.md) | repository skill 与 MCP 组合 | 注册一个 Loader builtin |
++| [`cordis-fabric/`](cordis-fabric/README.md) | Fabric/Mixin 风格的加载期变换与 patch registry | 注册 `ctx.fabric` |
++| [`cordis-fabric-api/`](cordis-fabric-api/README.md) | 协作式、面向 Mod 的 Fabric API 模块 | 注册 `ctx.fabricAgent`、`ctx.fabricTools`、`ctx.fabricPrompt`、`ctx.fabricCommands`，以及（web）`ctx.fabricClient` |
+diff --git a/packages/cordis/tool-cordis/src/api-catalog.ts b/packages/cordis/tool-cordis/src/api-catalog.ts
+index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e63651661 100644
+--- a/packages/cordis/tool-cordis/src/api-catalog.ts
++++ b/packages/cordis/tool-cordis/src/api-catalog.ts
+@@ -300,6 +300,122 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+       },
+     ],
+   },
++  {
++    key: 'fabric',
++    summary: 'The Fabric registry service.',
++    methods: [
++      {
++        signature: 'register(patch: FabricPatch): PatchId',
++        jsDoc: '/**\n * Register a patch and enable its handler for the current fiber.\n *\n * The registration is an effect: disposing the fiber disables and removes\n * the patch, so transformed code falls back to the original body. The\n * effect attaches on the first registration of an id only; a later\n * re-registration from another fiber updates metadata and handler without\n * changing disposal ownership.\n * @param patch - validated patch descriptor.\n * @returns the registered patch id.\n */',
++      },
++      {
++        signature: 'list(): FabricPatchInfo[]',
++        jsDoc: '/**\n * Ordered diagnostic snapshot of all registered patches.\n * @returns the patch infos sorted by priority then id.\n */',
++      },
++      {
++        signature: 'disable(id: string): void',
++        jsDoc: '/**\n * Disable a patch\'s handler; transformed code delegates to the original\n * body until the patch is enabled again.\n * @param id - the patch id.\n */',
++      },
++      {
++        signature: 'enable(id: string, handler: FabricHandler): void',
++        jsDoc: '/**\n * Enable a previously disabled patch with a fresh handler binding.\n * @param id - the patch id.\n * @param handler - the trusted runtime handler.\n */',
++      },
++    ],
++  },
++  {
++    key: 'fabricAgent',
++    summary: 'Cooperative Mod-facing Agent lifecycle API.',
++    methods: [
++      {
++        signature: 'onCreated(listener: (agent: Agent) => void): () => boolean',
++        jsDoc: '/**\n * Observe a live agent being created.\n * @param listener - called with the created agent.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++      {
++        signature: 'onDisposed(listener: (agent: Agent) => void): () => boolean',
++        jsDoc: '/**\n * Observe a live agent being disposed.\n * @param listener - called with the disposed agent.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++      {
++        signature: 'onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean',
++        jsDoc: '/**\n * Observe an agent\'s idle/running status transitions.\n * @param listener - called with the agent and its new status.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++      {
++        signature: 'onSettled(listener: (agent: Agent, turn: number, reason: SettleReason) => void): () => boolean',
++        jsDoc: '/**\n * Observe a turn settling (completed, aborted, disposed, or failed).\n * @param listener - called with the agent, the settled turn, and the reason.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++      {
++        signature: 'inject(agent: Agent, message: UserMessage): void',
++        jsDoc: '/**\n * Inject a logged, model-visible user message into one agent\'s context.\n *\n * The message goes through `agent.inject()`, the Agent\'s own durable\n * injection path: anything this API contributes to a model request is\n * reconstructable from the session log. No provider request is assembled\n * here.\n * @param agent - the live agent to inject into.\n * @param message - the sourced user message to append.\n */',
++      },
++    ],
++  },
++  {
++    key: 'fabricClient',
++    summary: 'Cooperative Mod-facing browser API.',
++    methods: [
++      {
++        signature: 'registerCommand(contribution: CommandContribution): () => void',
++        jsDoc: '/**\n * Register one client command contribution.\n * @param contribution - slash-menu entry whose behavior lives entirely on the client.\n * @returns the exact effect disposer that unregisters it.\n */',
++      },
++      {
++        signature: 'registerSlot(options: FabricSlotOptions, component: unknown): () => void',
++        jsDoc: '/**\n * Contribute a component to a declared slot and optionally declare child slots.\n * @param options - the narrow registration face (see {@link FabricSlotOptions}).\n * @param component - component honoring the composed-props contract of the declared slot.\n * @returns the disposer removing the registration and its declarations.\n */',
++      },
++    ],
++  },
++  {
++    key: 'fabricCommands',
++    summary: 'Cooperative Mod-facing command registry API.',
++    methods: [
++      {
++        signature: 'register(definition: CommandDefinition): () => void',
++        jsDoc: '/**\n * Register one human command through the authoritative registry.\n * @param definition - discovery metadata and direct UI handler.\n * @returns the exact effect disposer that unregisters this definition.\n */',
++      },
++      {
++        signature: 'list(agent: Agent): readonly CommandDescriptor[]',
++        jsDoc: '/**\n * List the effective immutable command descriptors for one agent.\n * @param agent - exact receiving agent and scoped-layer key.\n * @returns name-sorted descriptors after scoped shadowing.\n */',
++      },
++    ],
++  },
++  {
++    key: 'fabricPrompt',
++    summary: 'Cooperative Mod-facing system-prompt registry API.',
++    methods: [
++      {
++        signature: 'section(section: PromptSection): () => void',
++        jsDoc: '/**\n * Register an ordered system section.\n * @param section - the section to register.\n * @returns the exact effect disposer that unregisters it.\n */',
++      },
++      {
++        signature: 'context(context: PromptContext): () => void',
++        jsDoc: '/**\n * Register an ordered, cache-safe dynamic context contribution.\n * @param context - the context contribution to register.\n * @returns the exact effect disposer that unregisters it.\n */',
++      },
++      {
++        signature: 'tools(provider: (context: AssembleContext) => ToolProviderResult): () => void',
++        jsDoc: '/**\n * Register a tool-schema provider.\n * @param provider - evaluated for each assembly with its context.\n * @returns the exact effect disposer that unregisters it.\n */',
++      },
++      {
++        signature: 'variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void',
++        jsDoc: '/**\n * Register a prompt variable.\n * @param name - the `[a-z][a-z0-9_]*` reference name.\n * @param provider - evaluated for each assembly; returning `undefined` makes a referencing section fail.\n * @returns the exact effect disposer that unregisters it.\n */',
++      },
++    ],
++  },
++  {
++    key: 'fabricTools',
++    summary: 'Cooperative Mod-facing tool registry API.',
++    methods: [
++      {
++        signature: 'register(definition: ToolDefinition): () => void',
++        jsDoc: '/**\n * Register one tool through the authoritative registry.\n * @param definition - tool schema, execution, and optional finalization/presentation callbacks.\n * @returns the exact disposer that unregisters the tool.\n */',
++      },
++      {
++        signature: 'onPreExecute(listener: (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>): () => boolean',
++        jsDoc: '/**\n * Observe or gate dispatch through `tools/pre-execute`.\n * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++      {
++        signature: 'onPostExecute( listener: ( exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>, ) => Promise<PostToolDecision>, ): () => boolean',
++        jsDoc: '/**\n * Observe or shape a normalized dispatch outcome through `tools/post-execute`.\n * @param listener - the waterfall listener; call `next()` to accept the result unchanged.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++      },
++    ],
++  },
+   {
+     key: 'fs',
+     summary: 'Abstract filesystem provider.',
+@@ -1933,6 +2049,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'EpochHeader',
+     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
+   },
++  {
++    name: 'FabricAfterHandler',
++    declaration: 'export type FabricAfterHandler = (call: FabricCall) => unknown;',
++  },
++  {
++    name: 'FabricAroundHandler',
++    declaration: 'export type FabricAroundHandler = (call: FabricCall, invoke: FabricInvoke) => unknown;',
++  },
++  {
++    name: 'FabricBeforeHandler',
++    declaration: 'export type FabricBeforeHandler = (call: FabricCall) => void;',
++  },
++  {
++    name: 'FabricCall',
++    declaration: 'export interface FabricCall {\n    arguments: unknown[];\n    self: unknown;\n    moduleVersion?: string;\n    result?: unknown;\n}',
++  },
++  {
++    name: 'FabricHandler',
++    declaration: 'export type FabricHandler = FabricBeforeHandler | FabricAfterHandler | FabricAroundHandler | FabricReplaceHandler;',
++  },
++  {
++    name: 'FabricInvoke',
++    declaration: 'export type FabricInvoke = () => unknown;',
++  },
++  {
++    name: 'FabricOperation',
++    declaration: 'export type FabricOperation = \'before\' | \'after\' | \'around\' | \'replace\';',
++  },
++  {
++    name: 'FabricPatch',
++    declaration: 'export interface FabricPatch {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    priority?: number;\n    handler: FabricHandler;\n}',
++  },
++  {
++    name: 'FabricPatchInfo',
++    declaration: 'export interface FabricPatchInfo {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    priority: number;\n    enabled: boolean;\n}',
++  },
++  {
++    name: 'FabricReplaceHandler',
++    declaration: 'export type FabricReplaceHandler = (call: FabricCall, invoke: FabricInvoke) => unknown;',
++  },
++  {
++    name: 'FabricTarget',
++    declaration: 'export interface FabricTarget {\n    module: string;\n    versionRange: string;\n    filePath: string | RegExp;\n    functionQuery?: FunctionQuery;\n    astQuery?: string;\n}',
++  },
+   {
+     name: 'FileDiff',
+     declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
+@@ -2153,10 +2313,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'OneShotSubagentDescriptorData',
+     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
+   },
++  {
++    name: 'PatchId',
++    declaration: 'export type PatchId = string;',
++  },
+   {
+     name: 'PermissionSelect',
+     declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
+   },
++  {
++    name: 'PostToolDecision',
++    declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
++  },
+   {
+     name: 'PreparedLlmCall',
+     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+@@ -2173,6 +2341,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'PresetSpec',
+     declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
+   },
++  {
++    name: 'PreToolDecision',
++    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
++  },
+   {
+     name: 'ProjectionChangeListener',
+     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
+@@ -2641,6 +2813,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'SettingsScope',
+     declaration: 'export interface SettingsScope<T> {\n    get(): T;\n    watch(callback: (next: T, prev: T) => void | Promise<void>): () => void;\n    update(patch: object): Promise<void>;\n    replace(section: object): Promise<void>;\n}',
+   },
++  {
++    name: 'SettleReason',
++    declaration: 'export type SettleReason = {\n    kind: \'completed\';\n} | {\n    kind: \'aborted\';\n} | {\n    kind: \'error\';\n    error: unknown;\n    failure?: LlmFailure;\n};',
++  },
+   {
+     name: 'SkillCandidate',
+     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
+diff --git a/packages/typert/generator/src/cordis-catalog.ts b/packages/typert/generator/src/cordis-catalog.ts
+index 6bc649847e15c8b3ccfb6b6d61dccac0b0a2b213..253d86c7634093443cf38ce3a4fcab483ec91de0 100644
+--- a/packages/typert/generator/src/cordis-catalog.ts
++++ b/packages/typert/generator/src/cordis-catalog.ts
+@@ -230,8 +230,14 @@ export class CordisCatalogProjector {
+     for (const packageModel of this.face.packages) {
+       for (const service of packageModel.services) {
+         const declaration = this.renderer.declaration(service.symbol)
++        // Service classes may live in `src/index.ts`, in a platform-free
++        // `src/service.ts` split (browser halfs import the latter without
++        // pulling in node-only entry code), in a per-module entry file
++        // (cordis-fabric-api's `agent.ts`/`tools.ts`/`prompt.ts`/`commands.ts`),
++        // or in a `src/client/index.ts` browser entry.
++        const entryPattern = /^packages\/[^/]+\/[^/]+\/src\/(?:index|service|agent|tools|prompt|commands|client\/index)\.ts$/
+         if (declaration.kind !== 'class'
+-          || !/^packages\/[^/]+\/[^/]+\/src\/index\.ts$/.test(service.location.file)
++          || !entryPattern.test(service.location.file)
+           || declaration.location.file !== service.location.file) continue
+         const doc = parseJsDoc(declaration.jsDoc ?? '').doc
+         const source = pointer(declaration.location)
+diff --git a/scripts/check-workspace-constraints.ts b/scripts/check-workspace-constraints.ts
+index 6bd613c2ea26bff537ce6ef2b52bb4978a2ba306..61ad5eb333a27abce421a49fad7b5d06024e40a3 100644
+--- a/scripts/check-workspace-constraints.ts
++++ b/scripts/check-workspace-constraints.ts
+@@ -132,6 +132,15 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
+     ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
+     // runtime's shell-held loader subpath ships as its own bundle beside the client half.
+     ...exportDefault(manifest, './loader') === './lib/loader.js' ? ['lib/loader.js'] : [],
++    // The loader-thread hook entry of the async module.register fallback ships
++    // as its own bundle beside the node lib.
++    ...exportDefault(manifest, './hook-entry') === './lib/hook-entry.js' ? ['lib/hook-entry.js'] : [],
++    // Fabric API module entries ship as their own bundles beside the node lib.
++    ...exportDefault(manifest, './agent') === './lib/agent.js' ? ['lib/agent.js'] : [],
++    ...exportDefault(manifest, './tools') === './lib/tools.js' ? ['lib/tools.js'] : [],
++    ...exportDefault(manifest, './prompt') === './lib/prompt.js' ? ['lib/prompt.js'] : [],
++    ...exportDefault(manifest, './commands') === './lib/commands.js' ? ['lib/commands.js'] : [],
++    ...exportDefault(manifest, './compat') === './lib/compat.js' ? ['lib/compat.js'] : [],
+     // web-react's store subpath ships its own bundle (single-entry builds; no shared chunk).
+     ...exportDefault(manifest, './store') === './lib/store/index.js' ? ['lib/store/index.js'] : [],
+     ...extras,
+diff --git a/scripts/gen-cordis-catalog.ts b/scripts/gen-cordis-catalog.ts
+index 4dd381af69e61b2978263579ed9e5047100a212c..7a1ff59eaa8356a03bfcc4b127776890488b6cb4 100644
+--- a/scripts/gen-cordis-catalog.ts
++++ b/scripts/gen-cordis-catalog.ts
+@@ -239,6 +239,10 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
+ 
+ /** Project types deliberately documented outside the core-data catalog. */
+ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
++  FabricPatch: 'Fabric patch descriptor is owned by packages/cordis/cordis-fabric/src/types.ts',
++  FabricPatchInfo: 'Fabric patch snapshot is owned by packages/cordis/cordis-fabric/src/types.ts',
++  FabricHandler: 'Fabric handler contract is owned by packages/cordis/cordis-fabric/src/types.ts',
++  PatchId: 'Fabric patch id is owned by packages/cordis/cordis-fabric/src/types.ts',
+   AgentFactory: 'agent creation seam is owned by packages/core/agent/README.md',
+   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
+   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-slash/src/types.ts',
+@@ -265,6 +269,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+   ProjectionSnapshot: 'watermark snapshot shape is owned by packages/session-projection/session-projection/src/index.ts',
+   ProjectionCheckpoint: 'persisted checkpoint row map is owned by packages/session-projection/session-projection/src/index.ts',
+   CommandExecution: 'executor return contract is owned by packages/ui/commands/src/index.ts',
++  CommandContribution: 'client command contribution contract is owned by packages/client/ui-command/src/client/contract.ts',
++  FabricSlotOptions: 'narrow slot registration face is owned by packages/cordis/cordis-fabric-api/src/client/index.ts',
+   TypertContribution: 'registry contribution contract is owned by packages/typert/registry/README.md',
+   TypertFace: 'registry face identity is owned by packages/typert/registry/README.md',
+   TypertPackageFilter: 'registry package query filter is owned by packages/typert/registry/README.md',
+diff --git a/scripts/gen-doc-graphs.ts b/scripts/gen-doc-graphs.ts
+index 337b27d718c98307f15916abbf5f129e62657735..ae83dab3ab8af5410c65e34f220498e1ed64537c 100644
+--- a/scripts/gen-doc-graphs.ts
++++ b/scripts/gen-doc-graphs.ts
+@@ -473,6 +473,54 @@ const SERVICE_ROLES: ServiceRole[] = [
+     consumers: ['hmr'],
+     note: 'Composes the __DSH_BOOT__ entry graph from an incremental dshClient scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers.',
+   },
++  {
++    key: 'fabric',
++    pkg: 'cordis-fabric',
++    title: 'Fabric patch registry',
++    mode: 'core',
++    consumers: [],
++    note: 'Load-time transformation layer: trusted patches register handlers against target module functions; transformed code publishes to a shared bridge the registry dispatches.',
++  },
++  {
++    key: 'fabricAgent',
++    pkg: 'cordis-fabric-api',
++    title: 'Fabric Agent API',
++    mode: 'core',
++    consumers: [],
++    note: 'Cooperative Mod-facing agent lifecycle observation and logged context injection over the authoritative agent events.',
++  },
++  {
++    key: 'fabricTools',
++    pkg: 'cordis-fabric-api',
++    title: 'Fabric Tool API',
++    mode: 'core',
++    consumers: [],
++    note: 'Cooperative Mod-facing tool registration and execution listeners over the authoritative tool registry.',
++  },
++  {
++    key: 'fabricPrompt',
++    pkg: 'cordis-fabric-api',
++    title: 'Fabric Prompt API',
++    mode: 'core',
++    consumers: [],
++    note: 'Cooperative Mod-facing system-prompt contributions over the authoritative prompt registry.',
++  },
++  {
++    key: 'fabricCommands',
++    pkg: 'cordis-fabric-api',
++    title: 'Fabric Command API',
++    mode: 'core',
++    consumers: [],
++    note: 'Cooperative Mod-facing human command registration over the authoritative command registry.',
++  },
++  {
++    key: 'fabricClient',
++    pkg: 'cordis-fabric-api',
++    title: 'Fabric Client API',
++    mode: 'core',
++    consumers: [],
++    note: 'Cooperative Mod-facing browser command and UI-slot registration over the authoritative client services.',
++  },
+   {
+     key: 'workflows',
+     pkg: 'workflow',
+diff --git a/scripts/verify-package-readme-model-experience.ts b/scripts/verify-package-readme-model-experience.ts
+index 041972cb9ff66174bcede489ea77428d764b3d3b..e03f1c0f993322474bdf47e17f25e7d5ea45dd97 100644
+--- a/scripts/verify-package-readme-model-experience.ts
++++ b/scripts/verify-package-readme-model-experience.ts
+@@ -80,6 +80,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
+   'packages/fs/fs': { kind: 'indirect', reason: 'The service interface delegates model rendering to dsh-tool-fs.' },
+   'packages/fs/fs-local': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-fs.' },
+   'packages/hooks/hook-protocol': { kind: 'indirect', reason: 'Only the hook bridge plugins render decoded hook output to a model.' },
++  'packages/cordis/cordis-fabric': { kind: 'none', reason: 'Host-side load-time transformation and patch registry machinery; registers no model surface and patches register through code, never through model-written configuration.' },
++  'packages/cordis/cordis-fabric-api': { kind: 'indirect', reason: 'Facades delegate every registration to the authoritative owners (ctx.tools, ctx.systemPrompt, ctx.commands, agent events, browser command/slot services); those owners own any model-visible effect.' },
+   'packages/host/apiproxy': { kind: 'none', reason: 'The wire contract and fetch carriers move already-composed messages and register no model surface.' },
+   'packages/host/directory-picker': { kind: 'none', reason: 'The GUI-host picking seam registers no model surface.' },
+   'packages/host/directory-picker-auto': { kind: 'none', reason: 'The GUI-host picking chooser only mounts a backend row; registers no model surface.' },
+diff --git a/tsconfig.client.json b/tsconfig.client.json
+index e1d4088061a10f5146ad1c7791c0477c53732cd4..8f651662e8cd822921322d382fc67f2a48844b44 100644
+--- a/tsconfig.client.json
++++ b/tsconfig.client.json
+@@ -73,6 +73,8 @@
+     { "path": "./packages/client/ui-models" },
+     { "path": "./packages/client/locale" },
+     { "path": "./packages/client/web" },
++    { "path": "./packages/cordis/cordis-fabric" },
++    { "path": "./packages/cordis/cordis-fabric-api" },
+     { "path": "./apps/web" }
+   ]
+ }
+diff --git a/tsconfig.host.json b/tsconfig.host.json
+index 0847ad36ca56ef98d536c495b808d52f825c5c6c..6e66894f8bcac755869b36275b374bc88443bc4f 100644
+--- a/tsconfig.host.json
++++ b/tsconfig.host.json
+@@ -213,7 +213,10 @@
+     { "path": "./packages/plan/plan-mode" },
+     { "path": "./packages/guard/repeat-tool-guard" },
+     { "path": "./packages/cordis/tool-cordis" },
++    { "path": "./packages/cordis/cordis-fabric" },
++    { "path": "./packages/cordis/cordis-fabric-api" },
+     { "path": "./packages/cordis/repository-plugin" },
++
+     { "path": "./packages/hooks/hook-protocol" },
+     { "path": "./packages/hooks/hooks-claude" },
+     { "path": "./packages/hooks/hooks-codex" },

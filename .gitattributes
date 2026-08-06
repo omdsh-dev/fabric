@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.pdf binary
+
+# Unified-diff context lines use a leading space by format; do not reject that
+# marker as trailing whitespace when patch artifacts are added to the tree.
+patches/*.patch whitespace=-trailing-space
