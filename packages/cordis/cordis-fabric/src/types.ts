@@ -32,6 +32,14 @@ export interface FabricTarget {
   functionQuery?: FunctionQuery
   /** Raw esquery selector; when set it takes precedence over name matching. */
   astQuery?: string
+  /**
+   * Which match to transform when the selector picks several functions in
+   * one file: a zero-based index, or null/omitted to transform every match.
+   * Read for raw `astQuery` targets (forwarded as the behavior `index`);
+   * name-based `functionQuery` targets carry their own `index` with the
+   * same default.
+   */
+  index?: number | null
 }
 
 /** Runtime call record published to a patch's tracing channel. */

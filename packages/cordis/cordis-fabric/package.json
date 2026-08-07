@@ -41,6 +41,7 @@
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.1",
     "module-details-from-path": "^1.0.4",
+    "node-addon-require-builtin": "^0.1.4",
     "typescript": "^6.0.3"
   },
   "devDependencies": {

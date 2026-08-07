@@ -1,8 +1,8 @@
 diff --git a/.gitignore b/.gitignore
-index 4d3e1305d7f96c9b8e5842c71eab65b0ee7d36f5..9e57ce7298090f118765d2cc6a88a28ad6fb93bd 100644
+index 4d3e1305d7f96c9b8e5842c71eab65b0ee7d36f5..3e9db9d0776a074cb8feca6926f41a55a6cfb40b 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -1,6 +1,11 @@
+@@ -1,6 +1,13 @@
  CLAUDE.local.md
  .env
  node_modules/
@@ -11,166 +11,191 @@ index 4d3e1305d7f96c9b8e5842c71eab65b0ee7d36f5..9e57ce7298090f118765d2cc6a88a28a
 +!packages/cordis/cordis-fabric/tests/fixtures/node_modules/**
 +!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/
 +!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/**
++!apps/cli/tests/fixtures/node_modules/
++!apps/cli/tests/fixtures/node_modules/**
  lib/
  *.tsbuildinfo
  pnpm-debug.log
-diff --git a/apps/cli/config/web.cordis.yml b/apps/cli/config/web.cordis.yml
-index daf597916ebe721303cdbf98b73b87bef24463a9..bab1333e2144cf8fc1bc215f4e35da5a3dcc35e4 100644
---- a/apps/cli/config/web.cordis.yml
-+++ b/apps/cli/config/web.cordis.yml
-@@ -179,3 +179,18 @@
- 
-     - id: ui-trajectory
-       name: '@deepseek-ai/dsh-client-ui-trajectory'
-+
-+    # The browser Fabric runtime (bridge + ctx.fabric). Disabled by default:
-+    # the Fabric/Mixin extension layer is opt-in, and enabling it mounts the
-+    # FabricService in the browser Cordis tree so client plugins can register
-+    # patches against other client plugins' build-time-transformed functions.
-+    - id: cordis-fabric
-+      name: '@deepseek-ai/dsh-cordis-fabric'
-+      disabled: true
-+
-+    # The cooperative Fabric API client module (ctx.fabricClient). Disabled by
-+    # default: the Fabric API library is opt-in, and enabling it mounts the
-+    # browser command/slot facade for client Mods.
-+    - id: cordis-fabric-api
-+      name: '@deepseek-ai/dsh-cordis-fabric-api'
-+      disabled: true
 diff --git a/apps/cli/package.json b/apps/cli/package.json
-index 4ba1da7e8651165250b8151ae3aed8d9366586a3..548a5d5639c54e4e9bdf7708d96b60c20365dd35 100644
+index 87677ce1f9eeea33ed608b6832b236b0c28bc7b1..335ee36387b3d33c6651a8343596f6634896ebff 100644
 --- a/apps/cli/package.json
 +++ b/apps/cli/package.json
-@@ -45,6 +45,8 @@
-     "@deepseek-ai/dsh-client-ui-subagent": "workspace:^",
-     "@deepseek-ai/dsh-client-ui-theme": "workspace:^",
-     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
+@@ -19,6 +19,7 @@
+     "@cordisjs/plugin-timer": "workspace:*",
+     "@deepseek-ai/dsh-app-boot": "workspace:^",
+     "@deepseek-ai/dsh-base": "workspace:^",
 +    "@deepseek-ai/dsh-cordis-fabric": "workspace:^",
-+    "@deepseek-ai/dsh-cordis-fabric-api": "workspace:^",
-     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
-     "@deepseek-ai/dsh-code-runtime-worker": "workspace:^",
-     "@deepseek-ai/dsh-command-compact": "workspace:^",
-diff --git a/apps/cli/src/app-cli-entry.ts b/apps/cli/src/app-cli-entry.ts
-index 651dbca3f73c56f01881a5f448193c52f986adfe..58632a3768fb227e0582ef0f7fecc46abb725003 100644
---- a/apps/cli/src/app-cli-entry.ts
-+++ b/apps/cli/src/app-cli-entry.ts
-@@ -15,6 +15,7 @@ import { networkInterfaces } from 'node:os'
- import { join, resolve } from 'node:path'
- import { Context } from 'cordis'
- import type { PatchOptions } from '@cordisjs/plugin-include'
-+import type { FabricPatchStub } from '@deepseek-ai/dsh-cordis-fabric'
- import yaml from 'js-yaml'
- import {
-   boot,
-@@ -278,6 +279,7 @@ export class AppCLIEntry {
-     )
-     this.ctx = await boot('dsh', resolve(this.options.configPath), patches, async (ctx) => {
-       await this.options.prepare?.(ctx)
-+      await installFabricBootstrap(patches)
-       // Config-only HMR for the personal overlay: module reload stays off for
-       // this surface (web.cordis.yml disables the shared `hmr` row until its
-       // reload lifecycle is tested), so this row watches no module roots.
-@@ -352,4 +354,28 @@ export class AppCLIEntry {
-       throw new Error('dsh: frontend dist not built; run pnpm run build from the repository root first')
-     }
-   }
-+
-+
-+}
+     "@deepseek-ai/dsh-headless": "workspace:^",
+     "@deepseek-ai/dsh-mcp-client": "workspace:^",
+     "@deepseek-ai/dsh-paths": "workspace:^",
+diff --git a/apps/cli/src/profile-boot.ts b/apps/cli/src/profile-boot.ts
+index b69a938213ef27b5bcd2424ccfb780d66591adb9..92dfc20cb3f4bcf8079178d2e64a1936fc475ea8 100644
+--- a/apps/cli/src/profile-boot.ts
++++ b/apps/cli/src/profile-boot.ts
+@@ -98,6 +98,29 @@ export function prepareProfile(name: string, userLayer = true): Profile {
+ /** Read-only row index of a profile composition before launcher flag patches. */
+ export type ProfileRows = ReadonlyMap<string, { name?: string; config?: unknown }>
+ 
 +/**
-+ * Install the Fabric transformation hooks from the composed configuration.
++ * Install the Fabric transformation hooks from the composed profile rows.
 + *
 + * The optional `cordis-fabric` row may carry static patch descriptors under
 + * `config.patches` (id/target/operation — handlers are trusted code bound at
 + * registration). The hooks must exist before any target plugin module is
-+ * imported, so this runs in `boot()`'s prepare phase, before the config tree
++ * imported, so this runs in the boot `prepare` phase, before the config tree
 + * mounts. The row's `disabled` flag governs mounting the plugin (the browser
 + * roster keeps the row disabled by default); it does not suppress the
 + * load-time bootstrap — patches from the composed row apply whenever the row
 + * carries them. When the row is absent or carries no patches, nothing is
 + * installed.
-+ * @param patches - the fully composed patch list for this invocation.
++ * @param rows - the fully composed profile rows for this invocation.
 + */
-+export async function installFabricBootstrap(patches: readonly PatchOptions[]): Promise<void> {
-+  const fabricRow = patches.find(patch => patch.id === 'cordis-fabric')
++export async function installFabricBootstrap(rows: ProfileRows): Promise<void> {
++  const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
 +  const rowConfig = fabricRow?.config as { patches?: unknown } | undefined
 +  const descriptors = rowConfig?.patches
 +  if (!Array.isArray(descriptors) || descriptors.length === 0) return
 +  const { bootstrapFabric } = await import('@deepseek-ai/dsh-cordis-fabric')
-+  bootstrapFabric(descriptors as FabricPatchStub[])
- }
-diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
-new file mode 100644
-index 0000000000000000000000000000000000000000..65278aaceb3b452180e0ee794302c17e827954a3
---- /dev/null
-+++ b/apps/cli/tests/fabric-bootstrap.spec.ts
-@@ -0,0 +1,47 @@
-+import { beforeEach, describe, expect, it } from 'vitest'
-+import { installFabricBootstrap } from '../src/app-cli-entry.ts'
-+import { GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/bridge.ts'
-+
-+const stub = {
-+  id: 'launcher/before-add',
-+  target: {
-+    module: 'fabric-target-fixture',
-+    versionRange: '^1.0.0',
-+    filePath: 'index.mjs',
-+    functionQuery: { functionName: 'add', kind: 'Sync' },
-+  },
-+  operation: 'before',
++  bootstrapFabric(descriptors as Parameters<typeof bootstrapFabric>[0])
 +}
 +
-+describe('installFabricBootstrap', () => {
-+  beforeEach(() => {
-+    Reflect.deleteProperty(globalThis, GLOBAL_BRIDGE_KEY)
+ /** One profile's patch layers (application order) and the row index of its pre-flag composition. */
+ interface ComposedProfile {
+   profile: Profile
+@@ -234,6 +257,10 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
+       }
+       hostCtx.provide('headlessIo', io)
+     }
++    // Load-time transformation hooks must precede any target module import;
++    // the prepare phase runs after Loader installation and before the
++    // config-tree entries mount.
++    await installFabricBootstrap(composed.rows)
+     await options.prepare?.(hostCtx, composed.rows)
+   })
+   app.current = ctx
+diff --git a/apps/cli/tests/fabric-bootstrap-runner.mjs b/apps/cli/tests/fabric-bootstrap-runner.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..a16ffa0cd7af91f10d61f00ba51dd754cfd4fd75
+--- /dev/null
++++ b/apps/cli/tests/fabric-bootstrap-runner.mjs
+@@ -0,0 +1,39 @@
++/**
++ * Child-process harness for the CLI Fabric bootstrap spec.
++ *
++ * The launcher's `installFabricBootstrap` imports `@deepseek-ai/dsh-cordis-fabric`
++ * through the package root, which resolves to the built `lib/` half — the
++ * same resolution a source-mode or built `dsh` launch performs. The runtime
++ * registry must come from that same half, so this runner imports the package
++ * root too: mixing `src` and `lib` would split the bridge listeners across
++ * two module instances and no handler would ever see a transformed call.
++ */
++
++import { existsSync } from 'node:fs'
++import { createRequire } from 'node:module'
++import { fileURLToPath } from 'node:url'
++import { runtime } from '@deepseek-ai/dsh-cordis-fabric'
++import { installFabricBootstrap } from '../src/profile-boot.ts'
++
++const require = createRequire(import.meta.url)
++const fixturePath = fileURLToPath(new URL('./fixtures/node_modules/fabric-bootstrap-fixture/index.cjs', import.meta.url))
++
++const target = {
++  module: 'fabric-bootstrap-fixture',
++  versionRange: '^1.0.0',
++  filePath: 'index.cjs',
++  functionQuery: { methodName: 'add', kind: 'Sync' },
++}
++
++const rows = new Map([
++  ['cordis-fabric', { config: { patches: [{ id: 'boot/add', target, operation: 'before' }] } }],
++])
++
++await installFabricBootstrap(rows)
++const mod = require(fixturePath)
++runtime.register({ id: 'boot/add', target, operation: 'before', priority: 0, enabled: false })
++runtime.enable('boot/add', (call) => { call.arguments[0] = call.arguments[0] * 10 })
++const actual = mod.add(2, 3)
++const ok = actual === 23
++console.log(`${ok ? 'PASS' : 'FAIL'} bootstrap add(2,3): ${JSON.stringify(actual)}`)
++if (!ok) process.exitCode = 1
+diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..2b0f2e42d2f11601f35b1693fc5308580e5b8d16
+--- /dev/null
++++ b/apps/cli/tests/fabric-bootstrap.spec.ts
+@@ -0,0 +1,27 @@
++import { spawnSync } from 'node:child_process'
++import { existsSync } from 'node:fs'
++import { join } from 'node:path'
++import { fileURLToPath } from 'node:url'
++import { describe, expect, it } from 'vitest'
++import { installFabricBootstrap } from '../src/profile-boot.ts'
++
++const runner = fileURLToPath(new URL('./fabric-bootstrap-runner.mjs', import.meta.url))
++// Vitest runs from the repository root; the bootstrap resolves the package
++// root to its built lib half, so this suite requires `pnpm run build`.
++const fabricLib = join(process.cwd(), 'packages/cordis/cordis-fabric/lib/index.js')
++describe.skipIf(!existsSync(fabricLib))('cordis-fabric host bootstrap', () => {
++  it('installs transformation hooks from the composed cordis-fabric row', () => {
++    const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner], {
++      cwd: fileURLToPath(new URL('../..', import.meta.url)),
++      encoding: 'utf8',
++      env: { ...process.env },
++    })
++    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
++    expect(result.stdout).toContain('PASS bootstrap add(2,3): 23')
 +  })
 +
-+  it('installs the Fabric hooks when the cordis-fabric row carries patches', async () => {
-+    await installFabricBootstrap([
-+      { id: 'cordis-fabric', name: '@deepseek-ai/dsh-cordis-fabric', config: { patches: [stub] } },
-+    ])
-+    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toHaveProperty('publish')
-+  })
-+
-+  it('installs nothing when the row is absent', async () => {
-+    await installFabricBootstrap([{ id: 'other', name: '@deepseek-ai/dsh-other' }])
-+    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toBeUndefined()
-+  })
-+
-+  it('installs nothing when the row has no patches', async () => {
-+    await installFabricBootstrap([{ id: 'cordis-fabric', name: '@deepseek-ai/dsh-cordis-fabric', disabled: true }])
-+    expect((globalThis as Record<string, unknown>)[GLOBAL_BRIDGE_KEY]).toBeUndefined()
-+  })
-+
-+  it('fails loud on a malformed patch from configuration', async () => {
-+    await expect(installFabricBootstrap([
-+      {
-+        id: 'cordis-fabric',
-+        name: '@deepseek-ai/dsh-cordis-fabric',
-+        config: { patches: [{ ...stub, target: { ...stub.target, module: '' } }] },
-+      },
-+    ])).rejects.toThrow(/module/)
++  it('no-ops when the composed rows carry no cordis-fabric row or patches', async () => {
++    await expect(installFabricBootstrap(new Map())).resolves.toBeUndefined()
++    await expect(installFabricBootstrap(new Map([['cordis-fabric', { config: {} }]]))).resolves.toBeUndefined()
 +  })
 +})
+diff --git a/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..03b9692747157dd29952184ac642d7bf797cc097
+--- /dev/null
++++ b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs
+@@ -0,0 +1,7 @@
++'use strict'
++
++module.exports = {
++  add(a, b) {
++    return a + b
++  },
++}
+diff --git a/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..2421fc05128eef900497d7e29583f5e2115d11e7
+--- /dev/null
++++ b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json
+@@ -0,0 +1,7 @@
++{
++  "name": "fabric-bootstrap-fixture",
++  "version": "1.0.0",
++  "private": true,
++  "type": "commonjs",
++  "main": "index.cjs"
++}
 diff --git a/apps/cli/tsconfig.json b/apps/cli/tsconfig.json
-index 44730e9f37bd67d9b9c437140161fda97db3bb6d..1ad162bc59d2833bf9487c98de1aaabd37f96229 100644
+index 36c4bad6dd8daa571483ea81bb23fa94bbebc8c5..18845a5f0f0e52b4d3d984fc4744ca12d04cf68d 100644
 --- a/apps/cli/tsconfig.json
 +++ b/apps/cli/tsconfig.json
-@@ -32,6 +32,9 @@
+@@ -65,6 +65,9 @@
      {
-       "path": "../../packages/util/paths"
+       "path": "../../packages/bash/tool-bash"
      },
 +    {
 +      "path": "../../packages/cordis/cordis-fabric"
 +    },
      {
-       "path": "../../packages/session-query/session-query-sqlite"
+       "path": "../../packages/client/connection"
      },
 diff --git a/docs/capability-seams.md b/docs/capability-seams.md
-index cb24cee7d5843318cfb1860813361a0f8a3b8571..902fdf119cf4be609c67d6261ed51985517248ca 100644
+index 6a8f7943c22773190ed0c6ce7892d0e06a8f8e5a..9bb5ed52fd13d641ae32ebb236d7c9aa7cc9550e 100644
 --- a/docs/capability-seams.md
 +++ b/docs/capability-seams.md
-@@ -161,6 +161,14 @@ flowchart LR
+@@ -164,6 +164,14 @@ flowchart LR
    pkg_modules["modules"]
    pkg_hmr["hmr"]
    svc_clientModuleHost["ctx.clientModuleHost<br/>Client plugin graph host"]
@@ -185,7 +210,7 @@ index cb24cee7d5843318cfb1860813361a0f8a3b8571..902fdf119cf4be609c67d6261ed51985
    pkg_workflow["workflow"]
    svc_workflows["ctx.workflows<br/>Workflow script engine"]
    pkg_workflow_workerthread["workflow-workerthread"]
-@@ -179,6 +187,12 @@ flowchart LR
+@@ -182,6 +190,12 @@ flowchart LR
    pkg_compact --> svc_compact
    pkg_compact_basic --> svc_compact
    pkg_compact_tool_result_prune --> svc_toolResultPrune
@@ -198,7 +223,7 @@ index cb24cee7d5843318cfb1860813361a0f8a3b8571..902fdf119cf4be609c67d6261ed51985
    pkg_credentials --> svc_credentials
    pkg_credentials_local --> svc_credentials
    pkg_directory_picker --> svc_directoryPicker
-@@ -395,6 +409,12 @@ flowchart LR
+@@ -403,6 +417,12 @@ flowchart LR
  | `ctx.directoryPicker` | `seam` | `directory-picker` | `directory-picker-native`, `directory-picker-browse` | `apiproxy` | - | Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement). |
  | `ctx.httpServer` | `core` | `webserver` | - | `connection`, `modules`, `hmr` | - | Plain node:http carrier: named-route registry, index transform taps, and the static dist fallback; web-transport plugins register their own routes. |
  | `ctx.clientModuleHost` | `core` | `modules` | - | `hmr` | - | Composes the __DSH_BOOT__ entry graph from an incremental dshClient scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers. |
@@ -212,10 +237,10 @@ index cb24cee7d5843318cfb1860813361a0f8a3b8571..902fdf119cf4be609c67d6261ed51985
  
  Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.
 diff --git a/docs/config-catalog.md b/docs/config-catalog.md
-index b381d1e3da2fcc912c82c28327ba5f5a187f0fd7..2b5967f6270f6b12ec6a8773eac0910e681b685a 100644
+index d6920b4847fdd6ad619bcc70c1dcf26619258117..7db428808172b069a4cde9becd9091281412e9cf 100644
 --- a/docs/config-catalog.md
 +++ b/docs/config-catalog.md
-@@ -2346,6 +2346,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
+@@ -2493,6 +2493,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
  - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compact` ([`packages/compact/command-compact/src/index.ts`](../packages/compact/command-compact/src/index.ts))
  - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
  - `@deepseek-ai/dsh-commands` ([`packages/ui/commands/src/index.ts`](../packages/ui/commands/src/index.ts))
@@ -223,7 +248,7 @@ index b381d1e3da2fcc912c82c28327ba5f5a187f0fd7..2b5967f6270f6b12ec6a8773eac0910e
  - `@deepseek-ai/dsh-fs-policy` ([`packages/fs/fs-policy/src/index.ts`](../packages/fs/fs-policy/src/index.ts))
  - `@deepseek-ai/dsh-goal-session` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-session/src/index.ts`](../packages/goal/goal-session/src/index.ts))
  - `@deepseek-ai/dsh-host-directory-picker-auto` — requires `httpServer` · `loader` ([`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts))
-@@ -2403,6 +2404,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
+@@ -2551,6 +2552,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
  - `@deepseek-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))
  - `@deepseek-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
  - `@deepseek-ai/dsh-client-web-react` ([`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts))
@@ -232,10 +257,10 @@ index b381d1e3da2fcc912c82c28327ba5f5a187f0fd7..2b5967f6270f6b12ec6a8773eac0910e
  - `@deepseek-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))
  - `@deepseek-ai/dsh-jsonrpc-demo` ([`packages/examples/jsonrpc-demo/src/index.ts`](../packages/examples/jsonrpc-demo/src/index.ts))
 diff --git a/docs/cordis-catalog/services.md b/docs/cordis-catalog/services.md
-index 36446f39c31315a8f5bf9ea74d131dd058e26189..75ff946e39b78563880f8ed4653bd4bc32012bec 100644
+index 44a44a139ee38ef77ca0b8b1d6efeb0f4951078b..b726e19e884dd29d5f1f0a3fe39a58bf03b92044 100644
 --- a/docs/cordis-catalog/services.md
 +++ b/docs/cordis-catalog/services.md
-@@ -568,6 +568,224 @@ abstract capability(): DirectoryPickerCapability
+@@ -578,6 +578,217 @@ abstract capability(): DirectoryPickerCapability
  
  Source: [`packages/host/directory-picker/src/index.ts:131`](../../packages/host/directory-picker/src/index.ts)
  
@@ -309,13 +334,6 @@ index 36446f39c31315a8f5bf9ea74d131dd058e26189..75ff946e39b78563880f8ed4653bd4bc
 +onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean
 +
 +/**
-+ * Observe a turn settling (completed, aborted, disposed, or failed).
-+ * @param listener - called with the agent, the settled turn, and the reason.
-+ * @returns the exact `ctx.on()` disposer removing this listener.
-+ */
-+onSettled(listener: (agent: Agent, turn: number, reason: SettleReason) => void): () => boolean
-+
-+/**
 + * Inject a logged, model-visible user message into one agent's context.
 + *
 + * The message goes through `agent.inject()`, the Agent's own durable
@@ -328,7 +346,7 @@ index 36446f39c31315a8f5bf9ea74d131dd058e26189..75ff946e39b78563880f8ed4653bd4bc
 +inject(agent: Agent, message: UserMessage): void
 +```
 +
-+Types: [Agent](../core-data-structures/core.md) · [AgentStatus](../core-data-structures/core.md) · [SettleReason](../core-data-structures/core.md) · [UserMessage](../core-data-structures/session.md)
++Types: [Agent](../core-data-structures/core.md) · [AgentStatus](../core-data-structures/core.md) · [UserMessage](../core-data-structures/session.md)
 +
 +Source: [`packages/cordis/cordis-fabric-api/src/agent.ts:34`](../../packages/cordis/cordis-fabric-api/src/agent.ts)
 +
@@ -461,47 +479,45 @@ index 36446f39c31315a8f5bf9ea74d131dd058e26189..75ff946e39b78563880f8ed4653bd4bc
  
  Abstract filesystem provider. Targets must preserve identity across aliases; reads expose regular UTF-8 text or typed errors, listings are stable and content-free, and mutations are atomic. Optional guards add stale protection without changing the unguarded provider contract.
 diff --git a/docs/event-producer-consumer.md b/docs/event-producer-consumer.md
-index cd53931df378ea24f5bdcf85f07ca1fa0128bc42..fb371d14fb8319f13760565c69be304accaa7e94 100644
+index 23794b5c9d0a51e1398d993f30eb54ee2dfe4e88..177ee46ebe86f6dfe3328d19947f56d811367e88 100644
 --- a/docs/event-producer-consumer.md
 +++ b/docs/event-producer-consumer.md
-@@ -9,8 +9,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+@@ -8,8 +8,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | Event | Mode | Declared in | Dispatchers | Listeners |
  | --- | --- | --- | --- | --- |
- | `agent-loop/config-start-failed` | `emit` | [`packages/core/agent-loop/src/index.ts:158`](../packages/core/agent-loop/src/index.ts) | [`agent-loop`](../packages/core/agent-loop) (`events.dispatch`) | - |
- | `agent/cancel-requested` | `emit` | [`packages/core/agent/src/types.ts:353`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`goal-session`](../packages/goal/goal-session) |
--| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:284`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`goal-session`](../packages/goal/goal-session) |
--| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:293`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
-+| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:284`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session) |
-+| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:293`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
- | `agent/error` | `emit` | [`packages/core/agent/src/types.ts:467`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | `apiproxy`, [`goal-session`](../packages/goal/goal-session), [`session-telemetry`](../packages/telemetry/session-telemetry) |
- | `agent/inbox/dequeue` | `emit` | [`packages/core/agent/src/types.ts:331`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`subagent`](../packages/subagent/subagent) |
- | `agent/inbox/discard` | `emit` | [`packages/core/agent/src/types.ts:343`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`subagent`](../packages/subagent/subagent) |
-@@ -20,8 +20,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
- | `agent/request` | `waterfall` | [`packages/core/agent/src/types.ts:406`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`agent`](../packages/core/agent) |
- | `agent/request-error` | `waterfall` | [`packages/core/agent/src/types.ts:425`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`compact-basic`](../packages/compact/compact-basic), [`llm-retry`](../packages/llm/llm-retry) |
- | `agent/session-start` | `emit` | [`packages/core/agent/src/types.ts:366`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`goal`](../packages/goal/goal), [`goal-session`](../packages/goal/goal-session), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`workspace-context`](../packages/context/workspace-context) |
--| `agent/settled` | `emit` | [`packages/core/agent/src/types.ts:454`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`compact-basic`](../packages/compact/compact-basic) |
--| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:302`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`goal-session`](../packages/goal/goal-session) |
-+| `agent/settled` | `emit` | [`packages/core/agent/src/types.ts:454`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`compact-basic`](../packages/compact/compact-basic), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) |
-+| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:302`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`agent`](../packages/core/agent), `apiproxy`, [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session) |
- | `agent/step` | `serial` | [`packages/core/agent/src/types.ts:393`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`compact-basic`](../packages/compact/compact-basic), [`plan-mode`](../packages/plan/plan-mode), [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`time-context`](../packages/context/time-context), [`tmux-context`](../packages/context/tmux-context), [`tool-skill`](../packages/skill/tool-skill), [`workspace-context`](../packages/context/workspace-context) |
- | `agent/turn-stopping` | `serial` | [`packages/core/agent/src/types.ts:440`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex) |
+ | `agent-loop/config-start-failed` | `emit` | [`packages/core/agent-loop/src/index.ts:182`](../packages/core/agent-loop/src/index.ts) | [`agent-loop`](../packages/core/agent-loop) (`events.dispatch`) | - |
+-| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:154`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`goal-session`](../packages/goal/goal-session) |
+-| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:163`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
++| `agent/created` | `emit` | [`packages/core/agent/src/types.ts:154`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session) |
++| `agent/disposed` | `emit` | [`packages/core/agent/src/types.ts:163`](../packages/core/agent/src/types.ts) | [`agent`](../packages/core/agent) (`events.dispatch`) | [`agent-loop`](../packages/core/agent-loop), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
+ | `agent/error` | `emit` | [`packages/core/agent/src/types.ts:285`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`acp`](../packages/acp/acp), `apiproxy`, [`goal-session`](../packages/goal/goal-session), [`session-telemetry`](../packages/telemetry/session-telemetry) |
+ | `agent/inbox/claimed` | `emit` | [`packages/core/agent/src/types.ts:192`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`acp`](../packages/acp/acp), [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
+ | `agent/inbox/discarded` | `emit` | [`packages/core/agent/src/types.ts:200`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`goal-session`](../packages/goal/goal-session), [`subagent`](../packages/subagent/subagent) |
+@@ -18,7 +18,7 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | `agent/request` | `waterfall` | [`packages/core/agent/src/types.ts:239`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`agent`](../packages/core/agent) |
+ | `agent/request-error` | `waterfall` | [`packages/core/agent/src/types.ts:255`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`waterfall`) | [`compact-basic`](../packages/compact/compact-basic), [`llm-retry`](../packages/llm/llm-retry) |
+ | `agent/session-start` | `emit` | [`packages/core/agent/src/types.ts:212`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emitAgentEvent`) | [`goal`](../packages/goal/goal), [`goal-session`](../packages/goal/goal-session), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex) |
+-| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:173`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`agent`](../packages/core/agent), `apiproxy`, [`compact-basic`](../packages/compact/compact-basic), [`goal-session`](../packages/goal/goal-session), [`headless`](../packages/bundle/headless), [`jsonrpc`](../packages/ui/jsonrpc) |
++| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:173`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`agent`](../packages/core/agent), `apiproxy`, [`compact-basic`](../packages/compact/compact-basic), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session), [`headless`](../packages/bundle/headless), [`jsonrpc`](../packages/ui/jsonrpc) |
+ | `agent/turn-stopping` | `serial` | [`packages/core/agent/src/types.ts:273`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex) |
  | `approval/request` | `waterfall` | [`packages/ui/user-approval/src/index.ts:30`](../packages/ui/user-approval/src/index.ts) | [`user-approval`](../packages/ui/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `apiproxy` |
-@@ -51,8 +51,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
+ | `commands/change` | `emit` | [`packages/ui/commands/src/index.ts:154`](../packages/ui/commands/src/index.ts) | [`commands`](../packages/ui/commands) (`events.dispatch`) | `apiproxy` |
+@@ -47,8 +47,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
  | `tools/change` | `emit` | [`packages/core/tools/src/index.ts:167`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`emit`) | - |
  | `tools/code-dispatch-log` | `waterfall` | [`packages/core/tools/src/index.ts:149`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`spill-policy`](../packages/spill/spill-policy) |
  | `tools/execute` | `waterfall` | [`packages/core/tools/src/index.ts:124`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`timeout-policy`](../packages/timeout/timeout-policy) |
--| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search), [`workspace-context`](../packages/context/workspace-context) |
+-| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
 -| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
-+| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search), [`workspace-context`](../packages/context/workspace-context) |
++| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
 +| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
  | `tools/result` | `emit` | [`packages/core/tools/src/index.ts:157`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`events.dispatch`) | [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`workspace-context`](../packages/context/workspace-context) |
  | `workflow/agent-end` | `emit` | [`packages/workflow/workflow/src/index.ts:81`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
  | `workflow/agent-start` | `emit` | [`packages/workflow/workflow/src/index.ts:70`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
 diff --git a/docs/module-graph.md b/docs/module-graph.md
-index aae611eff5d20f5448cb2fb9bb0ae784fabb85ea..eacbc4501a8464fe9a5ef789b9e3c747d8190203 100644
+index 390f4bcdecffac21b80da60603463da6a4ec673d..7d79cb86eb6e440c1cba3bfb20f2a6ed52e77d0c 100644
 --- a/docs/module-graph.md
 +++ b/docs/module-graph.md
-@@ -99,6 +99,7 @@ flowchart TD
+@@ -101,6 +101,7 @@ flowchart TD
      pkg_plan_mode["plan-mode"]
    end
    subgraph group_cordis["packages/cordis"]
@@ -509,7 +525,7 @@ index aae611eff5d20f5448cb2fb9bb0ae784fabb85ea..eacbc4501a8464fe9a5ef789b9e3c747
      pkg_repository_plugin["repository-plugin"]
      pkg_tool_cordis["tool-cordis"]
    end
-@@ -281,6 +282,7 @@ flowchart TD
+@@ -289,6 +290,7 @@ flowchart TD
    pkg_timeout --> pkg_invariants
    pkg_scope --> pkg_invariants
    pkg_skill --> pkg_invariants
@@ -517,7 +533,7 @@ index aae611eff5d20f5448cb2fb9bb0ae784fabb85ea..eacbc4501a8464fe9a5ef789b9e3c747
    pkg_acp_snapshot --> pkg_invariants
    pkg_llm_mock_server --> pkg_invariants
    pkg_loader_smoke --> pkg_invariants
-@@ -1084,6 +1086,7 @@ flowchart TD
+@@ -1121,6 +1123,7 @@ flowchart TD
  | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
  | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |
  | [`skill`](../packages/skill/skill) | `skill` | [`invariants`](../packages/support/invariants) |
@@ -526,10 +542,10 @@ index aae611eff5d20f5448cb2fb9bb0ae784fabb85ea..eacbc4501a8464fe9a5ef789b9e3c747
  | [`llm-mock-server`](../packages/support/llm-mock-server) | `support` | [`invariants`](../packages/support/invariants) |
  | [`loader-smoke`](../packages/support/loader-smoke) | `support` | [`invariants`](../packages/support/invariants) |
 diff --git a/knip.json b/knip.json
-index 22e2b09fdb58b1dd46779dc01823ffd53748415d..5e966b234f4f64b389f4c486f8185493d5fb46dc 100644
+index 745a7faf0fea6870bfe322a90660ef824b5f50c6..43ca6ecb7182646d3b17eaaa1cbc83e9f8639051 100644
 --- a/knip.json
 +++ b/knip.json
-@@ -168,6 +168,32 @@
+@@ -174,6 +174,32 @@
          "tests/**/*.ts"
        ]
      },
@@ -562,11 +578,21 @@ index 22e2b09fdb58b1dd46779dc01823ffd53748415d..5e966b234f4f64b389f4c486f8185493
      "packages/core/tools": {
        "entry": [
          "tests/**/*.spec.ts"
+@@ -672,7 +698,8 @@
+         "tests/**/*.ts"
+       ],
+       "ignoreDependencies": [
+-        "@deepseek-ai/.+"
++        "@deepseek-ai/.+",
++        "fabric-bootstrap-fixture"
+       ]
+     },
+     "packages/client/modules": {
 diff --git a/package.json b/package.json
-index 905c39f33b7e195745553c7cb9607ec9642b6b03..848729377d48cda96a58a7b1c80ad018553d3583 100644
+index 7bd84db93a8f0493eff9462c1d121180da9d3c53..3d6ba4ef87f09f32ceef84b3f3561d760bd289d5 100644
 --- a/package.json
 +++ b/package.json
-@@ -152,6 +152,7 @@
+@@ -153,6 +153,7 @@
      "tsdown": "^0.22.2",
      "tsx": "^4.22.4",
      "typescript": "^6.0.3",
@@ -574,11 +600,47 @@ index 905c39f33b7e195745553c7cb9607ec9642b6b03..848729377d48cda96a58a7b1c80ad018
      "vite-tsconfig-paths": "^6.1.1",
      "vitest": "^4.1.8"
    }
+diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
+index a0f53b787f7caa2c9ddda3361327438aa1c47231..5164d73f185ba5e086f8ddc73d85b94706782777 100644
+--- a/packages/bundle/web-app/cordis.patch.yml
++++ b/packages/bundle/web-app/cordis.patch.yml
+@@ -192,3 +192,18 @@
+ 
+     - id: ui-trajectory
+       name: '@deepseek-ai/dsh-client-ui-trajectory'
++
++    # The browser Fabric runtime (bridge + ctx.fabric). Disabled by default:
++    # the Fabric/Mixin extension layer is opt-in, and enabling it mounts the
++    # FabricService in the browser Cordis tree so client plugins can register
++    # patches against other client plugins' build-time-transformed functions.
++    - id: cordis-fabric
++      name: '@deepseek-ai/dsh-cordis-fabric'
++      disabled: true
++
++    # The cooperative Fabric API client module (ctx.fabricClient). Disabled by
++    # default: the Fabric API library is opt-in, and enabling it mounts the
++    # browser command/slot facade for client Mods.
++    - id: cordis-fabric-api
++      name: '@deepseek-ai/dsh-cordis-fabric-api'
++      disabled: true
+diff --git a/packages/bundle/web-app/package.json b/packages/bundle/web-app/package.json
+index 1b812b994394e7fe1f666157263a017d214e376b..c1360ef510fd1e3f4170d7b3c6a0a6d147a610f8 100644
+--- a/packages/bundle/web-app/package.json
++++ b/packages/bundle/web-app/package.json
+@@ -39,6 +39,8 @@
+     "@deepseek-ai/dsh-client-runtime": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-command": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
++    "@deepseek-ai/dsh-cordis-fabric": "workspace:^",
++    "@deepseek-ai/dsh-cordis-fabric-api": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-goal": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-model": "workspace:^",
 diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
-index aa7110f86bdc158c88e139123295371ff925f59d..490eaddb37d100ec71cff78aa8c35fd661178e35 100644
+index aa7110f86bdc158c88e139123295371ff925f59d..00377fe83bb2a327a2700cf74198f37877258c4c 100644
 --- a/packages/client/tsdown.client.ts
 +++ b/packages/client/tsdown.client.ts
-@@ -56,6 +56,18 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
+@@ -56,6 +56,21 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
    return repositoryPath.startsWith('packages/') ? `../../../${repositoryPath}` : source
  }
  
@@ -589,15 +651,18 @@ index aa7110f86bdc158c88e139123295371ff925f59d..490eaddb37d100ec71cff78aa8c35fd6
 +  /**
 +   * Source transform applied to every bundled module (e.g. the Fabric
 +   * browser transform). Returns rewritten source, or `null` to leave the
-+   * module untouched.
++   * module untouched. The third argument is the plugin's `addWatchFile`:
++   * a file-backed transform (e.g. a watched Fabric patch set) registers
++   * its backing file so a watch-mode change invalidates every module and
++   * re-runs the transform — this is the build trigger for patch edits.
 +   */
-+  transform?: (code: string, id: string) => { code: string; map?: string } | null
++  transform?: (code: string, id: string, addWatchFile?: (file: string) => void) => { code: string; map?: string } | null
 +}
 +
  /**
   * Build the tsdown config for one UI plugin package: the node-half lib build
   * plus the browser client bundle. A package-level tsdown.config.ts REPLACES
-@@ -67,9 +79,10 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
+@@ -67,9 +82,10 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
   * @param libEntry - node-half entries, spelled at the call site so the
   * package-invariants gate can see `lib/types/invariant.js` in each package's
   * own tsdown.config.ts (a preset-side glob hides it from the mechanical check).
@@ -609,7 +674,7 @@ index aa7110f86bdc158c88e139123295371ff925f59d..490eaddb37d100ec71cff78aa8c35fd6
    return [{
      entry: [...libEntry],
      outDir: 'lib',
-@@ -167,7 +180,20 @@ export function clientBundle(id: string, libEntry: readonly string[]): [UserConf
+@@ -167,7 +183,22 @@ export function clientBundle(id: string, libEntry: readonly string[]): [UserConf
            `export default ${JSON.stringify(classMap)};`,
          ].join('\n')
        },
@@ -618,12 +683,14 @@ index aa7110f86bdc158c88e139123295371ff925f59d..490eaddb37d100ec71cff78aa8c35fd6
 +      ? [{
 +        // Opt-in source transform (e.g. the Fabric browser transform):
 +        // rewrites matching modules before bundling. The filter keeps the
-+        // hook off non-source ids; the handler delegates to the caller.
++        // hook off non-source ids; the handler delegates to the caller and
++        // forwards the plugin's addWatchFile so file-backed transforms join
++        // the watch graph.
 +        name: 'dsh-client-source-transform',
 +        transform: {
 +          filter: { id: /\.(?:[cm]?js|mjs|ts|tsx)$/ },
-+          handler(code: string, id: string) {
-+            return options.transform!(code, id) ?? null
++          handler(this: { addWatchFile(id: string): void }, code: string, id: string) {
++            return options.transform!(code, id, file => this.addWatchFile(file)) ?? null
 +          },
 +        },
 +      }]
@@ -664,10 +731,10 @@ index c452f9a7ef69e7f5af8900153271d500f19f9e47..459160c222ed3ab63328b74967554e6a
 +| [`cordis-fabric/`](cordis-fabric/README.md) | Fabric/Mixin 风格的加载期变换与 patch registry | 注册 `ctx.fabric` |
 +| [`cordis-fabric-api/`](cordis-fabric-api/README.md) | 协作式、面向 Mod 的 Fabric API 模块 | 注册 `ctx.fabricAgent`、`ctx.fabricTools`、`ctx.fabricPrompt`、`ctx.fabricCommands`，以及（web）`ctx.fabricClient` |
 diff --git a/packages/cordis/tool-cordis/src/api-catalog.ts b/packages/cordis/tool-cordis/src/api-catalog.ts
-index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e63651661 100644
+index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc11956542 100644
 --- a/packages/cordis/tool-cordis/src/api-catalog.ts
 +++ b/packages/cordis/tool-cordis/src/api-catalog.ts
-@@ -300,6 +300,122 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+@@ -304,6 +304,118 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
        },
      ],
    },
@@ -708,10 +775,6 @@ index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e
 +      {
 +        signature: 'onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean',
 +        jsDoc: '/**\n * Observe an agent\'s idle/running status transitions.\n * @param listener - called with the agent and its new status.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
-+      },
-+      {
-+        signature: 'onSettled(listener: (agent: Agent, turn: number, reason: SettleReason) => void): () => boolean',
-+        jsDoc: '/**\n * Observe a turn settling (completed, aborted, disposed, or failed).\n * @param listener - called with the agent, the settled turn, and the reason.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
 +      },
 +      {
 +        signature: 'inject(agent: Agent, message: UserMessage): void',
@@ -790,7 +853,7 @@ index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e
    {
      key: 'fs',
      summary: 'Abstract filesystem provider.',
-@@ -1933,6 +2049,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -1941,6 +2053,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'EpochHeader',
      declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
    },
@@ -836,12 +899,12 @@ index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e
 +  },
 +  {
 +    name: 'FabricTarget',
-+    declaration: 'export interface FabricTarget {\n    module: string;\n    versionRange: string;\n    filePath: string | RegExp;\n    functionQuery?: FunctionQuery;\n    astQuery?: string;\n}',
++    declaration: 'export interface FabricTarget {\n    module: string;\n    versionRange: string;\n    filePath: string | RegExp;\n    functionQuery?: FunctionQuery;\n    astQuery?: string;\n    index?: number | null;\n}',
 +  },
    {
      name: 'FileDiff',
      declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-@@ -2153,10 +2313,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2169,10 +2325,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'OneShotSubagentDescriptorData',
      declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
    },
@@ -859,8 +922,8 @@ index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e
 +  },
    {
      name: 'PreparedLlmCall',
-     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
-@@ -2173,6 +2341,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+@@ -2193,6 +2357,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'PresetSpec',
      declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
    },
@@ -871,17 +934,6 @@ index a5903d8be04c64dfd390616291784c00a3331eec..dad2a841c4f866e8f8e62af7949ecd5e
    {
      name: 'ProjectionChangeListener',
      declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
-@@ -2641,6 +2813,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
-     name: 'SettingsScope',
-     declaration: 'export interface SettingsScope<T> {\n    get(): T;\n    watch(callback: (next: T, prev: T) => void | Promise<void>): () => void;\n    update(patch: object): Promise<void>;\n    replace(section: object): Promise<void>;\n}',
-   },
-+  {
-+    name: 'SettleReason',
-+    declaration: 'export type SettleReason = {\n    kind: \'completed\';\n} | {\n    kind: \'aborted\';\n} | {\n    kind: \'error\';\n    error: unknown;\n    failure?: LlmFailure;\n};',
-+  },
-   {
-     name: 'SkillCandidate',
-     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
 diff --git a/packages/typert/generator/src/cordis-catalog.ts b/packages/typert/generator/src/cordis-catalog.ts
 index 6bc649847e15c8b3ccfb6b6d61dccac0b0a2b213..253d86c7634093443cf38ce3a4fcab483ec91de0 100644
 --- a/packages/typert/generator/src/cordis-catalog.ts
@@ -903,10 +955,10 @@ index 6bc649847e15c8b3ccfb6b6d61dccac0b0a2b213..253d86c7634093443cf38ce3a4fcab48
          const doc = parseJsDoc(declaration.jsDoc ?? '').doc
          const source = pointer(declaration.location)
 diff --git a/scripts/check-workspace-constraints.ts b/scripts/check-workspace-constraints.ts
-index 6bd613c2ea26bff537ce6ef2b52bb4978a2ba306..61ad5eb333a27abce421a49fad7b5d06024e40a3 100644
+index e0b9344cdf77b47a28a2a9dd524aff4901d2d90e..5210ffbb48ca0089645900888d47038ff06c765e 100644
 --- a/scripts/check-workspace-constraints.ts
 +++ b/scripts/check-workspace-constraints.ts
-@@ -132,6 +132,15 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
+@@ -136,6 +136,15 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
      ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
      // runtime's shell-held loader subpath ships as its own bundle beside the client half.
      ...exportDefault(manifest, './loader') === './lib/loader.js' ? ['lib/loader.js'] : [],
@@ -922,11 +974,168 @@ index 6bd613c2ea26bff537ce6ef2b52bb4978a2ba306..61ad5eb333a27abce421a49fad7b5d06
      // web-react's store subpath ships its own bundle (single-entry builds; no shared chunk).
      ...exportDefault(manifest, './store') === './lib/store/index.js' ? ['lib/store/index.js'] : [],
      ...extras,
+diff --git a/scripts/client-bundle-source-transform.spec.ts b/scripts/client-bundle-source-transform.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ebde99f411429b7d5fac8c937e83d5abe092545
+--- /dev/null
++++ b/scripts/client-bundle-source-transform.spec.ts
+@@ -0,0 +1,65 @@
++/**
++ * The client bundle preset's opt-in source transform receives the plugin's
++ * addWatchFile as its third argument, so file-backed transforms (the Fabric
++ * watched patches file) join the Rolldown watch graph and a backing-file
++ * change invalidates every module's transform result.
++ */
++import { describe, expect, it } from 'vitest'
++import { clientBundle } from '../packages/client/tsdown.client.ts'
++
++interface TransformPlugin {
++  name: string
++  transform?: {
++    filter: { id: RegExp }
++    handler(this: { addWatchFile(id: string): void }, code: string, id: string): unknown
++  }
++}
++
++type SourceTransform = (code: string, id: string, addWatchFile?: (file: string) => void) => { code: string } | null
++
++function transformPlugin(transform: SourceTransform): TransformPlugin {
++  const configs = clientBundle('@deepseek-ai/dsh-client-test', ['lib/types/index.js', 'lib/types/invariant.js'], { transform })
++  const plugins = (configs[1] as { plugins: TransformPlugin[] }).plugins
++  const plugin = plugins.find(candidate => candidate.name === 'dsh-client-source-transform')
++  if (plugin === undefined) throw new Error('source transform plugin missing from client config')
++  return plugin
++}
++
++describe('client bundle source transform', () => {
++  it('forwards code, id, and a working addWatchFile to the transform', () => {
++    const seen: Array<{ code: string; id: string }> = []
++    const watched: string[] = []
++    const plugin = transformPlugin((code, id, addWatchFile) => {
++      seen.push({ code, id })
++      addWatchFile?.('/repo/fabric.patches.json')
++      return { code: `${code}\n// transformed` }
++    })
++    const hook = plugin.transform
++    if (hook === undefined) throw new Error('transform hook missing')
++
++    const output = hook.handler.call({ addWatchFile: id => watched.push(id) }, 'export const x = 1', '/repo/src/index.ts')
++
++    expect(seen).toEqual([{ code: 'export const x = 1', id: '/repo/src/index.ts' }])
++    expect(watched).toEqual(['/repo/fabric.patches.json'])
++    expect(output).toEqual({ code: 'export const x = 1\n// transformed' })
++  })
++
++  it('maps a null transform result to null (module untouched)', () => {
++    const plugin = transformPlugin(() => null)
++    const hook = plugin.transform
++    if (hook === undefined) throw new Error('transform hook missing')
++    expect(hook.handler.call({ addWatchFile: () => {} }, 'export const x = 1', '/repo/src/index.ts')).toBeNull()
++  })
++
++  it('keeps the hook off non-source ids', () => {
++    const plugin = transformPlugin(() => null)
++    const filter = plugin.transform?.filter.id
++    if (filter === undefined) throw new Error('transform filter missing')
++    for (const id of ['/repo/a.ts', '/repo/a.tsx', '/repo/a.js', '/repo/a.mjs', '/repo/a.cjs']) {
++      expect(filter.test(id), id).toBe(true)
++    }
++    for (const id of ['/repo/a.css', '/repo/a.json', '/repo/a.svg']) {
++      expect(filter.test(id), id).toBe(false)
++    }
++  })
++})
+diff --git a/scripts/dev-web-fabric.spec.ts b/scripts/dev-web-fabric.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d52aceebb1e1b8ab9bca3fa02490e4d1620bcea
+--- /dev/null
++++ b/scripts/dev-web-fabric.spec.ts
+@@ -0,0 +1,80 @@
++/**
++ * End-to-end proof of the Fabric browser build trigger: a client bundle
++ * whose tsdown config wires `clientBundle(..., { transform: createWatchedBrowserTransform(...) })`
++ * rebuilds under watch mode when the patches file (not any source module)
++ * changes, because the transform registers the file in the watch graph
++ * through the preset-forwarded addWatchFile. The rewritten bundle is what
++ * the client-hmr chain (stat poll → rebuilt frame → fiber swap) delivers
++ * to the browser.
++ *
++ * The fixture's tsdown.config.ts mirrors a real client package's config and
++ * imports the preset and the Fabric factory by absolute path, exactly as
++ * `scripts/dev-web.ts` drives package configs in workspace mode.
++ */
++import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import { join } from 'node:path'
++import { expect, it } from 'vitest'
++import type { TsdownBundle } from 'tsdown'
++import { watchClientPlugins } from './dev-web.ts'
++
++it('rebuilds a client bundle when the watched Fabric patches file changes', async () => {
++  const root = await mkdtemp(join(tmpdir(), 'dsh-dev-web-fabric-'))
++  let bundles: TsdownBundle[] = []
++  try {
++    await symlink(join(import.meta.dirname, '..', 'node_modules'), join(root, 'node_modules'), 'dir')
++    await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@dsh-test/dev-web-fabric', private: true, type: 'module' }))
++    await mkdir(join(root, 'src/client'), { recursive: true })
++    await writeFile(join(root, 'src/client/index.ts'), 'export function add(a: number, b: number): number { return a + b }\n')
++    const patchesPath = join(root, 'fabric.patches.json')
++    const patch = {
++      id: 'web/before-add',
++      target: {
++        module: '@dsh-test/dev-web-fabric',
++        versionRange: '^1.0.0',
++        filePath: 'client/index.ts',
++        functionQuery: { functionName: 'add', kind: 'Sync' },
++      },
++      operation: 'before',
++    }
++    await writeFile(patchesPath, JSON.stringify([patch]))
++
++    const repoRoot = join(import.meta.dirname, '..')
++    await writeFile(join(root, 'tsdown.config.ts'), `
++import { defineConfig } from 'tsdown'
++import { clientBundle } from ${JSON.stringify(join(repoRoot, 'packages/client/tsdown.client.ts'))}
++import { createWatchedBrowserTransform, repoSourceResolver } from ${JSON.stringify(join(repoRoot, 'packages/cordis/cordis-fabric/src/browser-transform.ts'))}
++
++const fabric = createWatchedBrowserTransform(
++  ${JSON.stringify(patchesPath)},
++  repoSourceResolver('@dsh-test/dev-web-fabric', ${JSON.stringify(join(root, 'src'))}, '1.0.0'),
++)
++
++export default defineConfig([clientBundle('@dsh-test/dev-web-fabric', ['lib/types/index.js'], { transform: fabric })[1]])
++`)
++
++    bundles = await watchClientPlugins(root, ['.'], 50)
++
++    const bundlePath = join(root, 'lib/client.js')
++    await expect.poll(async () => {
++      try {
++        return (await readFile(bundlePath, 'utf8')).includes('__dshFabricBridge')
++      } catch {
++        return false
++      }
++    }, { timeout: 10_000 }).toBe(true)
++    expect(await readFile(bundlePath, 'utf8')).toContain('web/before-add')
++
++    // Let the watcher settle, then empty the patch set: the rebuild must
++    // re-run the transform (watch-file invalidation), so the bridge
++    // machinery disappears from the bundle without any source change.
++    await new Promise(resolve => setTimeout(resolve, 1_000))
++    await writeFile(patchesPath, '[]')
++    await expect.poll(async () => (await readFile(bundlePath, 'utf8')).includes('__dshFabricBridge'), {
++      timeout: 10_000,
++    }).toBe(false)
++  } finally {
++    for (const bundle of bundles) await bundle[Symbol.asyncDispose]()
++    await rm(root, { recursive: true, force: true })
++  }
++}, 30_000)
 diff --git a/scripts/gen-cordis-catalog.ts b/scripts/gen-cordis-catalog.ts
-index 4dd381af69e61b2978263579ed9e5047100a212c..7a1ff59eaa8356a03bfcc4b127776890488b6cb4 100644
+index bcf90d1e828f6cff30f93d54da766c6af10605b9..25b6368bc97bfc7c9a5bb9f5651e357eb5c631c6 100644
 --- a/scripts/gen-cordis-catalog.ts
 +++ b/scripts/gen-cordis-catalog.ts
-@@ -239,6 +239,10 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
+@@ -244,6 +244,10 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
  
  /** Project types deliberately documented outside the core-data catalog. */
  export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
@@ -937,7 +1146,7 @@ index 4dd381af69e61b2978263579ed9e5047100a212c..7a1ff59eaa8356a03bfcc4b127776890
    AgentFactory: 'agent creation seam is owned by packages/core/agent/README.md',
    z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
    BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-slash/src/types.ts',
-@@ -265,6 +269,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+@@ -270,6 +274,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
    ProjectionSnapshot: 'watermark snapshot shape is owned by packages/session-projection/session-projection/src/index.ts',
    ProjectionCheckpoint: 'persisted checkpoint row map is owned by packages/session-projection/session-projection/src/index.ts',
    CommandExecution: 'executor return contract is owned by packages/ui/commands/src/index.ts',
@@ -947,7 +1156,7 @@ index 4dd381af69e61b2978263579ed9e5047100a212c..7a1ff59eaa8356a03bfcc4b127776890
    TypertFace: 'registry face identity is owned by packages/typert/registry/README.md',
    TypertPackageFilter: 'registry package query filter is owned by packages/typert/registry/README.md',
 diff --git a/scripts/gen-doc-graphs.ts b/scripts/gen-doc-graphs.ts
-index 337b27d718c98307f15916abbf5f129e62657735..ae83dab3ab8af5410c65e34f220498e1ed64537c 100644
+index b9f445cc22d298a023446ef940e5eb7ba86739ce..e978b05781a15b9612e7561e9ada2193b2f951d1 100644
 --- a/scripts/gen-doc-graphs.ts
 +++ b/scripts/gen-doc-graphs.ts
 @@ -473,6 +473,54 @@ const SERVICE_ROLES: ServiceRole[] = [
@@ -1006,7 +1215,7 @@ index 337b27d718c98307f15916abbf5f129e62657735..ae83dab3ab8af5410c65e34f220498e1
      key: 'workflows',
      pkg: 'workflow',
 diff --git a/scripts/verify-package-readme-model-experience.ts b/scripts/verify-package-readme-model-experience.ts
-index 041972cb9ff66174bcede489ea77428d764b3d3b..e03f1c0f993322474bdf47e17f25e7d5ea45dd97 100644
+index 316a4233de9214266ac9a3ad5f96689cff199279..b9723c3652922605ac2841b523c7d7413df31cc0 100644
 --- a/scripts/verify-package-readme-model-experience.ts
 +++ b/scripts/verify-package-readme-model-experience.ts
 @@ -80,6 +80,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
@@ -1019,10 +1228,20 @@ index 041972cb9ff66174bcede489ea77428d764b3d3b..e03f1c0f993322474bdf47e17f25e7d5
    'packages/host/directory-picker': { kind: 'none', reason: 'The GUI-host picking seam registers no model surface.' },
    'packages/host/directory-picker-auto': { kind: 'none', reason: 'The GUI-host picking chooser only mounts a backend row; registers no model surface.' },
 diff --git a/tsconfig.client.json b/tsconfig.client.json
-index e1d4088061a10f5146ad1c7791c0477c53732cd4..8f651662e8cd822921322d382fc67f2a48844b44 100644
+index e1d4088061a10f5146ad1c7791c0477c53732cd4..0e05821f37ea23c24a440f159519f72d4fccd7de 100644
 --- a/tsconfig.client.json
 +++ b/tsconfig.client.json
-@@ -73,6 +73,8 @@
+@@ -25,7 +25,8 @@
+     "packages/host/directory-picker-native/tests/**/*.tsx",
+     "packages/client/tsdown.client.ts",
+     "scripts/client-bundle-css.spec.ts",
+-    "scripts/client-bundle-purity.spec.ts"
++    "scripts/client-bundle-purity.spec.ts",
++    "scripts/client-bundle-source-transform.spec.ts"
+   ],
+   "references": [
+     // Shared leaf: web e2e boots the real host webserver (fixture + real-host
+@@ -73,6 +74,8 @@
      { "path": "./packages/client/ui-models" },
      { "path": "./packages/client/locale" },
      { "path": "./packages/client/web" },
@@ -1032,10 +1251,20 @@ index e1d4088061a10f5146ad1c7791c0477c53732cd4..8f651662e8cd822921322d382fc67f2a
    ]
  }
 diff --git a/tsconfig.host.json b/tsconfig.host.json
-index 0847ad36ca56ef98d536c495b808d52f825c5c6c..6e66894f8bcac755869b36275b374bc88443bc4f 100644
+index 9e63314bc567a9b7577e68631180fa9ef86b9532..57c95d1b74e7edacf3a0a59fc0d88ca57bc0d202 100644
 --- a/tsconfig.host.json
 +++ b/tsconfig.host.json
-@@ -213,7 +213,10 @@
+@@ -72,7 +72,8 @@
+     "packages/host/directory-picker-native/**",
+     "scripts/client-bundle-css.spec.ts",
+     "packages/typert/generator/tests/fixtures/**",
+-    "scripts/client-bundle-purity.spec.ts"
++    "scripts/client-bundle-purity.spec.ts",
++    "scripts/client-bundle-source-transform.spec.ts"
+   ],
+   "references": [
+     { "path": "./vendor/cosmokit" },
+@@ -221,7 +222,10 @@
      { "path": "./packages/plan/plan-mode" },
      { "path": "./packages/guard/repeat-tool-guard" },
      { "path": "./packages/cordis/tool-cordis" },

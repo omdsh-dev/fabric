@@ -58,9 +58,20 @@ export function validatePatchStatic(patch: { target: FabricTarget; operation: Fa
   if (typeof target.filePath !== 'string' && !(target.filePath instanceof RegExp)) {
     throw new Error('fabric: patch target.filePath must be a string or RegExp')
   }
+  if (!isValidIndex(target.index)) {
+    throw new Error('fabric: patch target.index must be a non-negative integer or null')
+  }
+  if (!isValidIndex(target.functionQuery?.index)) {
+    throw new Error('fabric: patch target functionQuery.index must be a non-negative integer or null')
+  }
   if (!['before', 'after', 'around', 'replace'].includes(patch.operation)) {
     throw new Error(`fabric: unknown operation ${JSON.stringify(patch.operation)}`)
   }
+}
+
+/** Whether an index field holds a valid match selector: unset, null (every match), or a non-negative integer. */
+function isValidIndex(index: number | null | undefined): boolean {
+  return index === undefined || index === null || (Number.isInteger(index) && index >= 0)
 }
 
 /** Whether a value is a thenable (the async-target result shape). */

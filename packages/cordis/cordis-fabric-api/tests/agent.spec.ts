@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from 'cordis'
-import type { Agent, AgentStatus, SettleReason } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import { FabricAgentService } from '../src/agent.ts'
 
 /** Minimal live-agent stand-in: the facade touches only the listed members. */
@@ -19,28 +19,24 @@ describe('FabricAgentService', () => {
     const { ctx } = await setup()
     const seen: AgentStatus[] = []
     const dispose = ctx.fabricAgent.onStatus((_agent, status) => { seen.push(status) })
-    ctx.emit('agent/status', fakeAgent(), 'running')
+    ctx.emit('agent/status', { agent: fakeAgent(), status: 'running' })
     expect(seen).toEqual(['running'])
     dispose()
-    ctx.emit('agent/status', fakeAgent(), 'idle')
+    ctx.emit('agent/status', { agent: fakeAgent(), status: 'idle' })
     expect(seen).toEqual(['running'])
   })
 
-  it('forwards created, disposed, and settled observations', async () => {
+  it('forwards created and disposed observations', async () => {
     const { ctx } = await setup()
     const created: Agent[] = []
     const disposed: Agent[] = []
-    const settled: Array<[Agent, number, SettleReason]> = []
     ctx.fabricAgent.onCreated((agent) => { created.push(agent) })
     ctx.fabricAgent.onDisposed((agent) => { disposed.push(agent) })
-    ctx.fabricAgent.onSettled((agent, turn, reason) => { settled.push([agent, turn, reason]) })
     const agent = fakeAgent()
-    ctx.emit('agent/created', agent)
-    ctx.emit('agent/settled', agent, 3, { kind: 'completed' })
-    ctx.emit('agent/disposed', agent)
+    ctx.emit('agent/created', { agent })
+    ctx.emit('agent/disposed', { agent })
     expect(created).toEqual([agent])
     expect(disposed).toEqual([agent])
-    expect(settled).toEqual([[agent, 3, { kind: 'completed' }]])
   })
 
   it('removes a listener when its contributing fiber disposes (HMR safety)', async () => {
@@ -54,9 +50,9 @@ describe('FabricAgentService', () => {
         modCtx.fabricAgent.onStatus((_agent, status) => { seen.push(status) })
       },
     })
-    ctx.emit('agent/status', fakeAgent(), 'running')
+    ctx.emit('agent/status', { agent: fakeAgent(), status: 'running' })
     await mod.dispose()
-    ctx.emit('agent/status', fakeAgent(), 'idle')
+    ctx.emit('agent/status', { agent: fakeAgent(), status: 'idle' })
     expect(seen).toEqual(['running'])
   })
 

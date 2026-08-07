@@ -57,14 +57,41 @@ describe('cordis-fabric load-time transformation (child processes)', () => {
     expect(out).toContain('PASS asyncAwait withAwait(2): 50')
   })
 
-  it('leaves generator functions untouched', () => {
+  it('transforms generator functions with preserved iteration semantics', () => {
     const out = runCase('generator')
-    expect(out).toContain('PASS generator counter(3) untouched: "[0,1,2]"')
+    expect(out).toContain('PASS generator untouched counter(3): "[0,1,2]"')
+    expect(out).toContain('PASS generator patched counter(3): "[0,1,2,3,4,5]"')
+  })
+
+  it('transforms async generator functions with preserved iteration semantics', () => {
+    const out = runCase('asyncGenerator')
+    expect(out).toContain('PASS asyncGenerator patched asyncCounter(3): "[0,1,2,3,4,5]"')
   })
 
   it('transforms arrow functions with plain identifier parameters', () => {
     const out = runCase('arrow')
     expect(out).toContain('PASS arrow double(2): 40')
+  })
+
+  it('transforms arrow functions with rest parameters', () => {
+    const out = runCase('arrowRest')
+    expect(out).toContain('PASS arrowRest sumRest(1,2,3): 15')
+  })
+
+  it('transforms arrow functions with default parameters', () => {
+    const out = runCase('arrowDefault')
+    expect(out).toContain('PASS arrowDefault withDefault(2): 30')
+    expect(out).toContain('PASS arrowDefault withDefault(2,3): 23')
+  })
+
+  it('transforms arrow functions with destructuring parameters', () => {
+    const out = runCase('arrowDestructure')
+    expect(out).toContain('PASS arrowDestructure pickName: "z:t:a:2"')
+  })
+
+  it('preserves an arrow body referencing the enclosing arguments object', () => {
+    const out = runCase('arrowOuterArgs')
+    expect(out).toContain('PASS arrowOuterArgs callOuterArgs(7): "140"')
   })
 
   it('orders per-function handlers by priority, higher first', () => {
@@ -98,5 +125,29 @@ describe('cordis-fabric load-time transformation (child processes)', () => {
     expect(out).toContain('PASS retransform v1 add(2,3): 23')
     expect(out).toContain('PASS retransform cached add(2,3): 23')
     expect(out).toContain('PASS retransform reloaded add(2,3): 203')
+  })
+
+  it('re-transforms an already-evaluated ESM module (HMR invalidation)', () => {
+    const out = runCase('retransformEsm')
+    expect(out).toContain('PASS retransformEsm v1 add(2,3): 23')
+    expect(out).toContain('PASS retransformEsm cached add(2,3): 23')
+    expect(out).toContain('PASS retransformEsm reloaded add(2,3): 203')
+  })
+
+  it('restores the previous instance when an ESM re-import fails', () => {
+    const out = runCase('retransformEsmRollback')
+    expect(out).toContain('PASS retransformEsmRollback initial value: 1')
+    expect(out).toContain('PASS retransformEsmRollback re-import fails: true')
+    expect(out).toContain('PASS retransformEsmRollback restores cached instance: true')
+  })
+
+  it('invalidates both the require cache and the ESM load cache for CommonJS', () => {
+    const out = runCase('retransformCjsDual')
+    expect(out).toContain('PASS retransformCjsDual shared instance: true')
+    expect(out).toContain('PASS retransformCjsDual v1 add(2,3): 23')
+    expect(out).toContain('PASS retransformCjsDual reloaded add(2,3): 203')
+    expect(out).toContain('PASS retransformCjsDual old instance detached: true')
+    expect(out).toContain('PASS retransformCjsDual esm re-import shares reload: true')
+    expect(out).toContain('PASS retransformCjsDual esm add(2,3): 203')
   })
 })

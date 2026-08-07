@@ -19,8 +19,10 @@
  */
 
 import { Module, createRequire, register, registerHooks } from 'node:module'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'
 import parse from 'module-details-from-path'
 import { installBridge } from './bridge.ts'
@@ -81,9 +83,14 @@ export function patchInstrumentation(patch: FabricPatchStub): FabricInstrumentat
       filePath: target.filePath,
     },
     astQuery: query,
-    ...(target.functionQuery && !target.astQuery
-      ? { functionQuery: target.functionQuery }
-      : {}),
+    // The function query doubles as the behavior bag: name-based targets carry
+    // their matching fields; raw astQuery targets have only behavior fields
+    // (index) read. The default flips the upstream first-match-only (index 0)
+    // to every match (index null): the selector picks the functions, so all
+    // of them are rewritten.
+    functionQuery: target.functionQuery && !target.astQuery
+      ? { ...target.functionQuery, index: target.functionQuery.index ?? null }
+      : { index: target.index ?? null },
     transform: 'fabric',
     fabricPatchId: patch.id,
     fabricOperation: patch.operation,
@@ -165,15 +172,18 @@ interface LoaderState {
   active: boolean
   /** Orchestrion matcher with the Fabric transform registered. */
   matcher: ReturnType<typeof create>
+  /** The ordered instrumentations, serialized to the async hook entry. */
+  instrumentations: FabricInstrumentationConfig[]
   /** Transformers resolved per module URL. */
   transformers: Map<string, ReturnType<ReturnType<typeof create>['getTransformer']>>
   /** URLs already transformed (guards the CJS double-path). */
   seen: Set<string>
 }
 
-/** Active installations in order; the latest (top of the stack) owns the CJS
- * `_compile` wrapper. Each installation's hooks capture their own state, so
- * concurrent installations transform through their own matchers. */
+/** Active installations in installation order. Each installation's ESM hooks
+ * capture their own state, and the CJS `_compile` wrapper chains every active
+ * installation in order, so concurrent installations all transform through
+ * their own matchers. */
 const states: LoaderState[] = []
 
 /** Package-version lookup cache (resolve and _compile both read per module). */
@@ -189,28 +199,78 @@ function cachedPackageVersion(basedir: string): string {
 }
 
 /**
- * Whether this Node version exposes the synchronous `registerHooks` API.
- * DSH's engine range (^22.19) always does; the async fallback covers older
- * runtimes.
+ * Whether this Node version exposes a reliable synchronous `registerHooks`
+ * API. The function exists from 22.19.0, but before 22.22.3 / 24.11.1 its
+ * synchronous load chain returns no source for CommonJS modules when
+ * loader-thread hooks (`module.register`, e.g. tsx on those versions) are
+ * also present, which crashes Node's load validation; the stable API lands
+ * in 22.22.3 and 24.11.1. Below those, the async fallback keeps every hook
+ * on one loader-thread chain.
  */
 function supportsSyncHooks(): boolean {
   // DSH_FABRIC_FORCE_ASYNC_HOOKS exercises the async `module.register`
   // fallback on runtimes that do have `registerHooks` (test seam).
-  return process.env.DSH_FABRIC_FORCE_ASYNC_HOOKS !== '1' && typeof registerHooks === 'function'
+  if (process.env.DSH_FABRIC_FORCE_ASYNC_HOOKS === '1') return false
+  if (typeof registerHooks !== 'function') return false
+  const [major = 0, minor = 0, patch = 0] = process.versions.node.split('.').map(Number)
+  if (major === 22) return minor > 22 || (minor === 22 && patch >= 3)
+  if (major === 24) return minor > 11 || (minor === 11 && patch >= 1)
+  return major > 24
+}
+
+/** Whether the async loader-thread hook entry has been registered (once). */
+let asyncHooksInstalled = false
+
+/** Shared configuration file the loader-thread entry reads on every load. */
+let asyncConfigPath: string | undefined
+
+/**
+ * Remove the shared configuration file on process exit (once). The loader
+ * thread only reads the file during module loads, which cannot happen after
+ * the exit event; a hard crash may leave the pid-scoped file behind and
+ * tmpdir policy owns those leftovers.
+ */
+function scheduleAsyncConfigCleanup(path: string): void {
+  process.once('exit', () => {
+    try {
+      unlinkSync(path)
+    } catch {
+      // Already removed or never written; nothing else can reach it here.
+    }
+  })
 }
 
 /**
- * Install the async loader-thread hooks (`module.register`) used when the
- * synchronous `registerHooks` API is unavailable. The hook entry runs on the
- * loader thread and transforms matching ESM modules; CommonJS stays on the
- * main thread's `_compile` patch (plain `require()` calls never reach the
- * loader-thread load hook).
- * @param instrumentations - Orchestrion configs selecting target modules.
+ * Register the async loader-thread hooks (`module.register`) used when the
+ * synchronous `registerHooks` API is unavailable (or unreliable — see
+ * {@link supportsSyncHooks}). The hook entry runs on the loader thread and
+ * transforms matching ESM modules; CommonJS stays on the main thread's
+ * `_compile` patch (plain `require()` calls never reach the loader-thread
+ * load hook).
+ *
+ * The entry is registered exactly once; later installations and disposals do
+ * not re-register (there is no unregister), they update the shared
+ * configuration file, which the entry reads on every load. Registration-time
+ * snapshots therefore become load-time state: a new installation replaces
+ * the transform on the next module evaluation, disposing one removes its
+ * instrumentations, and `retransformEsm` works exactly as on the sync path.
+ * @param configPath - the shared configuration file path.
  */
-function installAsyncHooks(instrumentations: FabricInstrumentationConfig[]): void {
+function installAsyncHooks(configPath: string): void {
+  if (asyncHooksInstalled) return
+  asyncHooksInstalled = true
   register(new URL('./hook-entry.js', import.meta.url).href, import.meta.url, {
-    data: { instrumentations },
+    data: { configPath },
   })
+}
+
+/** Serialize the installation stack for the async hook entry. */
+function writeAsyncConfig(): void {
+  if (!asyncConfigPath) return
+  writeFileSync(asyncConfigPath, JSON.stringify(states.map(state => ({
+    active: state.active,
+    instrumentations: state.instrumentations,
+  }))))
 }
 
 /**
@@ -234,18 +294,26 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
   installBridge()
   const ordered = orderInstrumentations(instrumentations)
   const syncHooks = supportsSyncHooks()
-  if (!syncHooks) installAsyncHooks(ordered)
+  if (!syncHooks) {
+    if (asyncConfigPath === undefined) {
+      asyncConfigPath = join(tmpdir(), `dsh-fabric-config-${process.pid}.json`)
+      scheduleAsyncConfigCleanup(asyncConfigPath)
+    }
+    installAsyncHooks(asyncConfigPath)
+  }
 
   const matcher = create(ordered)
   registerFabricTransform(matcher)
 
   const state: LoaderState = {
     active: true,
+    instrumentations: ordered,
     matcher,
     transformers: new Map(),
     seen: new Set(),
   }
   states.push(state)
+  if (!syncHooks) writeAsyncConfig()
 
   if (syncHooks) {
     registerHooks({
@@ -297,6 +365,7 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
     if (index >= 0) states.splice(index, 1)
     for (const transformer of state.transformers.values()) transformer?.free()
     state.transformers.clear()
+    writeAsyncConfig()
   }
 }
 
@@ -306,8 +375,10 @@ let compileWrapperInstalled = false
 /**
  * Install the process-wide `_compile` wrapper once. With no active
  * installation it passes through to the original compile function; with one
- * or more it transforms matching CommonJS files through the top-of-stack
- * installation.
+ * or more it chains the content through every active installation's matcher
+ * in installation order, mirroring the sync ESM hook chain (a later
+ * installation's transform applies last, wrapping outermost). Disposed
+ * installations are spliced out of the stack and skipped.
  */
 function installCompileWrapper(): void {
   if (compileWrapperInstalled) return
@@ -316,20 +387,19 @@ function installCompileWrapper(): void {
   const compileKey = '_compile'
   const originalCompile = modulePrototype[compileKey] as CompileFn
   modulePrototype[compileKey] = function (this: Module, content: string, filename: string) {
-    const stateRef = states[states.length - 1]
-    if (stateRef?.active) {
-      const details = parse(filename)
-      if (details) {
-        const version = cachedPackageVersion(details.basedir)
-        const transformer = stateRef.matcher.getTransformer(details.name, version, details.path)
-        if (transformer && !stateRef.seen.has(filename)) {
-          stateRef.seen.add(filename)
-          try {
-            content = transformer.transform(content, 'cjs').code
-          } catch (error) {
-            stateRef.seen.delete(filename)
-            throw new Error(`fabric: failed to transform ${filename}`, { cause: error })
-          }
+    const details = parse(filename)
+    if (details) {
+      const version = cachedPackageVersion(details.basedir)
+      for (const state of states) {
+        if (!state.active) continue
+        const transformer = state.matcher.getTransformer(details.name, version, details.path)
+        if (!transformer || state.seen.has(filename)) continue
+        state.seen.add(filename)
+        try {
+          content = transformer.transform(content, 'cjs').code
+        } catch (error) {
+          state.seen.delete(filename)
+          throw new Error(`fabric: failed to transform ${filename}`, { cause: error })
         }
       }
     }
@@ -359,15 +429,95 @@ const require = createRequire(import.meta.url)
  * HMR-style invalidation for CommonJS: the module's `require.cache` entry is
  * dropped and its `seen` marks are cleared, so the next `require()` runs the
  * `_compile` wrapper again and transforms the module with the top-of-stack
- * installation's current matcher. The returned value is the NEW module
- * exports object; references to the old one keep the old transformation.
- * ESM modules have no equivalent (the ESM cache has no unload path).
+ * installation's current matcher. The same file may also sit in the ESM graph
+ * (import()ed): its `loadCache` entry is evicted too (the same dual-cache
+ * invalidation the vendored Loader's HMR performs), so both graphs observe
+ * the fresh evaluation. The returned value is the NEW module exports object;
+ * references to the old one keep the old transformation.
  * @param filename - the absolute module path used as the `require.cache` key.
  * @returns the freshly evaluated module exports.
  */
 export function retransformCommonJs(filename: string): unknown {
   // oxlint-disable-next-line typescript/no-dynamic-delete -- require.cache eviction is the sanctioned invalidation API.
   delete require.cache[filename]
+  const cache = internalLoader()?.loadCache
+  if (cache) {
+    Map.prototype.delete.call(cache, pathToFileURL(filename).href)
+  }
   for (const state of states) state.seen.delete(filename)
   return require(filename)
+}
+
+interface InternalLoader {
+  /** Node-internal ESM module cache, keyed by module URL. */
+  readonly loadCache?: Map<string, unknown>
+}
+
+let cachedInternalLoader: InternalLoader | undefined
+
+/**
+ * Locate Node's internal cascaded module loader (Node >= 22), used to evict
+ * ESM cache entries. The same mechanism the vendored Loader's HMR uses;
+ * it is an internal API and its shape may change across Node versions.
+ */
+function internalLoader(): InternalLoader | undefined {
+  if (cachedInternalLoader) return cachedInternalLoader
+  const require = createRequire(import.meta.url)
+  let raw: { getOrInitializeCascadedLoader?: () => unknown } | undefined
+  try {
+    // node-addon-require-builtin ships no declarations; the addon surface is
+    // a single requireBuiltin(id) returning the Node-internal module.
+    const addon = require('node-addon-require-builtin') as { requireBuiltin(id: string): unknown }
+    raw = addon.requireBuiltin('internal/modules/esm/loader') as { getOrInitializeCascadedLoader?: () => unknown } | undefined
+  } catch {
+    return undefined
+  }
+  const loader = raw?.getOrInitializeCascadedLoader?.() as InternalLoader | undefined
+  if (loader) cachedInternalLoader = loader
+  return loader
+}
+
+/**
+ * Re-evaluate an already-loaded ESM module under the current instrumentation
+ * stack.
+ *
+ * HMR-style invalidation for ESM: the module's entry in Node's internal
+ * `loadCache` is evicted (the same mechanism the vendored Loader's HMR uses)
+ * and the `seen` marks are cleared, so the next `import()` of the same URL
+ * re-evaluates the module and the load hooks transform it with the
+ * top-of-stack installation's current matcher. The returned value is the NEW
+ * module namespace; references to the old one keep the old transformation.
+ *
+ * A failed re-import restores the evicted cache entry (the same rollback the
+ * vendored Loader's HMR performs): the module falls back to the previous
+ * instance instead of being left unevaluatable, and a later `import()` of the
+ * URL serves the restored instance without re-evaluating it.
+ *
+ * Requires the Node internal loader (Node >= 22) and the synchronous
+ * `registerHooks` path — the async `module.register` fallback transforms ESM
+ * in the loader thread, where a main-thread eviction alone does not reach.
+ * @param url - the module URL used as the `loadCache` key.
+ * @returns the freshly evaluated module namespace.
+ */
+export async function retransformEsm(url: string): Promise<Record<string, unknown>> {
+  const loader = internalLoader()
+  const cache = loader?.loadCache
+  if (!cache) {
+    throw new Error('fabric: ESM re-transformation requires the Node internal module loader (Node >= 22)')
+  }
+  // Back up the cached job so a failed re-import can restore the previous
+  // module instance instead of leaving the URL unevaluatable.
+  const job: unknown = Map.prototype.get.call(cache, url)
+  // Map.prototype.delete removes the entry completely on both Node 22/23
+  // (plain Map) and Node 24 (LoadCache whose own delete only clears the slot).
+  Map.prototype.delete.call(cache, url)
+  const path = url.startsWith('file:') ? fileURLToPath(url) : url
+  for (const state of states) state.seen.delete(path)
+  try {
+    const module = await import(url) as Record<string, unknown>
+    return module
+  } catch (error) {
+    if (job !== undefined) Map.prototype.set.call(cache, url, job)
+    throw error
+  }
 }

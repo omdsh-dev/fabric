@@ -6,7 +6,7 @@
  * `./src/*` export and is launched with tsx from the repository root.
  */
 
-import { installFabricHooks, patchInstrumentation, retransformCommonJs, runtime, GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
+import { installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, runtime, GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -149,18 +149,45 @@ switch (caseName) {
     break
 
   case 'generator':
-    // Generator targets are skipped by the transform: the injected return
-    // would break iteration semantics, so the function stays untouched.
-    await withPatch({
-      id: 'e2e/generator',
-      target: { ...target, functionQuery: { functionName: 'counter', kind: 'Sync' } },
-      operation: 'replace',
-      handler(call, invoke) {
-        return invoke()
-      },
-    }, async (mod) => {
-      check('generator counter(3) untouched', JSON.stringify([...mod.counter(3)]), JSON.stringify([0, 1, 2]))
-    })
+    {
+      // Generators transform through delegation: without a handler publish
+      // hands back the traced generator and `yield*` preserves iteration; a
+      // before handler's argument mutation flows into the replayed generator.
+      const patch = {
+        id: 'e2e/generator-before',
+        target: { ...target, functionQuery: { functionName: 'counter', kind: 'Sync' } },
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 2
+        },
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      const mod = await import(fixtureUrl)
+      check('generator untouched counter(3)', JSON.stringify([...mod.counter(3)]), JSON.stringify([0, 1, 2]))
+      runtime.register({ id: patch.id, target: patch.target, operation: patch.operation, priority: 0, enabled: false })
+      runtime.enable(patch.id, patch.handler)
+      check('generator patched counter(3)', JSON.stringify([...mod.counter(3)]), JSON.stringify([0, 1, 2, 3, 4, 5]))
+    }
+    break
+
+  case 'asyncGenerator':
+    {
+      const patch = {
+        id: 'e2e/async-gen-before',
+        target: { ...target, functionQuery: { functionName: 'asyncCounter', kind: 'Async' } },
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 2
+        },
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      const mod = await import(fixtureUrl)
+      runtime.register({ id: patch.id, target: patch.target, operation: patch.operation, priority: 0, enabled: false })
+      runtime.enable(patch.id, patch.handler)
+      const out = []
+      for await (const value of mod.asyncCounter(3)) out.push(value)
+      check('asyncGenerator patched asyncCounter(3)', JSON.stringify(out), JSON.stringify([0, 1, 2, 3, 4, 5]))
+    }
     break
 
   case 'arrow':
@@ -173,6 +200,59 @@ switch (caseName) {
       },
     }, async (mod) => {
       check('arrow double(2)', mod.double(2), 40)
+    })
+    break
+
+  case 'arrowRest':
+    await withPatch({
+      id: 'e2e/arrow-rest',
+      target: { ...target, functionQuery: { functionName: 'sumRest', kind: 'Sync' } },
+      operation: 'before',
+      handler(call) {
+        call.arguments[0] = call.arguments[0] * 10
+      },
+    }, async (mod) => {
+      check('arrowRest sumRest(1,2,3)', mod.sumRest(1, 2, 3), 15)
+    })
+    break
+
+  case 'arrowDefault':
+    await withPatch({
+      id: 'e2e/arrow-default',
+      target: { ...target, functionQuery: { functionName: 'withDefault', kind: 'Sync' } },
+      operation: 'before',
+      handler(call) {
+        call.arguments[0] = call.arguments[0] * 10
+      },
+    }, async (mod) => {
+      check('arrowDefault withDefault(2)', mod.withDefault(2), 30)
+      check('arrowDefault withDefault(2,3)', mod.withDefault(2, 3), 23)
+    })
+    break
+
+  case 'arrowDestructure':
+    await withPatch({
+      id: 'e2e/arrow-destructure',
+      target: { ...target, functionQuery: { functionName: 'pickName', kind: 'Sync' } },
+      operation: 'before',
+      handler(call) {
+        call.arguments[0].name = 'z'
+      },
+    }, async (mod) => {
+      check('arrowDestructure pickName', mod.pickName({ name: 'n', meta: { tag: 't' } }, ['a', 'b', 'c']), 'z:t:a:2')
+    })
+    break
+
+  case 'arrowOuterArgs':
+    await withPatch({
+      id: 'e2e/arrow-outer-args',
+      target: { ...target, functionQuery: { functionName: 'inner', kind: 'Sync' } },
+      operation: 'after',
+      handler(call) {
+        return String(call.result * 10)
+      },
+    }, async (mod) => {
+      check('arrowOuterArgs callOuterArgs(7)', mod.callOuterArgs(7), '140')
     })
     break
 
@@ -334,6 +414,112 @@ switch (caseName) {
       // ...until retransformCommonJs re-evaluates it under the v2 installation.
       const m2 = retransformCommonJs(cjsPath)
       check('retransform reloaded add(2,3)', m2.add(2, 3), 203)
+    }
+    break
+
+  case 'retransformEsm':
+    {
+      const functionQuery = { functionName: 'add', kind: 'Sync' }
+      const patchV1 = {
+        id: 'e2e/esm-v1',
+        target: { ...target, functionQuery },
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 10
+        },
+      }
+      const disposeV1 = installFabricHooks([patchInstrumentation(patchV1)])
+      const m1 = await import(fixtureUrl)
+      runtime.register({ id: patchV1.id, target: patchV1.target, operation: patchV1.operation, priority: 0, enabled: false })
+      runtime.enable(patchV1.id, patchV1.handler)
+      check('retransformEsm v1 add(2,3)', m1.add(2, 3), 23)
+      const patchV2 = {
+        id: 'e2e/esm-v2',
+        target: { ...target, functionQuery },
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 100
+        },
+      }
+      // HMR: the old installation is replaced by a new one before the module
+      // is evicted from Node's internal loadCache and re-imported.
+      disposeV1()
+      installFabricHooks([patchInstrumentation(patchV2)])
+      runtime.register({ id: patchV2.id, target: patchV2.target, operation: patchV2.operation, priority: 0, enabled: false })
+      runtime.enable(patchV2.id, patchV2.handler)
+      check('retransformEsm cached add(2,3)', m1.add(2, 3), 23)
+      const m2 = await retransformEsm(fixtureUrl.href)
+      check('retransformEsm reloaded add(2,3)', m2.add(2, 3), 203)
+    }
+    break
+
+  case 'retransformEsmRollback':
+    {
+      const rollbackUrl = new URL('./fixtures/node_modules/fabric-target-fixture/rollback.mjs', import.meta.url).href
+      const m1 = await import(rollbackUrl)
+      check('retransformEsmRollback initial value', m1.value, 1)
+      process.env.DSH_FABRIC_ROLLBACK_BOOM = '1'
+      let failed = false
+      try {
+        await retransformEsm(rollbackUrl)
+      } catch {
+        failed = true
+      }
+      check('retransformEsmRollback re-import fails', failed, true)
+      delete process.env.DSH_FABRIC_ROLLBACK_BOOM
+      // The evicted entry was restored: import() serves the previous instance
+      // from the cache instead of re-evaluating (which would have thrown again).
+      const m2 = await import(rollbackUrl)
+      check('retransformEsmRollback restores cached instance', m2 === m1, true)
+    }
+    break
+
+  case 'retransformCjsDual':
+    {
+      const cjsPath = new URL('./fixtures/node_modules/fabric-target-fixture/index.cjs', import.meta.url).pathname
+      const cjsUrl = pathToFileURL(cjsPath).href
+      const cjsTarget = {
+        module: 'fabric-target-fixture',
+        versionRange: '^1.0.0',
+        filePath: 'index.cjs',
+        functionQuery: { methodName: 'add', kind: 'Sync' },
+      }
+      const patchV1 = {
+        id: 'e2e/dual-v1',
+        target: cjsTarget,
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 10
+        },
+      }
+      const disposeV1 = installFabricHooks([patchInstrumentation(patchV1)])
+      const esm = await import(cjsUrl)
+      const cjs = require(cjsPath)
+      runtime.register({ id: patchV1.id, target: patchV1.target, operation: patchV1.operation, priority: 0, enabled: false })
+      runtime.enable(patchV1.id, patchV1.handler)
+      check('retransformCjsDual shared instance', esm.add === cjs.add, true)
+      check('retransformCjsDual v1 add(2,3)', cjs.add(2, 3), 23)
+      const patchV2 = {
+        id: 'e2e/dual-v2',
+        target: cjsTarget,
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 100
+        },
+      }
+      disposeV1()
+      installFabricHooks([patchInstrumentation(patchV2)])
+      runtime.register({ id: patchV2.id, target: patchV2.target, operation: patchV2.operation, priority: 0, enabled: false })
+      runtime.enable(patchV2.id, patchV2.handler)
+      const m2 = retransformCommonJs(cjsPath)
+      check('retransformCjsDual reloaded add(2,3)', m2.add(2, 3), 203)
+      check('retransformCjsDual old instance detached', m2.add !== cjs.add, true)
+      // The ESM graph must observe the fresh evaluation too: the loadCache
+      // entry was evicted, so import() re-loads the file (reusing the fresh
+      // require.cache entry the reload above created).
+      const esm2 = await import(cjsUrl)
+      check('retransformCjsDual esm re-import shares reload', esm2.add === m2.add, true)
+      check('retransformCjsDual esm add(2,3)', esm2.add(2, 3), 203)
     }
     break
 

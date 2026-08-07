@@ -188,10 +188,10 @@ describe('createBrowserTransform', () => {
     expect(output!.code).toContain('return dshFabricCall')
   })
 
-  it('skips arrows whose body reads the enclosing arguments object', () => {
+  it('preserves an arrow body reading the enclosing arguments object', () => {
     const patchArgs = {
       ...patch,
-      id: 'web/args-skip',
+      id: 'web/args-keep',
       target: { ...patch.target, filePath: 'args-arrow.js', functionQuery: { expressionName: 'bad', kind: 'Sync' as const } },
     }
     const transform = createBrowserTransform([patchInstrumentation(patchArgs)], nodeModulesResolver())
@@ -199,6 +199,69 @@ describe('createBrowserTransform', () => {
     const source = 'function wrap() { return (x) => x + arguments[0] }\nexport const bad = () => arguments[0]'
     const output = transform(source, id)
     expect(output).not.toBeNull()
-    expect(output!.code).not.toContain('id: "web/args-skip"')
+    // The arrow is transformed, and the outer `arguments` reference is
+    // preserved through a capture statement before the traced body.
+    expect(output!.code).toContain('id: "web/args-keep"')
+    expect(output!.code).toContain('dshFabricOuterArguments = arguments')
+    expect(output!.code).not.toContain('return arguments')
+  })
+})
+
+describe('multi-match selection', () => {
+  const multiId = `${fixtureDir}multi.mjs`
+  const multiSource = (): string => readFileSync(multiId, 'utf8')
+  const multiTarget = { module: 'fabric-target-fixture', versionRange: '^1.0.0', filePath: 'multi.mjs' }
+  const multiTransform = (target: Record<string, unknown>) =>
+    createBrowserTransform(
+      [patchInstrumentation({ id: 'web/multi', operation: 'before', target: target as never })],
+      nodeModulesResolver(),
+    )
+
+  it('transforms every function the selector picks by default (name query)', () => {
+    const output = multiTransform({ ...multiTarget, functionQuery: { methodName: 'close', kind: 'Sync' } })(multiSource(), multiId)!
+    expect((output.code.match(/web\/multi/g) ?? [])).toHaveLength(2)
+  })
+
+  it('transforms every function the selector picks by default (raw astQuery)', () => {
+    const output = multiTransform({ ...multiTarget, astQuery: 'ClassBody > [key.name="close"] > FunctionExpression' })(multiSource(), multiId)!
+    expect((output.code.match(/web\/multi/g) ?? [])).toHaveLength(2)
+  })
+
+  it('selects the index-th match when a name query carries an index', () => {
+    const first = multiTransform({ ...multiTarget, functionQuery: { methodName: 'close', kind: 'Sync', index: 0 } })(multiSource(), multiId)!
+    expect((first.code.match(/web\/multi/g) ?? [])).toHaveLength(1)
+    expect(first.code.indexOf('web/multi')).toBeLessThan(first.code.indexOf('beta:'))
+
+    const second = multiTransform({ ...multiTarget, functionQuery: { methodName: 'close', kind: 'Sync', index: 1 } })(multiSource(), multiId)!
+    expect((second.code.match(/web\/multi/g) ?? [])).toHaveLength(1)
+    expect(second.code.indexOf('web/multi')).toBeGreaterThan(second.code.indexOf('alpha:'))
+  })
+
+  it('forwards target.index as the behavior bag for raw astQuery targets', () => {
+    const output = multiTransform({ ...multiTarget, astQuery: 'ClassBody > [key.name="close"] > FunctionExpression', index: 1 })(multiSource(), multiId)!
+    expect((output.code.match(/web\/multi/g) ?? [])).toHaveLength(1)
+    expect(output.code.indexOf('web/multi')).toBeGreaterThan(output.code.indexOf('alpha:'))
+  })
+
+  it('rejects malformed index fields at instrumentation build time', () => {
+    expect(() => patchInstrumentation({
+      id: 'web/bad-index', operation: 'before',
+      target: { ...multiTarget, astQuery: 'FunctionDeclaration', index: -1 },
+    })).toThrow(/target\.index/)
+    expect(() => patchInstrumentation({
+      id: 'web/bad-fq-index', operation: 'before',
+      target: { ...multiTarget, functionQuery: { methodName: 'close', kind: 'Sync', index: 1.5 } },
+    })).toThrow(/functionQuery\.index/)
+  })
+
+  it('rejects constructor targets loudly instead of emitting unevaluatable code', () => {
+    expect(() => multiTransform({
+      ...multiTarget,
+      astQuery: 'ClassBody > [key.name="constructor"] > FunctionExpression',
+    })(multiSource(), multiId)).toThrow(/constructor targets are not supported/)
+    expect(() => multiTransform({
+      ...multiTarget,
+      functionQuery: { methodName: 'constructor', kind: 'Sync' },
+    })(multiSource(), multiId)).toThrow(/constructor targets are not supported/)
   })
 })

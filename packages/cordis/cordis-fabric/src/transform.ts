@@ -15,9 +15,13 @@
  *
  * Matched nodes must be function declarations, function expressions, methods,
  * or arrow functions with a block (or, for arrows, expression) body. Arrows
- * are supported only with plain identifier parameters: they have no own
- * `arguments` binding, so the argument array is rebuilt from the parameter
- * list and `this` stays lexical.
+ * have no own `arguments` binding, so the argument array is rebuilt from the
+ * parameter patterns (identifiers, rest, defaults, and destructuring all
+ * work — the patterns bind their names before the injected statements run)
+ * and `this` stays lexical; a body referencing the enclosing `arguments`
+ * object is preserved by capturing it first. Generator functions transform
+ * through delegation (`yield*` over the traced generator), so iteration
+ * semantics survive the no-handler and delegated paths.
  * @module @deepseek-ai/dsh-cordis-fabric/transform
  */
 
@@ -25,7 +29,7 @@ import type { CustomTransform } from '@apm-js-collab/code-transformer'
 import { create } from '@apm-js-collab/code-transformer'
 import type {
   ArrowFunctionExpression, Expression, FunctionDeclaration, FunctionExpression,
-  Node, Pattern, Program, Property, Statement,
+  Identifier, Literal, Node, Pattern, Program, Property, SpreadElement, Statement,
 } from 'estree'
 import { GLOBAL_BRIDGE_KEY } from './bridge.ts'
 
@@ -33,6 +37,7 @@ import { GLOBAL_BRIDGE_KEY } from './bridge.ts'
 const ARGS = 'dshFabricArguments'
 const TRACED = 'dshFabricTraced'
 const CALL = 'dshFabricCall'
+const OUTER_ARGUMENTS = 'dshFabricOuterArguments'
 
 /**
  * Register the Fabric custom transform on an Orchestrion matcher. Both the
@@ -77,7 +82,17 @@ export function createFabricTransform(
   patchId: string,
   operation: string,
 ): CustomTransform {
-  return (_state, node, _parent, ancestry) => {
+  return (_state, node, parent, ancestry) => {
+    if (isConstructorTarget(node, parent)) {
+      // A constructor body cannot move into the traced closure: a derived
+      // constructor's super() call is a syntax error inside a plain function,
+      // and new.target would silently become undefined. Fail the transform
+      // loudly instead of emitting a module that breaks at evaluation.
+      throw new Error(
+        'fabric: constructor targets are not supported (super() and new.target cannot survive '
+        + 'the traced-closure replay); patch a method or factory instead',
+      )
+    }
     const matched = matchFunction(node)
     if (!matched) return
     const program = ancestry[ancestry.length - 1]
@@ -104,11 +119,36 @@ export function createFabricTransform(
     const tracedName = refs.unique(TRACED)
     const callName = refs.unique(CALL)
 
+    // An arrow body referencing the enclosing `arguments` object would break
+    // when moved into the traced regular function (its own `arguments` would
+    // shadow the outer one). The arrow's own lexical resolution makes
+    // `arguments` in an injected capture statement refer to the outer scope,
+    // so the reference is preserved: capture it first, then rewrite the
+    // body's `arguments` identifiers (lexical references only — nested
+    // non-arrow functions own their `arguments` and are not descended into)
+    // to the capture.
+    const outerArgsName = matched.arrow && mapOuterArguments(matched.body, undefined)
+      ? refs.unique(OUTER_ARGUMENTS)
+      : undefined
+    if (outerArgsName) mapOuterArguments(matched.body, outerArgsName)
+
+    // const dshFabricOuterArguments = arguments
+    // Only arrows: the arrow's own lexical resolution makes `arguments` here
+    // refer to the enclosing scope, preserving the body's outer reference.
+    const capture: Statement | undefined = outerArgsName === undefined ? undefined : {
+      type: 'VariableDeclaration',
+      kind: 'const',
+      declarations: [{
+        type: 'VariableDeclarator',
+        id: { type: 'Identifier', name: outerArgsName },
+        init: { type: 'Identifier', name: 'arguments' },
+      }],
+    }
+
     // const dshFabricArguments = <args>
     // Regular functions rebuild from their own `arguments` object; arrows have
-    // no own binding, so the array is assembled from the (plain identifier)
-    // parameter names — handler mutations then flow through apply() to the
-    // replayed body.
+    // no own binding, so the array is assembled from the parameter patterns —
+    // handler mutations then flow through apply() to the replayed body.
     const args: Statement = matched.arrow
       ? {
         type: 'VariableDeclaration',
@@ -118,8 +158,7 @@ export function createFabricTransform(
           id: { type: 'Identifier', name: argsName },
           init: {
             type: 'ArrayExpression',
-            elements: (matched.params as { type: 'Identifier'; name: string }[])
-              .map(param => ({ type: 'Identifier', name: param.name })),
+            elements: matched.params.map(patternToExpression),
           },
         }],
       }
@@ -221,9 +260,7 @@ export function createFabricTransform(
       }],
     }
 
-    // return globalThis["__dshFabricBridge"]
-    //   ? globalThis["__dshFabricBridge"].publish(dshFabricCall)
-    //   : dshFabricTraced()
+    // globalThis["__dshFabricBridge"]
     const bridge = (): Expression => ({
       type: 'MemberExpression',
       computed: true,
@@ -231,34 +268,133 @@ export function createFabricTransform(
       object: { type: 'Identifier', name: 'globalThis' },
       property: { type: 'Literal', value: GLOBAL_BRIDGE_KEY },
     })
-    const publish: Statement = {
-      type: 'ReturnStatement',
-      argument: {
-        type: 'ConditionalExpression',
-        test: bridge(),
-        consequent: {
-          type: 'CallExpression',
+
+    // globalThis["__dshFabricBridge"] ? publish(dshFabricCall) : dshFabricTraced()
+    const publishCall = (): Expression => ({
+      type: 'ConditionalExpression',
+      test: bridge(),
+      consequent: {
+        type: 'CallExpression',
+        optional: false,
+        callee: {
+          type: 'MemberExpression',
+          computed: false,
           optional: false,
-          callee: {
-            type: 'MemberExpression',
-            computed: false,
-            optional: false,
-            object: bridge(),
-            property: { type: 'Identifier', name: 'publish' },
-          },
-          arguments: [{ type: 'Identifier', name: callName }],
+          object: bridge(),
+          property: { type: 'Identifier', name: 'publish' },
         },
-        alternate: {
-          type: 'CallExpression',
-          optional: false,
-          callee: { type: 'Identifier', name: tracedName },
-          arguments: [],
-        },
+        arguments: [{ type: 'Identifier', name: callName }],
       },
+      alternate: {
+        type: 'CallExpression',
+        optional: false,
+        callee: { type: 'Identifier', name: tracedName },
+        arguments: [],
+      },
+    })
+
+    // Generator functions delegate instead of returning: publish may hand
+    // back the traced generator (no handler, before, or an around/replace
+    // that invoked), which is delegated with `yield*` so iteration semantics
+    // survive; a handler-supplied replacement that is not iterable is
+    // returned directly (the caller's choice to break the iterator contract).
+    // Async generators also accept async iterables.
+    let publish: Statement
+    if (matched.generator) {
+      const resultName = refs.unique('dshFabricResult')
+      const isIterable = (symbol: 'iterator' | 'asyncIterator'): Expression => ({
+        type: 'BinaryExpression',
+        operator: '===',
+        left: {
+          type: 'UnaryExpression',
+          operator: 'typeof',
+          prefix: true,
+          argument: {
+            type: 'MemberExpression',
+            computed: true,
+            optional: false,
+            object: { type: 'Identifier', name: resultName },
+            property: {
+              type: 'MemberExpression',
+              computed: false,
+              optional: false,
+              object: { type: 'Identifier', name: 'Symbol' },
+              property: { type: 'Identifier', name: symbol },
+            },
+          },
+        },
+        right: { type: 'Literal', value: 'function' },
+      })
+      const iterableCheck: Expression = matched.async
+        ? {
+          type: 'LogicalExpression',
+          operator: '||',
+          left: isIterable('iterator'),
+          right: isIterable('asyncIterator'),
+        }
+        : isIterable('iterator')
+      publish = {
+        type: 'VariableDeclaration',
+        kind: 'const',
+        declarations: [{
+          type: 'VariableDeclarator',
+          id: { type: 'Identifier', name: resultName },
+          init: publishCall(),
+        }],
+      }
+      const delegate: Statement = {
+        type: 'IfStatement',
+        test: {
+          type: 'LogicalExpression',
+          operator: '&&',
+          left: {
+            type: 'BinaryExpression',
+            operator: '!=',
+            left: { type: 'Identifier', name: resultName },
+            right: { type: 'Literal', value: null },
+          },
+          right: iterableCheck,
+        },
+        consequent: {
+          type: 'ReturnStatement',
+          argument: {
+            type: 'YieldExpression',
+            delegate: true,
+            argument: { type: 'Identifier', name: resultName },
+          },
+        },
+      }
+      const fallbackReturn: Statement = {
+        type: 'ReturnStatement',
+        argument: { type: 'Identifier', name: resultName },
+      }
+      const delegatedBody: (Statement | undefined)[] = [capture, args, traced, call, publish, delegate, fallbackReturn]
+      block.body = delegatedBody.filter((statement): statement is Statement => statement !== undefined)
+      return
     }
 
-    block.body = [args, traced, call, publish]
+    publish = {
+      type: 'ReturnStatement',
+      argument: publishCall(),
+    }
+
+    const injected: (Statement | undefined)[] = [capture, args, traced, call, publish]
+    block.body = injected.filter((statement): statement is Statement => statement !== undefined)
   }
+}
+
+/**
+ * Whether the matched node selects a class constructor: either the match is
+ * the MethodDefinition itself (a raw `astQuery` naming it) or it is the
+ * method's function value (name-based queries and `> [async]` selectors).
+ * @param node - the matched AST node.
+ * @param parent - the matched node's parent.
+ * @returns true when the match targets a constructor.
+ */
+function isConstructorTarget(node: Node, parent: Node): boolean {
+  const kindOf = (candidate: Node): unknown =>
+    candidate.type === 'MethodDefinition' ? (candidate as { kind?: unknown }).kind : undefined
+  return kindOf(node) === 'constructor' || kindOf(parent) === 'constructor'
 }
 
 /**
@@ -278,18 +414,12 @@ function matchFunction(node: Node): MatchedFunction | undefined {
   }
   const functionNode = fn as FunctionDeclaration | FunctionExpression | ArrowFunctionExpression
   const arrow = type === 'ArrowFunctionExpression'
-  // Generator functions are skipped: the injected `return publish(...)` would
-  // make the outer generator return instead of yielding, changing iteration
-  // semantics for callers.
-  if (functionNode.generator) return undefined
   if (arrow) {
-    // Arrows rebuild arguments from their parameter names; only plain
-    // identifier parameters are supported (no rest, defaults, or destructuring).
-    if (!functionNode.params.every(param => param.type === 'Identifier')) return undefined
-    // An arrow body referencing the enclosing `arguments` object would break
-    // when moved into the traced regular function (its own `arguments` would
-    // shadow the outer one); skip rather than change semantics.
-    if (referencesOuterArguments(functionNode.body)) return undefined
+    // A parameter literally named `arguments` would shadow the outer
+    // `arguments` object the body may reference; skip rather than guess which
+    // one the body means. All other pattern shapes (rest, defaults,
+    // destructuring) are supported.
+    if (functionNode.params.some(param => patternNames(param).has('arguments'))) return undefined
   }
   return {
     node: functionNode,
@@ -302,16 +432,120 @@ function matchFunction(node: Node): MatchedFunction | undefined {
 }
 
 /**
- * Whether an arrow body references the enclosing scope's `arguments` object.
- * Nested non-arrow functions own their `arguments` and are not descended
- * into; nested arrows still resolve lexically and are descended into.
- * @param node - the arrow's body.
- * @returns true when the body reads the outer `arguments`.
+ * Convert a bound parameter pattern into the expression that rebuilds its
+ * value for the reconstructed arrow argument array. Patterns bind their names
+ * before the injected statements run (defaults are evaluated during
+ * binding), so every shape is representable as an expression over the bound
+ * names: an identifier is a reference, object/array patterns become their
+ * literal shape over the bound names, an assignment pattern is its bound
+ * pattern, and a rest element becomes a spread (the array element position
+ * only).
+ * @param pattern - a parameter pattern.
+ * @returns the array element expression (spread for rest), or null for a
+ * pattern shape the transform does not convert (never a parameter list).
  */
-function referencesOuterArguments(node: Node | undefined): boolean {
+function patternToExpression(pattern: Pattern): Expression | SpreadElement | null {
+  switch (pattern.type) {
+    case 'Identifier':
+      return { type: 'Identifier', name: pattern.name }
+    case 'AssignmentPattern':
+      return patternToExpression(pattern.left)
+    case 'RestElement':
+      return { type: 'SpreadElement', argument: patternToExpression(pattern.argument) as Expression }
+    case 'ObjectPattern':
+      return {
+        type: 'ObjectExpression',
+        properties: pattern.properties.map((prop) => {
+          if (prop.type === 'RestElement') {
+            return { type: 'SpreadElement', argument: patternToExpression(prop.argument) as Expression }
+          }
+          return {
+            type: 'Property',
+            kind: 'init',
+            method: false,
+            shorthand: false,
+            computed: prop.computed,
+            key: prop.key as Identifier | Literal,
+            value: patternToExpression(prop.value) as Expression,
+          }
+        }),
+      }
+    case 'ArrayPattern':
+      return {
+        type: 'ArrayExpression',
+        elements: pattern.elements.map((element) => {
+          if (element === null) return null
+          if (element.type === 'RestElement') {
+            return { type: 'SpreadElement', argument: patternToExpression(element.argument) as Expression }
+          }
+          return patternToExpression(element)
+        }),
+      }
+    default:
+      return null
+  }
+}
+
+/**
+ * Collect every name a parameter pattern binds.
+ * @param pattern - a parameter pattern.
+ * @returns the set of bound names.
+ */
+function patternNames(pattern: Pattern): Set<string> {
+  const out = new Set<string>()
+  collectPatternNames(pattern, out)
+  return out
+}
+
+/** Recursive helper for {@link patternNames}. */
+function collectPatternNames(pattern: Pattern, out: Set<string>): void {
+  switch (pattern.type) {
+    case 'Identifier':
+      out.add(pattern.name)
+      break
+    case 'AssignmentPattern':
+      collectPatternNames(pattern.left, out)
+      break
+    case 'RestElement':
+      collectPatternNames(pattern.argument, out)
+      break
+    case 'ObjectPattern':
+      for (const prop of pattern.properties) {
+        if (prop.type === 'RestElement') collectPatternNames(prop.argument, out)
+        else collectPatternNames(prop.value, out)
+      }
+      break
+    case 'ArrayPattern':
+      for (const element of pattern.elements) {
+        if (element !== null) collectPatternNames(element, out)
+      }
+      break
+    default:
+      // No other Pattern shape binds names (defensive: never a parameter list).
+      break
+  }
+}
+
+/**
+ * Whether a node references the enclosing scope's `arguments` object, and
+ * optionally rewrites those references to a capture name. Nested non-arrow
+ * functions own their `arguments` and are not descended into; nested arrows
+ * still resolve lexically and are descended into. Property keys and
+ * non-computed member properties are not references.
+ * @param node - the node to scan (and rewrite when `name` is given).
+ * @param name - capture name to rewrite `arguments` references to; omit to
+ * only detect references.
+ * @returns true when at least one outer `arguments` reference was found.
+ */
+function mapOuterArguments(node: Node | undefined, name: string | undefined): boolean {
   if (!node) return false
-  if (node.type === 'Identifier') return node.name === 'arguments'
+  if (node.type === 'Identifier') {
+    if (node.name !== 'arguments') return false
+    if (name !== undefined) node.name = name
+    return true
+  }
   if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression') return false
+  let found = false
   for (const key of Object.keys(node)) {
     if (key === 'loc' || key === 'range' || key === 'start' || key === 'end') continue
     // Property keys and non-computed member properties are not references.
@@ -320,13 +554,13 @@ function referencesOuterArguments(node: Node | undefined): boolean {
     const value = (node as unknown as Record<string, unknown>)[key]
     if (Array.isArray(value)) {
       for (const child of value) {
-        if (typeof child === 'object' && child !== null && referencesOuterArguments(child as Node)) return true
+        if (typeof child === 'object' && child !== null && mapOuterArguments(child as Node, name)) found = true
       }
     } else if (typeof value === 'object' && value !== null) {
-      if (referencesOuterArguments(value as Node)) return true
+      if (mapOuterArguments(value as Node, name)) found = true
     }
   }
-  return false
+  return found
 }
 
 /** A `key: value` object property. */

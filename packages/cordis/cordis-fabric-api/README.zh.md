@@ -69,7 +69,7 @@ export function apply(ctx: Context): void {
 
 每个 registration 都是 fiber effect：销毁贡献插件会移除贡献，与权威所有者的 disposal 语义一致（HMR-safe）。Facade 方法返回底层精确 disposer。
 
-- **Agent API。** 生命周期观察（`onCreated`、`onDisposed`、`onStatus`、`onSettled`）和操作局部 context injection（`inject`）的稳定子集。它不暴露具体 loop、私有队列状态或可变 session 内部；只有当权威事件本来就提供 live Agent 时，callback 才接收它。
+- **Agent API。** 生命周期观察（`onCreated`、`onDisposed`、`onStatus`）和操作局部 context injection（`inject`）的稳定子集。它不暴露具体 loop、私有队列状态或可变 session 内部；只有当权威事件本来就提供 live Agent 时，callback 才接收它。
 - **Tool API。** 通过 `ctx.tools` 注册 tool 以及执行前后 listener。Fabric API tool 与原生 DSH tool 具有相同的 schema 和 result 义务，包括 model-visible logging 和 render intent。Waterfall listener 必须调用 `next()`，除非它有意否决。
 - **Prompt API。** 通过 `ctx.systemPrompt` 注册有序 system section、可安全缓存的 context、tool-schema provider 和 prompt variable。没有插入未记录 model-visible 文本或直接组装 provider request 的捷径。
 - **Command API。** 通过 `ctx.commands` 注册人类用户 command；除非权威契约启动 turn，否则 command 保持在 model turn 之外。

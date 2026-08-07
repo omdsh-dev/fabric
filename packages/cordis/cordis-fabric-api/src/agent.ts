@@ -13,7 +13,7 @@
 
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
-import type { Agent, AgentStatus, SettleReason } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 
 declare module 'cordis' {
@@ -49,7 +49,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onCreated(listener: (agent: Agent) => void): () => boolean {
-    return this.ctx.on('agent/created', (agent) => { listener(agent) })
+    return this.ctx.on('agent/created', (payload) => { listener(payload.agent) })
   }
 
   /**
@@ -58,7 +58,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onDisposed(listener: (agent: Agent) => void): () => boolean {
-    return this.ctx.on('agent/disposed', (agent) => { listener(agent) })
+    return this.ctx.on('agent/disposed', (payload) => { listener(payload.agent) })
   }
 
   /**
@@ -67,16 +67,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean {
-    return this.ctx.on('agent/status', (agent, status) => { listener(agent, status) })
-  }
-
-  /**
-   * Observe a turn settling (completed, aborted, disposed, or failed).
-   * @param listener - called with the agent, the settled turn, and the reason.
-   * @returns the exact `ctx.on()` disposer removing this listener.
-   */
-  onSettled(listener: (agent: Agent, turn: number, reason: SettleReason) => void): () => boolean {
-    return this.ctx.on('agent/settled', (agent, turn, reason) => { listener(agent, turn, reason) })
+    return this.ctx.on('agent/status', (payload) => { listener(payload.agent, payload.status) })
   }
 
   /**

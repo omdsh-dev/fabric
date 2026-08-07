@@ -46,7 +46,7 @@ describe('Fabric API assembled composition', () => {
 
     // Agent listener through the real event bus: the facade-registered
     // listener observes a dispatched status transition.
-    ctx.emit('agent/status', { id: 'assembly-agent' } as Agent, 'running')
+    ctx.emit('agent/status', { agent: { id: 'assembly-agent' } as Agent, status: 'running' })
     expect((globalThis as Record<string, unknown>).__fabricApiFixtureSeen).toContain('assembly-agent:running')
 
     await ctx.fiber.dispose()

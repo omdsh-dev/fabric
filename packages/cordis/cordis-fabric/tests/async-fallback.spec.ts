@@ -18,5 +18,7 @@ describe.skipIf(!existsSync(hookEntry))('cordis-fabric async module.register fal
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(result.stdout).toContain('PASS async-fallback add(2,3): 23')
     expect(result.stdout).toContain('PASS async-fallback cjs add(2,3): 23')
+    expect(result.stdout).toContain('PASS async-fallback reloaded add(2,3): 203')
+    expect(result.stdout).toContain('PASS async-fallback stacked greet(world): "hello worldBA"')
   })
 })

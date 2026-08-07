@@ -16,12 +16,14 @@
 
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'
 import parse from 'module-details-from-path'
+import { readFileSync } from 'node:fs'
 import { relative } from 'node:path'
 import ts from 'typescript'
 import { getPackageVersion, detectModuleType } from './module-identity.ts'
-import { orderInstrumentations } from './node-loader.ts'
+import { orderInstrumentations, patchInstrumentation } from './node-loader.ts'
 import { registerFabricTransform } from './transform.ts'
 import type { FabricInstrumentationConfig } from './node-loader.ts'
+import type { FabricPatchStub } from './types.ts'
 
 /**
  * Strip TypeScript type annotations so the Orchestrion transformer (a plain
@@ -134,3 +136,88 @@ export function createBrowserTransform(
 }
 
 export type { InstrumentationConfig }
+
+/**
+ * A browser transform that also receives the bundler's watch-file
+ * registration hook (the third argument `clientBundle`'s source-transform
+ * plugin forwards), so a file-backed patch set joins the watch graph.
+ */
+export type WatchedBrowserTransform = (
+  code: string,
+  id: string,
+  addWatchFile?: (file: string) => void,
+) => TransformOutput | null
+
+/**
+ * Parse the watched patches file: a JSON array of static patch stubs (the
+ * same shape the profile row's `config.patches` carries — JSON cannot
+ * express a `RegExp` `filePath`, so file paths are strings here). Every
+ * malformed entry fails loud at build time rather than installing a
+ * never-matching transform.
+ * @param content - raw file content.
+ * @param patchesPath - file path, used in error messages.
+ * @returns the validated patch stubs.
+ */
+function parsePatchesFile(content: string, patchesPath: string): FabricPatchStub[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch (error) {
+    throw new Error(`fabric: cannot parse watched patches file ${patchesPath} as JSON`, { cause: error })
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`fabric: watched patches file ${patchesPath} must hold a JSON array of patch stubs`)
+  }
+  return parsed.map((entry: unknown, index) => {
+    const target: unknown = typeof entry === 'object' && entry !== null ? (entry as { target?: unknown }).target : undefined
+    if (typeof entry !== 'object' || entry === null || typeof target !== 'object' || target === null) {
+      throw new Error(`fabric: watched patches file ${patchesPath} entry ${index} must be a patch stub object with a target`)
+    }
+    // patchInstrumentation (called by the caller's transform rebuild)
+    // validates the remaining fields: id, module, versionRange, filePath,
+    // operation, and the function/AST query.
+    return entry as FabricPatchStub
+  })
+}
+
+/**
+ * Build a bundler transform whose patch set lives in a JSON file, for the
+ * dev rebuild chain: the returned transform registers the file in the
+ * bundler's watch graph on every module (a patch edit can make a previously
+ * unmatched module match, so every module must re-run), re-reads it per
+ * module, and rebuilds the underlying matcher only when the content
+ * changed — the same read-per-use, rebuild-on-content-change pattern the
+ * async loader-thread entry uses for its shared configuration file.
+ *
+ * Wired through `clientBundle(id, libEntry, { transform })`, an edit to the
+ * patches file triggers a bundle rebuild under `tsdown --watch`
+ * (`scripts/dev-web.ts`), and the rebuilt bundle rides the client-hmr
+ * chain (stat poll → `rebuilt` frame → invalidate/prefetch/fiber swap) into
+ * the browser: the build trigger for browser re-transformation.
+ * @param patchesPath - absolute path of the JSON patches file.
+ * @param resolve - module identity resolver for the build's source layout.
+ * @returns a transform function `(code, id, addWatchFile?) => output | null`.
+ */
+export function createWatchedBrowserTransform(
+  patchesPath: string,
+  resolve: IdentityResolver,
+): WatchedBrowserTransform {
+  let cached: { content: string; transform: (code: string, id: string) => TransformOutput | null } | undefined
+  const transformFor = (content: string): ((code: string, id: string) => TransformOutput | null) => {
+    if (cached?.content === content) return cached.transform
+    const instrumentations = parsePatchesFile(content, patchesPath).map(patchInstrumentation)
+    const transform = createBrowserTransform(instrumentations, resolve)
+    cached = { content, transform }
+    return transform
+  }
+  return (code, id, addWatchFile) => {
+    addWatchFile?.(patchesPath)
+    let content: string
+    try {
+      content = readFileSync(patchesPath, 'utf8')
+    } catch (error) {
+      throw new Error(`fabric: cannot read watched patches file ${patchesPath}`, { cause: error })
+    }
+    return transformFor(content)(code, id)
+  }
+}

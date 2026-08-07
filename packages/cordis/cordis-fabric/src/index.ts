@@ -17,14 +17,16 @@ export {
   publish,
   type FabricBridgeCall,
 } from './bridge.ts'
-export { bootstrapFabric, installFabricHooks, patchInstrumentation, retransformCommonJs, type FabricInstrumentationConfig } from './node-loader.ts'
+export { bootstrapFabric, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
 export {
   createBrowserTransform,
+  createWatchedBrowserTransform,
   nodeModulesResolver,
   repoSourceResolver,
   type IdentityResolver,
   type ModuleIdentity,
   type TransformOutput,
+  type WatchedBrowserTransform,
 } from './browser-transform.ts'
 export { runtime, validatePatchId } from './runtime.ts'
 export { createFabricTransform } from './transform.ts'

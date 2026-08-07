@@ -69,7 +69,7 @@ export function apply(ctx: Context): void {
 
 Every registration is a fiber effect: disposing the contributing plugin removes the contribution, matching the authoritative owner's disposal semantics (HMR-safe). Facade methods return the exact underlying disposer.
 
-- **Agent API.** A stable subset of lifecycle observation (`onCreated`, `onDisposed`, `onStatus`, `onSettled`) and operation-local context injection (`inject`). It never exposes the concrete loop, private queue state, or mutable session internals; callbacks receive the live Agent only where the owning event already does.
+- **Agent API.** A stable subset of lifecycle observation (`onCreated`, `onDisposed`, `onStatus`) and operation-local context injection (`inject`). It never exposes the concrete loop, private queue state, or mutable session internals; callbacks receive the live Agent only where the owning event already does.
 - **Tool API.** `register` and pre/post execution listeners through `ctx.tools`. A Fabric API tool has the same schema and result obligations as a native DSH tool, including model-visible logging and render intent. A waterfall listener must call `next()` unless it intentionally vetoes.
 - **Prompt API.** Ordered system sections, cache-safe contexts, tool-schema providers, and prompt variables through `ctx.systemPrompt`. There is no shortcut that inserts unlogged model-visible text or assembles provider requests directly.
 - **Command API.** Human commands through `ctx.commands`; commands remain outside model turns unless the owning contract starts one.
