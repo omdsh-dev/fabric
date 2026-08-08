@@ -523,6 +523,34 @@ switch (caseName) {
     }
     break
 
+  case 'workspaceIdentity':
+    {
+      // The workspace-package shape: the module is reached at its real path
+      // (no node_modules boundary — Node realpaths workspace links), so the
+      // npm-layout parser cannot name it and the nearest-package.json fallback
+      // must. This is how host packages load in the real product launch.
+      const patch = {
+        id: 'e2e/workspace-identity',
+        target: {
+          module: 'workspace-target-fixture',
+          versionRange: '*',
+          filePath: 'index.mjs',
+          functionQuery: { functionName: 'add', kind: 'Sync' },
+        },
+        operation: 'before',
+        handler(call) {
+          call.arguments[0] = call.arguments[0] * 10
+        },
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      const wsUrl = new URL('./fixtures/workspace-target-fixture/index.mjs', import.meta.url)
+      const mod = await import(wsUrl)
+      runtime.register({ id: patch.id, target: patch.target, operation: patch.operation, priority: 0, enabled: false })
+      runtime.enable(patch.id, patch.handler)
+      check('workspaceIdentity add(2,3)', mod.add(2, 3), 23)
+    }
+    break
+
   default:
     throw new Error(`unknown case ${caseName}`)
 }

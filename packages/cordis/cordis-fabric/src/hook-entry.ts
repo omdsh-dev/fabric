@@ -20,7 +20,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { createBrowserTransform, nodeModulesResolver } from './browser-transform.ts'
+import { createBrowserTransform, nodePackageResolver } from './browser-transform.ts'
 import type { FabricInstrumentationConfig } from './node-loader.ts'
 
 /** Shared configuration path, passed through `module.register` data. */
@@ -69,7 +69,7 @@ function readTransforms(): TransformFn[] {
       const instrumentations = entry.instrumentations ?? []
       return instrumentations.length === 0
         ? undefined
-        : createBrowserTransform(instrumentations, nodeModulesResolver())
+        : createBrowserTransform(instrumentations, nodePackageResolver())
     })
     .filter((transform): transform is TransformFn => transform !== undefined)
   cached = { config: raw, transforms }

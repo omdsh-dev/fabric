@@ -87,7 +87,7 @@ export function apply(ctx: Context): void {
 
 ## 平台支持
 
-- **Node Host（ESM + CommonJS）：** 通过同步 `module.registerHooks`（Node ≥ 22.22.3 / ≥ 24.11.1）和 CJS `_compile` 路径支持。`registerHooks` 从 22.19.0 起就存在，但在 22.22.3 / 24.11.1 之前，当 loader-thread hooks（`module.register`，例如这些版本上的 tsx）同时存在时，其同步 load 链对 CommonJS 模块不返回 source，会导致 Node 的 load 校验崩溃；因此这些版本通过 `./hook-entry` loader-thread 模块走异步 `module.register` fallback。entry 只注册一次，并在每次加载时读取共享配置文件（主线程在每次安装与销毁时重写），因此重新变换、销毁与并发安装在两条路径上行为一致。
+- **Node Host（ESM + CommonJS）：** 通过同步 `module.registerHooks`（Node ≥ 22.22.3 / ≥ 24.11.1）和 CJS `_compile` 路径支持。模块身份先经 npm 布局解析器解析，失败时回退到最近的 `package.json`（`nodePackageResolver`）——Node 会把 workspace 链接 realpath 成真实路径，因此 workspace 包加载后的 URL 没有可供布局解析器命名的 `node_modules` 边界，而最近的 manifest 总能命名它。这正是补丁能按真实路径命中第一方 workspace 包（例如宿主工具 bundle）的原因。`registerHooks` 从 22.19.0 起就存在，但在 22.22.3 / 24.11.1 之前，当 loader-thread hooks（`module.register`，例如这些版本上的 tsx）同时存在时，其同步 load 链对 CommonJS 模块不返回 source，会导致 Node 的 load 校验崩溃；因此这些版本通过 `./hook-entry` loader-thread 模块走异步 `module.register` fallback。entry 只注册一次，并在每次加载时读取共享配置文件（主线程在每次安装与销毁时重写），因此重新变换、销毁与并发安装在两条路径上行为一致。
 - **Browser/Web：** bundle 期重写（`createWatchedBrowserTransform`（静态集合用 `createBrowserTransform`）+ `repoSourceResolver`，经 `clientBundle(id, libEntry, { transform })` 接入）重写 client 插件函数；本 package 的 client half（`./client`）在浏览器 Cordis 树中安装 bridge 并挂载 `ctx.fabric`。client bundle 在该 entry 物化前回退到原函数，因此 patch 对浏览器 Fabric runtime 就绪后的调用生效。web roster 的 `cordis-fabric` 行默认禁用（opt-in）。
 
 ## Browser 构建用法

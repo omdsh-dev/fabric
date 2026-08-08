@@ -17,9 +17,10 @@
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'
 import parse from 'module-details-from-path'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import ts from 'typescript'
-import { getPackageVersion, detectModuleType } from './module-identity.ts'
+import { detectModuleType, getPackageVersion, packageIdentityFromPath } from './module-identity.ts'
 import { orderInstrumentations, patchInstrumentation } from './node-loader.ts'
 import { registerFabricTransform } from './transform.ts'
 import type { FabricInstrumentationConfig } from './node-loader.ts'
@@ -91,6 +92,21 @@ export function nodeModulesResolver(): IdentityResolver {
     const details = parse(id)
     if (!details) return undefined
     return { name: details.name, version: getPackageVersion(details.basedir), path: details.path }
+  }
+}
+
+/**
+ * Resolve module identity the way the Node host loads it: installed packages
+ * through their node_modules boundary, workspace packages through their
+ * nearest package.json (Node realpaths workspace links, so the npm-layout
+ * parser alone cannot name them). Shared by the async loader-thread entry
+ * and any Node-side consumer of {@link createBrowserTransform}.
+ * @returns an identity resolver for Node-loaded module ids (paths or file URLs).
+ */
+export function nodePackageResolver(): IdentityResolver {
+  return (id) => {
+    const path = id.startsWith('file:') ? fileURLToPath(id) : id
+    return nodeModulesResolver()(path) ?? packageIdentityFromPath(path)
   }
 }
 

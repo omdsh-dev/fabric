@@ -26,7 +26,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'
 import parse from 'module-details-from-path'
 import { installBridge } from './bridge.ts'
-import { getPackageVersion } from './module-identity.ts'
+import { getPackageVersion, packageIdentityFromPath, type PackageIdentity } from './module-identity.ts'
 import { validatePatchId, validatePatchStatic } from './runtime.ts'
 import { registerFabricTransform } from './transform.ts'
 import type { FabricPatchStub } from './types.ts'
@@ -186,16 +186,21 @@ interface LoaderState {
  * their own matchers. */
 const states: LoaderState[] = []
 
-/** Package-version lookup cache (resolve and _compile both read per module). */
-const versionCache = new Map<string, string>()
-
-function cachedPackageVersion(basedir: string): string {
-  let version = versionCache.get(basedir)
-  if (version === undefined) {
-    version = getPackageVersion(basedir)
-    versionCache.set(basedir, version)
+/**
+ * Resolve a loaded module's package identity: installed packages through
+ * their node_modules boundary, workspace packages through their nearest
+ * package.json (Node realpaths workspace links, so the npm-layout parser
+ * alone cannot name them).
+ * @param urlOrPath - the module URL or filesystem path.
+ * @returns the identity for the matcher, or undefined outside any package.
+ */
+function moduleIdentity(urlOrPath: string): PackageIdentity | undefined {
+  const filename = urlOrPath.startsWith('file:') ? fileURLToPath(urlOrPath) : urlOrPath
+  const details = parse(filename)
+  if (details !== undefined) {
+    return { name: details.name, version: getPackageVersion(details.basedir), path: details.path }
   }
-  return version
+  return packageIdentityFromPath(filename)
 }
 
 /**
@@ -320,10 +325,9 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
       resolve: (specifier, context, nextResolve) => {
         const resolved = nextResolve(specifier, context)
         if (!state.active) return resolved
-        const details = parse(resolved.url)
-        if (!details) return resolved
-        const version = cachedPackageVersion(details.basedir)
-        const transformer = state.matcher.getTransformer(details.name, version, details.path)
+        const identity = moduleIdentity(resolved.url)
+        if (identity === undefined) return resolved
+        const transformer = state.matcher.getTransformer(identity.name, identity.version, identity.path)
         if (transformer) state.transformers.set(resolved.url, transformer)
         return resolved
       },
@@ -387,12 +391,11 @@ function installCompileWrapper(): void {
   const compileKey = '_compile'
   const originalCompile = modulePrototype[compileKey] as CompileFn
   modulePrototype[compileKey] = function (this: Module, content: string, filename: string) {
-    const details = parse(filename)
-    if (details) {
-      const version = cachedPackageVersion(details.basedir)
+    const identity = moduleIdentity(filename)
+    if (identity !== undefined) {
       for (const state of states) {
         if (!state.active) continue
-        const transformer = state.matcher.getTransformer(details.name, version, details.path)
+        const transformer = state.matcher.getTransformer(identity.name, identity.version, identity.path)
         if (!transformer || state.seen.has(filename)) continue
         state.seen.add(filename)
         try {

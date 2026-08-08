@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/cordis/cordis-fabric/README.md
-README.md: 0e8089b69940fbac836943988773c2d8b0afcf2b
-README.zh.md: 6bc6375205c050b27ef1dcf7532421031f00c03c
+README.md: 60f3d47cbefbccf3d336d5e519580c90dab49286
+README.zh.md: 1028a533fbf5de356e5f32f7bc7bd663ace67563

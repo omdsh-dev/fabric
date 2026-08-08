@@ -16,6 +16,11 @@ function runCase(name: string): string {
 }
 
 describe('cordis-fabric load-time transformation (child processes)', () => {
+  it('transforms a workspace package reached at its real path (no node_modules boundary)', () => {
+    const out = runCase('workspaceIdentity')
+    expect(out).toContain('PASS workspaceIdentity add(2,3): 23')
+  })
+
   it('before rewrites arguments before the original body', () => {
     const out = runCase('before')
     expect(out).toContain('PASS before add(2,3): 23')

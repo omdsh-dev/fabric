@@ -22,6 +22,7 @@ export {
   createBrowserTransform,
   createWatchedBrowserTransform,
   nodeModulesResolver,
+  nodePackageResolver,
   repoSourceResolver,
   type IdentityResolver,
   type ModuleIdentity,
