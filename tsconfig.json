@@ -1,0 +1,28 @@
+{
+  "extends": "../deepseek-harness/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "paths": {
+      "@deepseek-ai/dsh-cordis-fabric": ["src/index.ts"],
+      "@deepseek-ai/dsh-cordis-fabric/src/*": ["src/*"],
+      "@deepseek-ai/dsh-cordis-fabric/*": ["src/*"],
+      "@deepseek-ai/dsh-cordis-fabric/api": ["src/api/index.ts"],
+      "@deepseek-ai/dsh-cordis-fabric/api/*": ["src/api/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../deepseek-harness/vendor/cordis" },
+    { "path": "../deepseek-harness/packages/support/invariants" },
+    { "path": "../deepseek-harness/packages/core/agent" },
+    { "path": "../deepseek-harness/packages/client/ui-command" },
+    { "path": "../deepseek-harness/packages/client/ui-slots" },
+    { "path": "../deepseek-harness/packages/ui/commands" },
+    { "path": "../deepseek-harness/packages/core/session" },
+    { "path": "../deepseek-harness/packages/core/system-prompt" },
+    { "path": "../deepseek-harness/packages/core/tools" }
+  ]
+}

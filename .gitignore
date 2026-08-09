@@ -2,9 +2,10 @@
 **/node_modules/
 coverage/
 .pnpm-store/
+*.tsbuildinfo
 
 # These directories are installed-package fixtures, not generated dependencies.
-!packages/cordis/cordis-fabric/tests/fixtures/node_modules/
-!packages/cordis/cordis-fabric/tests/fixtures/node_modules/**
-!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/
-!packages/cordis/cordis-fabric-api/tests/fixtures/node_modules/**
+!tests/api/fixtures/node_modules/
+!tests/api/fixtures/node_modules/**
+!tests/fabric/fixtures/node_modules/
+!tests/fabric/fixtures/node_modules/**
