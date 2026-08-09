@@ -4,7 +4,7 @@
 
 源码 worktree：`/home/raum/deepseek-harness/fabric`。
 
-最新上游提交：`f365e39 fix(fabric): resolve workspace-package identity through the nearest package.json`。
+最新上游提交：`b059f8d0 test(fabric): resolve face-aware client bundle config`。
 
 宿主补丁基线：该 feature worktree 的共同基线 `5b7d50a8`。
 
@@ -45,6 +45,9 @@ patches/fabric-plugin.patch          DSH 宿主接缝补丁
 - generator / async generator 转换
 - constructor target 拒绝
 - async loader fallback 和多 installation 链接
+- face-aware client bundle composition anchor 和 served bundle route
+- watched browser transform、serve seam 和 testkit
+- keyed-slot arbitration 与 bridge-backed compatibility facade
 
 patch handler 是可信代码，通过运行时 `ctx.fabric.register()` 注册，不从 YAML 或模型输入反序列化可执行逻辑。
 

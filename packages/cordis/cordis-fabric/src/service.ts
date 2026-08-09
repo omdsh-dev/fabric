@@ -15,7 +15,7 @@
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
 import { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
-import type { FabricPatch, FabricPatchInfo, FabricHandler, PatchId } from './types.ts'
+import type { FabricBinding, FabricPatch, FabricPatchInfo, FabricHandler, PatchId } from './types.ts'
 
 declare module 'cordis' {
   interface Context {
@@ -93,6 +93,37 @@ export class FabricService extends Service {
   enable(id: string, handler: FabricHandler): void {
     runtime.enable(id, handler)
   }
+
+  /**
+   * Snapshot of load-time bindings: the files the transformation hooks
+   * actually rewrote for one patch — the ground truth the `required` check
+   * and this package's diagnostics are built on.
+   * @param id - the patch id; when omitted, every recorded binding across
+   * patches, flattened in patch-id order.
+   * @returns the recorded binding records.
+   */
+  bindings(id?: PatchId): readonly FabricBinding[] {
+    return id === undefined ? runtime.allBindings() : runtime.bindingsOf(id)
+  }
+}
+
+/**
+ * Mount-aware accessor for the optional Fabric registry: returns the
+ * already-mounted service on this context, or mounts a fresh registry and
+ * returns it. Cordis removes the registry with the owning fiber and rejects
+ * a second registration, so repeated calls on a live context reuse the
+ * mounted service (the context's view of it — a traceable wrapper on plain
+ * contexts — never a fresh registry). Declared injection remains the
+ * preferred route: this is the documented fallback for plugins that cannot
+ * declare the optional service, and it reads the global store strictly, per
+ * the optional-service convention.
+ * @param ctx - the Cordis context to read from or mount on.
+ * @returns the mounted Fabric registry (the context's view).
+ */
+export function getFabric(ctx: Context): FabricService {
+  const existing = ctx.get('fabric')
+  if (existing !== undefined) return existing
+  return new FabricService(ctx)
 }
 
 /** Validate the static fields of a patch descriptor. */

@@ -29,7 +29,9 @@ const disposeHooks = bootstrapFabric([patch])
 await ctx.plugin(FabricService)
 ```
 
-`bootstrapFabric` validates the patches, builds their Orchestrion instrumentations, and installs the transformation hooks. In the `dsh` host, a `cordis-fabric` composition row with `config.patches` (static descriptors — handlers are trusted code bound at registration) is bootstrapped automatically during `boot()` preparation, before any config-tree entry mounts; `installFabricHooks` is the lower-level form when instrumentations are already built.
+`bootstrapFabric` validates the patches, builds their Orchestrion instrumentations, and installs the transformation hooks. In the `dsh` host, a `cordis-fabric` composition row carrying static descriptors under `config.fabric.patches` (id/target/operation — handlers are trusted code bound at registration) is bootstrapped automatically during `boot()` preparation, before any config-tree entry mounts; the deprecated `config.patches` key is still honored with a warning. `installFabricHooks` is the lower-level form when instrumentations are already built.
+
+A patch may set `required: true`: once the application boots and every target module has been imported, `checkRequiredPatches(patches)` fails loud, naming the patch id and its target, when a required patch's transform never rewrote anything — the `filePath` may be the wrong launch form (`src/index.ts` vs `lib/index.js`) or the function may have moved. The `dsh` host runs this check automatically after `boot()` completes. Several launch forms under one patch id are covered either by a RegExp `filePath` (e.g. `/^(src\/index\.ts|lib\/index\.js)$/`) or by the `filePaths` array convenience (each entry expands into its own instrumentation under the same id, one binding record per matched file). The load-time bindings the check is built on are recorded per transformed file and visible through `ctx.fabric.bindings(id?)` and each `list()` entry.
 
 ```yaml
 # User overlay (e.g. $DSH_HOME/config.yaml or a --config file): enable the row
@@ -38,14 +40,15 @@ await ctx.plugin(FabricService)
 - id: cordis-fabric
   disabled: false
   config:
-    patches:
-      - id: vendor/rewrite-greeting
-        target:
-          module: '@example/target-package'
-          versionRange: '^1.0.0'
-          filePath: 'lib/index.js'
-          functionQuery: { functionName: 'greet', kind: 'Sync' }
-        operation: 'before'
+    fabric:
+      patches:
+        - id: vendor/rewrite-greeting
+          target:
+            module: '@example/target-package'
+            versionRange: '^1.0.0'
+            filePath: 'lib/index.js'
+            functionQuery: { functionName: 'greet', kind: 'Sync' }
+          operation: 'before'
 ```
 
 The same row's browser half (`./client`) mounts `ctx.fabric` in the web tree when the row is enabled; client bundles transform at build time and only take effect after that entry materializes.
@@ -75,7 +78,7 @@ export function apply(ctx: Context): void {
 }
 ```
 
-The registration is a fiber effect: disposing the plugin disables and removes the patch. `ctx.fabric.list()` returns an ordered diagnostic snapshot; `ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` toggle a patch without removing it.
+The registration is a fiber effect: disposing the plugin disables and removes the patch. `ctx.fabric.list()` returns an ordered diagnostic snapshot whose entries carry the patch's recorded load-time bindings; `ctx.fabric.bindings(id?)` returns the binding records directly; `ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` toggle a patch without removing it. Plugins that cannot declare the optional service mount it through `getFabric(ctx)` — mount-aware: it reuses an existing registration and returns the context's view of the registry.
 
 ## Security and trust model
 
@@ -109,6 +112,14 @@ export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/ind
 The patches file holds a JSON array of static patch stubs (the same shape the launcher's `config.patches` row carries; JSON cannot express a `RegExp` `filePath`, so file paths are strings), and a malformed file fails the build loudly. The transform registers the file in the bundler's watch graph on every module, so under `tsdown --watch` (`pnpm run dev:web`) an edit rebuilds the bundle with the new patch set — the build trigger — and the client-hmr chain (stat poll, `rebuilt` frame, invalidate/prefetch/fiber swap) delivers it to the browser. A static in-memory patch set can still use `createBrowserTransform` directly.
 
 The resolver maps the package's own source tree to its package identity; the upstream adapter is not used because it requires a `node_modules` boundary that repository source builds do not have. TypeScript sources are stripped to plain JavaScript before transformation (the transformer parses emitted JavaScript).
+
+### Runtime bundle serving
+
+When the target bundle cannot be transformed at build time (its build is owned by another package), `serveBrowserTransform(ctx, options)` serves a transformed copy at runtime: it registers an EXACT webserver route (the exact table wins before longest-prefix, so it outranks the module host's `/plugins` route without a conflict), resolves the patches' `module` package through the Loader composition anchor (`ctx.baseUrl`) rather than Fabric's dependency tree, applies the patch rewrites per request under a source-content cache, answers 405 for non-GET and 404 for an unreadable bundle, and is loud by default when any selector rewrites nothing (500 naming every unbound patch id) — degrading to the raw bundle only with `fallback: 'raw'`. A missing composition anchor or unresolvable target package fails at registration. `patch` accepts one descriptor or an array: several patches stack on the same file exactly like Node-side patches (ascending priority wraps outermost), so several plugins can enhance the same bundle without owning it — the route stays single-owned, the rewrites stack. The route is a fiber effect; the returned disposer removes it immediately.
+
+### Testing patches
+
+The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `@deepseek-ai/dsh-cordis-fabric/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
 
 ## Model Experience
 

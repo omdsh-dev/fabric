@@ -17,7 +17,7 @@ index 4d3e1305d7f96c9b8e5842c71eab65b0ee7d36f5..3e9db9d0776a074cb8feca6926f41a55
  *.tsbuildinfo
  pnpm-debug.log
 diff --git a/apps/cli/package.json b/apps/cli/package.json
-index 87677ce1f9eeea33ed608b6832b236b0c28bc7b1..335ee36387b3d33c6651a8343596f6634896ebff 100644
+index a648901cb901f1df9f24be4e21d2cbdcaa66c0fb..9e4b6c59181d1bb45894ca80e206625dc0de69a0 100644
 --- a/apps/cli/package.json
 +++ b/apps/cli/package.json
 @@ -19,6 +19,7 @@
@@ -29,53 +29,112 @@ index 87677ce1f9eeea33ed608b6832b236b0c28bc7b1..335ee36387b3d33c6651a8343596f663
      "@deepseek-ai/dsh-mcp-client": "workspace:^",
      "@deepseek-ai/dsh-paths": "workspace:^",
 diff --git a/apps/cli/src/profile-boot.ts b/apps/cli/src/profile-boot.ts
-index b69a938213ef27b5bcd2424ccfb780d66591adb9..92dfc20cb3f4bcf8079178d2e64a1936fc475ea8 100644
+index 4730ec7073035986db383713b997f9d5273661c4..f7ded929bc745b7bb82c646b318e005292bf4455 100644
 --- a/apps/cli/src/profile-boot.ts
 +++ b/apps/cli/src/profile-boot.ts
-@@ -98,6 +98,29 @@ export function prepareProfile(name: string, userLayer = true): Profile {
+@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path'
+ import { fileURLToPath } from 'node:url'
+ import type { Context } from 'cordis'
+ import type { PatchOptions } from '@cordisjs/plugin-include'
++import type { FabricPatchStub } from '@deepseek-ai/dsh-cordis-fabric'
+ import {
+   boot,
+   composeEntries,
+@@ -99,6 +100,72 @@ export function prepareProfile(name: string, userLayer = true): Profile {
  /** Read-only row index of a profile composition before launcher flag patches. */
  export type ProfileRows = ReadonlyMap<string, { name?: string; config?: unknown }>
  
++/** One Fabric row's config surface: the namespaced patch stubs and the deprecated legacy key. */
++interface FabricRowConfig {
++  fabric?: { patches?: unknown }
++  patches?: unknown
++}
++
++/**
++ * Read the composed `cordis-fabric` row's patch stubs from the dedicated
++ * `config.fabric.patches` section, falling back to the deprecated
++ * `config.patches` key with a warning. The row's `disabled` flag governs
++ * mounting the plugin only; the bootstrap reads this section whenever it is
++ * present.
++ * @param rowConfig - the row's config, when the row exists.
++ * @param warn - deprecation sink.
++ * @returns the patch descriptors, or undefined when none are declared.
++ */
++function fabricDescriptors(rowConfig: FabricRowConfig | undefined, warn: (message: string) => void): unknown {
++  if (rowConfig?.fabric?.patches !== undefined) return rowConfig.fabric.patches
++  if (rowConfig?.patches !== undefined) {
++    warn('cordis-fabric: config.patches is deprecated; move the patch stubs under config.fabric.patches')
++    return rowConfig.patches
++  }
++  return undefined
++}
++
 +/**
 + * Install the Fabric transformation hooks from the composed profile rows.
 + *
 + * The optional `cordis-fabric` row may carry static patch descriptors under
-+ * `config.patches` (id/target/operation — handlers are trusted code bound at
-+ * registration). The hooks must exist before any target plugin module is
-+ * imported, so this runs in the boot `prepare` phase, before the config tree
-+ * mounts. The row's `disabled` flag governs mounting the plugin (the browser
-+ * roster keeps the row disabled by default); it does not suppress the
-+ * load-time bootstrap — patches from the composed row apply whenever the row
-+ * carries them. When the row is absent or carries no patches, nothing is
-+ * installed.
++ * `config.fabric.patches` (id/target/operation — handlers are trusted code
++ * bound at registration); the deprecated `config.patches` key is still
++ * honored with a warning. The hooks must exist before any target plugin
++ * module is imported, so this runs in the boot `prepare` phase, before the
++ * config tree mounts. The row's `disabled` flag governs mounting the plugin
++ * (the browser roster keeps the row disabled by default); it does not
++ * suppress the load-time bootstrap — patches from the composed row apply
++ * whenever the row carries them. When the row is absent or carries no
++ * patches, nothing is installed.
 + * @param rows - the fully composed profile rows for this invocation.
++ * @param warn - deprecation sink for the legacy config key.
 + */
-+export async function installFabricBootstrap(rows: ProfileRows): Promise<void> {
++export async function installFabricBootstrap(rows: ProfileRows, warn: (message: string) => void = () => {}): Promise<void> {
 +  const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
-+  const rowConfig = fabricRow?.config as { patches?: unknown } | undefined
-+  const descriptors = rowConfig?.patches
++  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, warn)
 +  if (!Array.isArray(descriptors) || descriptors.length === 0) return
 +  const { bootstrapFabric } = await import('@deepseek-ai/dsh-cordis-fabric')
-+  bootstrapFabric(descriptors as Parameters<typeof bootstrapFabric>[0])
++  bootstrapFabric(descriptors as FabricPatchStub[])
++}
++
++/**
++ * Verify the composed profile's `required` Fabric patches bound at load
++ * time. Runs after the config tree mounts (boot completion), when every
++ * target module has been imported and the transformation hooks recorded
++ * their bindings; a required patch that bound nothing fails the launch
++ * loud, naming the patch id and its target, instead of shipping an inert
++ * transform.
++ * @param rows - the fully composed profile rows for this invocation.
++ */
++async function checkFabricRequiredPatches(rows: ProfileRows): Promise<void> {
++  const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
++  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, () => {})
++  if (!Array.isArray(descriptors) || descriptors.length === 0) return
++  const { checkRequiredPatches } = await import('@deepseek-ai/dsh-cordis-fabric')
++  checkRequiredPatches(descriptors as FabricPatchStub[])
 +}
 +
  /** One profile's patch layers (application order) and the row index of its pre-flag composition. */
  interface ComposedProfile {
    profile: Profile
-@@ -234,6 +257,10 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
+@@ -240,9 +307,18 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
        }
        hostCtx.provide('headlessIo', io)
      }
 +    // Load-time transformation hooks must precede any target module import;
 +    // the prepare phase runs after Loader installation and before the
 +    // config-tree entries mount.
-+    await installFabricBootstrap(composed.rows)
++    await installFabricBootstrap(composed.rows, (message) => { hostCtx.logger.warn(message) })
      await options.prepare?.(hostCtx, composed.rows)
    })
    app.current = ctx
++  // The config-tree entries mounted with boot()'s completion, so every
++  // target module the Fabric hooks rewrite has been imported: a required
++  // patch that bound nothing is a misconfiguration and fails the launch
++  // loud, naming the patch id, instead of shipping an inert transform.
++  await checkFabricRequiredPatches(composed.rows)
+   // A surface can dispose the whole tree while startup was still in flight
+   // (early SIGTERM); the Loader service goes with it and there is nothing to
+   // keep live.
 diff --git a/apps/cli/tests/fabric-bootstrap-runner.mjs b/apps/cli/tests/fabric-bootstrap-runner.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..a16ffa0cd7af91f10d61f00ba51dd754cfd4fd75
+index 0000000000000000000000000000000000000000..600e584c084dd7c484fa331127f2553afb39e0f5
 --- /dev/null
 +++ b/apps/cli/tests/fabric-bootstrap-runner.mjs
 @@ -0,0 +1,39 @@
@@ -107,7 +166,7 @@ index 0000000000000000000000000000000000000000..a16ffa0cd7af91f10d61f00ba51dd754
 +}
 +
 +const rows = new Map([
-+  ['cordis-fabric', { config: { patches: [{ id: 'boot/add', target, operation: 'before' }] } }],
++  ['cordis-fabric', { config: { fabric: { patches: [{ id: 'boot/add', target, operation: 'before' }] } } }],
 +])
 +
 +await installFabricBootstrap(rows)
@@ -120,10 +179,10 @@ index 0000000000000000000000000000000000000000..a16ffa0cd7af91f10d61f00ba51dd754
 +if (!ok) process.exitCode = 1
 diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..2b0f2e42d2f11601f35b1693fc5308580e5b8d16
+index 0000000000000000000000000000000000000000..3824b869d883755e6d041c0404dc844daf80ebee
 --- /dev/null
 +++ b/apps/cli/tests/fabric-bootstrap.spec.ts
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,46 @@
 +import { spawnSync } from 'node:child_process'
 +import { existsSync } from 'node:fs'
 +import { join } from 'node:path'
@@ -149,6 +208,25 @@ index 0000000000000000000000000000000000000000..2b0f2e42d2f11601f35b1693fc530858
 +  it('no-ops when the composed rows carry no cordis-fabric row or patches', async () => {
 +    await expect(installFabricBootstrap(new Map())).resolves.toBeUndefined()
 +    await expect(installFabricBootstrap(new Map([['cordis-fabric', { config: {} }]]))).resolves.toBeUndefined()
++  })
++
++  it('reads config.fabric.patches without a deprecation warning', async () => {
++    const warnings: string[] = []
++    await installFabricBootstrap(
++      new Map([['cordis-fabric', { config: { fabric: { patches: [] } } }]]),
++      (message) => { warnings.push(message) },
++    )
++    expect(warnings).toEqual([])
++  })
++
++  it('honors the deprecated config.patches key with a warning', async () => {
++    const warnings: string[] = []
++    await installFabricBootstrap(
++      new Map([['cordis-fabric', { config: { patches: [] } }]]),
++      (message) => { warnings.push(message) },
++    )
++    expect(warnings).toHaveLength(1)
++    expect(warnings[0]).toContain('config.patches is deprecated')
 +  })
 +})
 diff --git a/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs
@@ -192,10 +270,10 @@ index 36c4bad6dd8daa571483ea81bb23fa94bbebc8c5..18845a5f0f0e52b4d3d984fc4744ca12
        "path": "../../packages/client/connection"
      },
 diff --git a/docs/capability-seams.md b/docs/capability-seams.md
-index 6a8f7943c22773190ed0c6ce7892d0e06a8f8e5a..9bb5ed52fd13d641ae32ebb236d7c9aa7cc9550e 100644
+index 1aee225b5df16f2da0d57ad93c65acb95e49b117..ea842911f70ae2e5f35c757ed144086a84f92746 100644
 --- a/docs/capability-seams.md
 +++ b/docs/capability-seams.md
-@@ -164,6 +164,14 @@ flowchart LR
+@@ -166,6 +166,13 @@ flowchart LR
    pkg_modules["modules"]
    pkg_hmr["hmr"]
    svc_clientModuleHost["ctx.clientModuleHost<br/>Client plugin graph host"]
@@ -206,24 +284,22 @@ index 6a8f7943c22773190ed0c6ce7892d0e06a8f8e5a..9bb5ed52fd13d641ae32ebb236d7c9aa
 +  svc_fabricTools["ctx.fabricTools<br/>Fabric Tool API"]
 +  svc_fabricPrompt["ctx.fabricPrompt<br/>Fabric Prompt API"]
 +  svc_fabricCommands["ctx.fabricCommands<br/>Fabric Command API"]
-+  svc_fabricClient["ctx.fabricClient<br/>Fabric Client API"]
    pkg_workflow["workflow"]
    svc_workflows["ctx.workflows<br/>Workflow script engine"]
    pkg_workflow_workerthread["workflow-workerthread"]
-@@ -182,6 +190,12 @@ flowchart LR
+@@ -185,6 +192,11 @@ flowchart LR
    pkg_compact --> svc_compact
    pkg_compact_basic --> svc_compact
    pkg_compact_tool_result_prune --> svc_toolResultPrune
 +  pkg_cordis_fabric --> svc_fabric
 +  pkg_cordis_fabric_api --> svc_fabricAgent
-+  pkg_cordis_fabric_api --> svc_fabricClient
 +  pkg_cordis_fabric_api --> svc_fabricCommands
 +  pkg_cordis_fabric_api --> svc_fabricPrompt
 +  pkg_cordis_fabric_api --> svc_fabricTools
    pkg_credentials --> svc_credentials
    pkg_credentials_local --> svc_credentials
    pkg_directory_picker --> svc_directoryPicker
-@@ -403,6 +417,12 @@ flowchart LR
+@@ -407,6 +419,11 @@ flowchart LR
  | `ctx.directoryPicker` | `seam` | `directory-picker` | `directory-picker-native`, `directory-picker-browse` | `apiproxy` | - | Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement). |
  | `ctx.httpServer` | `core` | `webserver` | - | `connection`, `modules`, `hmr` | - | Plain node:http carrier: named-route registry, index transform taps, and the static dist fallback; web-transport plugins register their own routes. |
  | `ctx.clientModuleHost` | `core` | `modules` | - | `hmr` | - | Composes the __DSH_BOOT__ entry graph from an incremental dshClient scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers. |
@@ -232,35 +308,34 @@ index 6a8f7943c22773190ed0c6ce7892d0e06a8f8e5a..9bb5ed52fd13d641ae32ebb236d7c9aa
 +| `ctx.fabricTools` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing tool registration and execution listeners over the authoritative tool registry. |
 +| `ctx.fabricPrompt` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing system-prompt contributions over the authoritative prompt registry. |
 +| `ctx.fabricCommands` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing human command registration over the authoritative command registry. |
-+| `ctx.fabricClient` | `core` | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | - | - | - | Cooperative Mod-facing browser command and UI-slot registration over the authoritative client services. |
  | `ctx.workflows` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-workerthread`](../packages/workflow/workflow-workerthread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | One engine per context (bash shape, no named-provider registry); the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents. |
  
  Maintenance mode: hybrid: services are discovered from Cordis declarations; interface/implementation/consumer roles are classified in `scripts/gen-doc-graphs.ts` with a completeness guard.
 diff --git a/docs/config-catalog.md b/docs/config-catalog.md
-index d6920b4847fdd6ad619bcc70c1dcf26619258117..7db428808172b069a4cde9becd9091281412e9cf 100644
+index 1f81974b21fbcccdb30138f8a3e747512530eac6..9c1c142b42876c71e5f78e9f8f46e02545311f8c 100644
 --- a/docs/config-catalog.md
 +++ b/docs/config-catalog.md
-@@ -2493,6 +2493,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
- - `@deepseek-ai/dsh-command-compact` — requires `commands` · `compact` ([`packages/compact/command-compact/src/index.ts`](../packages/compact/command-compact/src/index.ts))
+@@ -2573,6 +2573,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
+ - `@deepseek-ai/dsh-command-feedback` — requires `commands` ([`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts))
  - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
  - `@deepseek-ai/dsh-commands` ([`packages/ui/commands/src/index.ts`](../packages/ui/commands/src/index.ts))
 +- `@deepseek-ai/dsh-cordis-fabric-api` — requires `tools` · `systemPrompt` · `commands` ([`packages/cordis/cordis-fabric-api/src/index.ts`](../packages/cordis/cordis-fabric-api/src/index.ts))
  - `@deepseek-ai/dsh-fs-policy` ([`packages/fs/fs-policy/src/index.ts`](../packages/fs/fs-policy/src/index.ts))
  - `@deepseek-ai/dsh-goal-session` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-session/src/index.ts`](../packages/goal/goal-session/src/index.ts))
  - `@deepseek-ai/dsh-host-directory-picker-auto` — requires `httpServer` · `loader` ([`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts))
-@@ -2551,6 +2552,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
+@@ -2630,6 +2631,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
  - `@deepseek-ai/dsh-client-ui-slots` ([`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts))
  - `@deepseek-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
  - `@deepseek-ai/dsh-client-web-react` ([`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts))
 +- `@deepseek-ai/dsh-cordis-fabric` ([`packages/cordis/cordis-fabric/src/index.ts`](../packages/cordis/cordis-fabric/src/index.ts))
+ - `@deepseek-ai/dsh-environment` ([`packages/util/environment/src/index.ts`](../packages/util/environment/src/index.ts))
  - `@deepseek-ai/dsh-helper` ([`packages/sdk/helper/src/index.ts`](../packages/sdk/helper/src/index.ts))
  - `@deepseek-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))
- - `@deepseek-ai/dsh-jsonrpc-demo` ([`packages/examples/jsonrpc-demo/src/index.ts`](../packages/examples/jsonrpc-demo/src/index.ts))
 diff --git a/docs/cordis-catalog/services.md b/docs/cordis-catalog/services.md
-index 44a44a139ee38ef77ca0b8b1d6efeb0f4951078b..b726e19e884dd29d5f1f0a3fe39a58bf03b92044 100644
+index a22c3464eb3b67cb2587d1af2a2ca9e1cfecb8f6..22010958dfc83ce2e7763108345f43184a65a325 100644
 --- a/docs/cordis-catalog/services.md
 +++ b/docs/cordis-catalog/services.md
-@@ -578,6 +578,217 @@ abstract capability(): DirectoryPickerCapability
+@@ -578,6 +578,202 @@ abstract capability(): DirectoryPickerCapability
  
  Source: [`packages/host/directory-picker/src/index.ts:131`](../../packages/host/directory-picker/src/index.ts)
  
@@ -301,6 +376,16 @@ index 44a44a139ee38ef77ca0b8b1d6efeb0f4951078b..b726e19e884dd29d5f1f0a3fe39a58bf
 + * @param handler - the trusted runtime handler.
 + */
 +enable(id: string, handler: FabricHandler): void
++
++/**
++ * Snapshot of load-time bindings: the files the transformation hooks
++ * actually rewrote for one patch — the ground truth the `required` check
++ * and this package's diagnostics are built on.
++ * @param id - the patch id; when omitted, every recorded binding across
++ * patches, flattened in patch-id order.
++ * @returns the recorded binding records.
++ */
++bindings(id?: PatchId): readonly FabricBinding[]
 +```
 +
 +Source: [`packages/cordis/cordis-fabric/src/service.ts:32`](../../packages/cordis/cordis-fabric/src/service.ts)
@@ -349,31 +434,6 @@ index 44a44a139ee38ef77ca0b8b1d6efeb0f4951078b..b726e19e884dd29d5f1f0a3fe39a58bf
 +Types: [Agent](../core-data-structures/core.md) · [AgentStatus](../core-data-structures/core.md) · [UserMessage](../core-data-structures/session.md)
 +
 +Source: [`packages/cordis/cordis-fabric-api/src/agent.ts:34`](../../packages/cordis/cordis-fabric-api/src/agent.ts)
-+
-+## `ctx.fabricClient` — `FabricClientService`
-+
-+Cooperative Mod-facing browser API.
-+
-+Every registration returns the exact disposer of the underlying service and keeps its conflict and disposal semantics. The service never stores a parallel copy of command or slot state.
-+
-+```ts cordis-catalog
-+/**
-+ * Register one client command contribution.
-+ * @param contribution - slash-menu entry whose behavior lives entirely on the client.
-+ * @returns the exact effect disposer that unregisters it.
-+ */
-+registerCommand(contribution: CommandContribution): () => void
-+
-+/**
-+ * Contribute a component to a declared slot and optionally declare child slots.
-+ * @param options - the narrow registration face (see {@link FabricSlotOptions}).
-+ * @param component - component honoring the composed-props contract of the declared slot.
-+ * @returns the disposer removing the registration and its declarations.
-+ */
-+registerSlot(options: FabricSlotOptions, component: unknown): () => void
-+```
-+
-+Source: [`packages/cordis/cordis-fabric-api/src/client/index.ts:68`](../../packages/cordis/cordis-fabric-api/src/client/index.ts)
 +
 +## `ctx.fabricCommands` — `FabricCommandsService`
 +
@@ -479,7 +539,7 @@ index 44a44a139ee38ef77ca0b8b1d6efeb0f4951078b..b726e19e884dd29d5f1f0a3fe39a58bf
  
  Abstract filesystem provider. Targets must preserve identity across aliases; reads expose regular UTF-8 text or typed errors, listings are stable and content-free, and mutations are atomic. Optional guards add stale protection without changing the unguarded provider contract.
 diff --git a/docs/event-producer-consumer.md b/docs/event-producer-consumer.md
-index 23794b5c9d0a51e1398d993f30eb54ee2dfe4e88..177ee46ebe86f6dfe3328d19947f56d811367e88 100644
+index 5c60be95e17b1f246ef86f27e5c7f8612aba6b32..64c42272f57190d58f782f766c587bdef3f8c6b7 100644
 --- a/docs/event-producer-consumer.md
 +++ b/docs/event-producer-consumer.md
 @@ -8,8 +8,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
@@ -501,51 +561,75 @@ index 23794b5c9d0a51e1398d993f30eb54ee2dfe4e88..177ee46ebe86f6dfe3328d19947f56d8
 +| `agent/status` | `emit` | [`packages/core/agent/src/types.ts:173`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`emit`) | [`agent`](../packages/core/agent), `apiproxy`, [`compact-basic`](../packages/compact/compact-basic), [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`goal-session`](../packages/goal/goal-session), [`headless`](../packages/bundle/headless), [`jsonrpc`](../packages/ui/jsonrpc) |
  | `agent/turn-stopping` | `serial` | [`packages/core/agent/src/types.ts:273`](../packages/core/agent/src/types.ts) | [`agent-loop`](../packages/core/agent-loop) (`serial`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex) |
  | `approval/request` | `waterfall` | [`packages/ui/user-approval/src/index.ts:30`](../packages/ui/user-approval/src/index.ts) | [`user-approval`](../packages/ui/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `apiproxy` |
- | `commands/change` | `emit` | [`packages/ui/commands/src/index.ts:154`](../packages/ui/commands/src/index.ts) | [`commands`](../packages/ui/commands) (`events.dispatch`) | `apiproxy` |
+ | `commands/change` | `emit` | [`packages/ui/commands/src/index.ts:172`](../packages/ui/commands/src/index.ts) | [`commands`](../packages/ui/commands) (`events.dispatch`) | `apiproxy` |
 @@ -47,8 +47,8 @@ This matrix shows which packages dispatch each harness-owned event and which pac
- | `tools/change` | `emit` | [`packages/core/tools/src/index.ts:167`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`emit`) | - |
- | `tools/code-dispatch-log` | `waterfall` | [`packages/core/tools/src/index.ts:149`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`spill-policy`](../packages/spill/spill-policy) |
- | `tools/execute` | `waterfall` | [`packages/core/tools/src/index.ts:124`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`timeout-policy`](../packages/timeout/timeout-policy) |
--| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
--| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
-+| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:136`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
-+| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:113`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
- | `tools/result` | `emit` | [`packages/core/tools/src/index.ts:157`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`events.dispatch`) | [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`workspace-context`](../packages/context/workspace-context) |
+ | `tools/change` | `emit` | [`packages/core/tools/src/index.ts:191`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`emit`) | - |
+ | `tools/code-dispatch-log` | `waterfall` | [`packages/core/tools/src/index.ts:173`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`spill-policy`](../packages/spill/spill-policy) |
+ | `tools/execute` | `waterfall` | [`packages/core/tools/src/index.ts:148`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`session-checkpoint-policy`](../packages/session-persistence/session-checkpoint-policy), [`timeout-policy`](../packages/timeout/timeout-policy) |
+-| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:160`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
+-| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:137`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
++| `tools/post-execute` | `waterfall` | [`packages/core/tools/src/index.ts:160`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`repeat-tool-guard`](../packages/guard/repeat-tool-guard), [`spill-policy`](../packages/spill/spill-policy), [`tool-fs-search`](../packages/fs/tool-fs-search) |
++| `tools/pre-execute` | `waterfall` | [`packages/core/tools/src/index.ts:137`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`waterfall`) | [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api), [`hooks-claude`](../packages/hooks/hooks-claude), [`hooks-codex`](../packages/hooks/hooks-codex), [`tool-tasks`](../packages/tasks/tool-tasks) |
+ | `tools/result` | `emit` | [`packages/core/tools/src/index.ts:181`](../packages/core/tools/src/index.ts) | [`tools`](../packages/core/tools) (`events.dispatch`) | [`subagent-inprocess`](../packages/subagent/subagent-inprocess), [`workspace-context`](../packages/context/workspace-context) |
  | `workflow/agent-end` | `emit` | [`packages/workflow/workflow/src/index.ts:81`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
  | `workflow/agent-start` | `emit` | [`packages/workflow/workflow/src/index.ts:70`](../packages/workflow/workflow/src/index.ts) | [`workflow`](../packages/workflow/workflow) (`events.dispatch`) | [`workflow`](../packages/workflow/workflow) |
 diff --git a/docs/module-graph.md b/docs/module-graph.md
-index 390f4bcdecffac21b80da60603463da6a4ec673d..7d79cb86eb6e440c1cba3bfb20f2a6ed52e77d0c 100644
+index 22af77f9c56967f8c70849cf67922bd26ff647bc..a0c3ab21580c95c3ba885eb44038cf2664365152 100644
 --- a/docs/module-graph.md
 +++ b/docs/module-graph.md
-@@ -101,6 +101,7 @@ flowchart TD
+@@ -103,6 +103,8 @@ flowchart TD
      pkg_plan_mode["plan-mode"]
    end
    subgraph group_cordis["packages/cordis"]
 +    pkg_cordis_fabric["cordis-fabric"]
++    pkg_cordis_fabric_api["cordis-fabric-api"]
      pkg_repository_plugin["repository-plugin"]
      pkg_tool_cordis["tool-cordis"]
    end
-@@ -289,6 +290,7 @@ flowchart TD
+@@ -300,6 +302,7 @@ flowchart TD
+   pkg_retention --> pkg_invariants
    pkg_timeout --> pkg_invariants
    pkg_scope --> pkg_invariants
-   pkg_skill --> pkg_invariants
 +  pkg_cordis_fabric --> pkg_invariants
-   pkg_acp_snapshot --> pkg_invariants
    pkg_llm_mock_server --> pkg_invariants
-   pkg_loader_smoke --> pkg_invariants
-@@ -1121,6 +1123,7 @@ flowchart TD
+   pkg_base --> pkg_invariants
+   pkg_client_modules --> pkg_invariants
+@@ -1014,6 +1017,14 @@ flowchart TD
+   pkg_tool_subagent_report --> pkg_llm
+   pkg_tool_subagent_report --> pkg_subagent
+   pkg_tool_subagent_report --> pkg_tools
++  pkg_cordis_fabric_api --> pkg_agent
++  pkg_cordis_fabric_api --> pkg_client_ui_command
++  pkg_cordis_fabric_api --> pkg_client_ui_slots
++  pkg_cordis_fabric_api --> pkg_commands
++  pkg_cordis_fabric_api --> pkg_cordis_fabric
++  pkg_cordis_fabric_api --> pkg_invariants
++  pkg_cordis_fabric_api --> pkg_system_prompt
++  pkg_cordis_fabric_api --> pkg_tools
+   pkg_repository_plugin --> pkg_invariants
+   pkg_repository_plugin --> pkg_mcp_client
+   pkg_repository_plugin --> pkg_paths
+@@ -1171,6 +1182,7 @@ flowchart TD
+ | [`retention`](../packages/util/retention) | `util` | [`invariants`](../packages/support/invariants) |
  | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
  | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |
- | [`skill`](../packages/skill/skill) | `skill` | [`invariants`](../packages/support/invariants) |
 +| [`cordis-fabric`](../packages/cordis/cordis-fabric) | `cordis` | [`invariants`](../packages/support/invariants) |
- | [`acp-snapshot`](../packages/support/acp-snapshot) | `support` | [`invariants`](../packages/support/invariants) |
  | [`llm-mock-server`](../packages/support/llm-mock-server) | `support` | [`invariants`](../packages/support/invariants) |
- | [`loader-smoke`](../packages/support/loader-smoke) | `support` | [`invariants`](../packages/support/invariants) |
+ | [`base`](../packages/bundle/base) | `bundle` | [`invariants`](../packages/support/invariants) |
+ | [`client-modules`](../packages/client/modules) | `client` | [`invariants`](../packages/support/invariants) |
+@@ -1336,6 +1348,7 @@ flowchart TD
+ | [`tool-subagent`](../packages/subagent/tool-subagent) | `subagent` | [`agent`](../packages/core/agent), [`invariants`](../packages/support/invariants), [`llm`](../packages/llm/llm), [`subagent`](../packages/subagent/subagent), [`tasks`](../packages/tasks/tasks), [`tools`](../packages/core/tools) |
+ | [`tool-subagent-control`](../packages/subagent/tool-subagent-control) | `subagent` | [`invariants`](../packages/support/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
+ | [`tool-subagent-report`](../packages/subagent/tool-subagent-report) | `subagent` | [`invariants`](../packages/support/invariants), [`llm`](../packages/llm/llm), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
++| [`cordis-fabric-api`](../packages/cordis/cordis-fabric-api) | `cordis` | [`agent`](../packages/core/agent), [`client-ui-command`](../packages/client/ui-command), [`client-ui-slots`](../packages/client/ui-slots), [`commands`](../packages/ui/commands), [`cordis-fabric`](../packages/cordis/cordis-fabric), [`invariants`](../packages/support/invariants), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
+ | [`repository-plugin`](../packages/cordis/repository-plugin) | `cordis` | [`invariants`](../packages/support/invariants), [`mcp-client`](../packages/mcp/mcp-client), [`paths`](../packages/util/paths), [`skill-local`](../packages/skill/skill-local) |
+ | [`hooks-claude`](../packages/hooks/hooks-claude) | `hooks` | [`agent`](../packages/core/agent), [`hook-protocol`](../packages/hooks/hook-protocol), [`invariants`](../packages/support/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session-persistence/session-persistence), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
+ | [`web-app`](../packages/bundle/web-app) | `bundle` | [`bash-env`](../packages/bash/bash-env), [`invariants`](../packages/support/invariants), [`system-prompt`](../packages/core/system-prompt) |
 diff --git a/knip.json b/knip.json
-index 745a7faf0fea6870bfe322a90660ef824b5f50c6..43ca6ecb7182646d3b17eaaa1cbc83e9f8639051 100644
+index ede8b2c738ea2c6a65c44cfc9863ceb8489a5eb2..04105e977efa4733845d44718d81dd0f52c11449 100644
 --- a/knip.json
 +++ b/knip.json
-@@ -174,6 +174,32 @@
+@@ -199,6 +199,32 @@
          "tests/**/*.ts"
        ]
      },
@@ -578,7 +662,7 @@ index 745a7faf0fea6870bfe322a90660ef824b5f50c6..43ca6ecb7182646d3b17eaaa1cbc83e9
      "packages/core/tools": {
        "entry": [
          "tests/**/*.spec.ts"
-@@ -672,7 +698,8 @@
+@@ -689,7 +715,8 @@
          "tests/**/*.ts"
        ],
        "ignoreDependencies": [
@@ -589,10 +673,10 @@ index 745a7faf0fea6870bfe322a90660ef824b5f50c6..43ca6ecb7182646d3b17eaaa1cbc83e9
      },
      "packages/client/modules": {
 diff --git a/package.json b/package.json
-index 7bd84db93a8f0493eff9462c1d121180da9d3c53..3d6ba4ef87f09f32ceef84b3f3561d760bd289d5 100644
+index 423cbf813c47ac78cdbdafadff4537c1eda890e6..5f7011fa6fb6e0804bf04d514ccdedc1e6eb3bda 100644
 --- a/package.json
 +++ b/package.json
-@@ -153,6 +153,7 @@
+@@ -164,6 +164,7 @@
      "tsdown": "^0.22.2",
      "tsx": "^4.22.4",
      "typescript": "^6.0.3",
@@ -601,10 +685,10 @@ index 7bd84db93a8f0493eff9462c1d121180da9d3c53..3d6ba4ef87f09f32ceef84b3f3561d76
      "vitest": "^4.1.8"
    }
 diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
-index a0f53b787f7caa2c9ddda3361327438aa1c47231..5164d73f185ba5e086f8ddc73d85b94706782777 100644
+index 62ed35bd4991a7f18c4a48089812917d1b8bc8bf..13d634a1abb1d3af260f4b42c5b69c15d2bd6e19 100644
 --- a/packages/bundle/web-app/cordis.patch.yml
 +++ b/packages/bundle/web-app/cordis.patch.yml
-@@ -192,3 +192,18 @@
+@@ -196,3 +196,18 @@
  
      - id: ui-trajectory
        name: '@deepseek-ai/dsh-client-ui-trajectory'
@@ -624,57 +708,50 @@ index a0f53b787f7caa2c9ddda3361327438aa1c47231..5164d73f185ba5e086f8ddc73d85b947
 +      name: '@deepseek-ai/dsh-cordis-fabric-api'
 +      disabled: true
 diff --git a/packages/bundle/web-app/package.json b/packages/bundle/web-app/package.json
-index 1b812b994394e7fe1f666157263a017d214e376b..c1360ef510fd1e3f4170d7b3c6a0a6d147a610f8 100644
+index 9b8e15fd66a983a44dbc9219296661a8585a22c0..cf6e59641d27c138c95184c8aac03ddb36dd5ae5 100644
 --- a/packages/bundle/web-app/package.json
 +++ b/packages/bundle/web-app/package.json
-@@ -39,6 +39,8 @@
-     "@deepseek-ai/dsh-client-runtime": "workspace:^",
+@@ -41,6 +41,8 @@
      "@deepseek-ai/dsh-client-ui-command": "workspace:^",
      "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
+     "@deepseek-ai/dsh-client-ui-deliverables": "workspace:^",
 +    "@deepseek-ai/dsh-cordis-fabric": "workspace:^",
 +    "@deepseek-ai/dsh-cordis-fabric-api": "workspace:^",
      "@deepseek-ai/dsh-client-ui-goal": "workspace:^",
      "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
      "@deepseek-ai/dsh-client-ui-model": "workspace:^",
 diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
-index aa7110f86bdc158c88e139123295371ff925f59d..00377fe83bb2a327a2700cf74198f37877258c4c 100644
+index 29b5a5f3b658803ca3277de93ec240767137a362..93b3abad1559a12f317436cfa20c3266ebd046e6 100644
 --- a/packages/client/tsdown.client.ts
 +++ b/packages/client/tsdown.client.ts
-@@ -56,6 +56,21 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
-   return repositoryPath.startsWith('packages/') ? `../../../${repositoryPath}` : source
+@@ -92,7 +92,7 @@ export function clientBundle(
+     const face = buildFace(env?.DSH_BUILD_FACE)
+     const client = clientConfig(id, face === undefined
+       ? 'src/client/index.ts'
+-      : 'lib/types/client/index.js')
++      : 'lib/types/client/index.js', options)
+     const node = [lib, ...(options.companions ?? [])]
+     if (face === 'host') return options.hostPhase === true ? node : [SKIP_WORKSPACE_BUILD]
+     if (face === 'client') return options.hostPhase === true ? [client] : [...node, client]
+@@ -129,6 +129,8 @@ interface ClientBundleOptions {
+   readonly companions?: readonly UserConfig[]
+   /** Overrides for the package's primary Node-side library config. */
+   readonly lib?: UserConfig
++  /** Optional source transform applied before browser bundling. */
++  readonly transform?: (code: string, id: string, addWatchFile?: (file: string) => void) => { code: string; map?: string } | null
  }
  
-+/**
-+ * Optional build hooks a UI plugin package may pass to {@link clientBundle}.
-+ */
-+export interface ClientBundleOptions {
-+  /**
-+   * Source transform applied to every bundled module (e.g. the Fabric
-+   * browser transform). Returns rewritten source, or `null` to leave the
-+   * module untouched. The third argument is the plugin's `addWatchFile`:
-+   * a file-backed transform (e.g. a watched Fabric patch set) registers
-+   * its backing file so a watch-mode change invalidates every module and
-+   * re-runs the transform — this is the build trigger for patch edits.
-+   */
-+  transform?: (code: string, id: string, addWatchFile?: (file: string) => void) => { code: string; map?: string } | null
-+}
-+
- /**
-  * Build the tsdown config for one UI plugin package: the node-half lib build
-  * plus the browser client bundle. A package-level tsdown.config.ts REPLACES
-@@ -67,9 +82,10 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
-  * @param libEntry - node-half entries, spelled at the call site so the
-  * package-invariants gate can see `lib/types/invariant.js` in each package's
-  * own tsdown.config.ts (a preset-side glob hides it from the mechanical check).
-+ * @param options - optional build hooks (see {@link ClientBundleOptions}).
-  * @returns tsdown user configs emitting lib/*.js and lib/client.js.
-  */
--export function clientBundle(id: string, libEntry: readonly string[]): [UserConfig, UserConfig] {
-+export function clientBundle(id: string, libEntry: readonly string[], options: ClientBundleOptions = {}): [UserConfig, UserConfig] {
-   return [{
-     entry: [...libEntry],
-     outDir: 'lib',
-@@ -167,7 +183,22 @@ export function clientBundle(id: string, libEntry: readonly string[]): [UserConf
+ type BuildFace = 'host' | 'client' | undefined
+@@ -159,7 +161,7 @@ function clientLibraryConfig(
+   }
+ }
+ 
+-function clientConfig(id: string, entry: string): UserConfig {
++function clientConfig(id: string, entry: string, options: ClientBundleOptions = {}): UserConfig {
+   return {
+     name: `${id}/client`,
+     entry: { client: entry },
+@@ -249,7 +251,19 @@ function clientConfig(id: string, entry: string): UserConfig {
            `export default ${JSON.stringify(classMap)};`,
          ].join('\n')
        },
@@ -682,15 +759,12 @@ index aa7110f86bdc158c88e139123295371ff925f59d..00377fe83bb2a327a2700cf74198f378
 +    }, ...(options.transform
 +      ? [{
 +        // Opt-in source transform (e.g. the Fabric browser transform):
-+        // rewrites matching modules before bundling. The filter keeps the
-+        // hook off non-source ids; the handler delegates to the caller and
-+        // forwards the plugin's addWatchFile so file-backed transforms join
-+        // the watch graph.
++        // rewrites matching modules before bundling and forwards watch files.
 +        name: 'dsh-client-source-transform',
 +        transform: {
 +          filter: { id: /\.(?:[cm]?js|mjs|ts|tsx)$/ },
-+          handler(this: { addWatchFile(id: string): void }, code: string, id: string) {
-+            return options.transform!(code, id, file => this.addWatchFile(file)) ?? null
++          handler(this: { addWatchFile(id: string): void }, code: string, moduleId: string) {
++            return options.transform!(code, moduleId, file => this.addWatchFile(file)) ?? null
 +          },
 +        },
 +      }]
@@ -731,10 +805,10 @@ index c452f9a7ef69e7f5af8900153271d500f19f9e47..459160c222ed3ab63328b74967554e6a
 +| [`cordis-fabric/`](cordis-fabric/README.md) | Fabric/Mixin 风格的加载期变换与 patch registry | 注册 `ctx.fabric` |
 +| [`cordis-fabric-api/`](cordis-fabric-api/README.md) | 协作式、面向 Mod 的 Fabric API 模块 | 注册 `ctx.fabricAgent`、`ctx.fabricTools`、`ctx.fabricPrompt`、`ctx.fabricCommands`，以及（web）`ctx.fabricClient` |
 diff --git a/packages/cordis/tool-cordis/src/api-catalog.ts b/packages/cordis/tool-cordis/src/api-catalog.ts
-index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc11956542 100644
+index dec95f3b5fb324257dc11c4922620842a2cd7fcf..4736dd4461f5772babd0840a4b844f5acf55dd3b 100644
 --- a/packages/cordis/tool-cordis/src/api-catalog.ts
 +++ b/packages/cordis/tool-cordis/src/api-catalog.ts
-@@ -304,6 +304,118 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+@@ -304,6 +304,108 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
        },
      ],
    },
@@ -758,6 +832,10 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
 +        signature: 'enable(id: string, handler: FabricHandler): void',
 +        jsDoc: '/**\n * Enable a previously disabled patch with a fresh handler binding.\n * @param id - the patch id.\n * @param handler - the trusted runtime handler.\n */',
 +      },
++      {
++        signature: 'bindings(id?: PatchId): readonly FabricBinding[]',
++        jsDoc: '/**\n * Snapshot of load-time bindings: the files the transformation hooks\n * actually rewrote for one patch — the ground truth the `required` check\n * and this package\'s diagnostics are built on.\n * @param id - the patch id; when omitted, every recorded binding across\n * patches, flattened in patch-id order.\n * @returns the recorded binding records.\n */',
++      },
 +    ],
 +  },
 +  {
@@ -779,20 +857,6 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
 +      {
 +        signature: 'inject(agent: Agent, message: UserMessage): void',
 +        jsDoc: '/**\n * Inject a logged, model-visible user message into one agent\'s context.\n *\n * The message goes through `agent.inject()`, the Agent\'s own durable\n * injection path: anything this API contributes to a model request is\n * reconstructable from the session log. No provider request is assembled\n * here.\n * @param agent - the live agent to inject into.\n * @param message - the sourced user message to append.\n */',
-+      },
-+    ],
-+  },
-+  {
-+    key: 'fabricClient',
-+    summary: 'Cooperative Mod-facing browser API.',
-+    methods: [
-+      {
-+        signature: 'registerCommand(contribution: CommandContribution): () => void',
-+        jsDoc: '/**\n * Register one client command contribution.\n * @param contribution - slash-menu entry whose behavior lives entirely on the client.\n * @returns the exact effect disposer that unregisters it.\n */',
-+      },
-+      {
-+        signature: 'registerSlot(options: FabricSlotOptions, component: unknown): () => void',
-+        jsDoc: '/**\n * Contribute a component to a declared slot and optionally declare child slots.\n * @param options - the narrow registration face (see {@link FabricSlotOptions}).\n * @param component - component honoring the composed-props contract of the declared slot.\n * @returns the disposer removing the registration and its declarations.\n */',
 +      },
 +    ],
 +  },
@@ -853,7 +917,7 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
    {
      key: 'fs',
      summary: 'Abstract filesystem provider.',
-@@ -1941,6 +2053,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -1959,6 +2061,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'EpochHeader',
      declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
    },
@@ -868,6 +932,10 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
 +  {
 +    name: 'FabricBeforeHandler',
 +    declaration: 'export type FabricBeforeHandler = (call: FabricCall) => void;',
++  },
++  {
++    name: 'FabricBinding',
++    declaration: 'export interface FabricBinding {\n    module: string;\n    file: string;\n    nodes: number;\n}',
 +  },
 +  {
 +    name: 'FabricCall',
@@ -887,11 +955,11 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
 +  },
 +  {
 +    name: 'FabricPatch',
-+    declaration: 'export interface FabricPatch {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    priority?: number;\n    handler: FabricHandler;\n}',
++    declaration: 'export interface FabricPatch {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    required?: boolean;\n    priority?: number;\n    handler: FabricHandler;\n}',
 +  },
 +  {
 +    name: 'FabricPatchInfo',
-+    declaration: 'export interface FabricPatchInfo {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    priority: number;\n    enabled: boolean;\n}',
++    declaration: 'export interface FabricPatchInfo {\n    id: PatchId;\n    target: FabricTarget;\n    operation: FabricOperation;\n    priority: number;\n    enabled: boolean;\n    bindings?: readonly FabricBinding[];\n}',
 +  },
 +  {
 +    name: 'FabricReplaceHandler',
@@ -899,12 +967,12 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
 +  },
 +  {
 +    name: 'FabricTarget',
-+    declaration: 'export interface FabricTarget {\n    module: string;\n    versionRange: string;\n    filePath: string | RegExp;\n    functionQuery?: FunctionQuery;\n    astQuery?: string;\n    index?: number | null;\n}',
++    declaration: 'export interface FabricTarget {\n    module: string;\n    versionRange: string;\n    filePath?: string | RegExp;\n    filePaths?: string[];\n    functionQuery?: FunctionQuery;\n    astQuery?: string;\n    index?: number | null;\n}',
 +  },
    {
      name: 'FileDiff',
      declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-@@ -2169,10 +2325,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2203,10 +2353,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'OneShotSubagentDescriptorData',
      declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
    },
@@ -923,7 +991,7 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
    {
      name: 'PreparedLlmCall',
      declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
-@@ -2193,6 +2357,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2227,6 +2385,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'PresetSpec',
      declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
    },
@@ -935,7 +1003,7 @@ index 9f520a012ddb9858209662af9a6ea492d67d302e..a043bcfa179c878bc2fea558736ed9bc
      name: 'ProjectionChangeListener',
      declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
 diff --git a/packages/typert/generator/src/cordis-catalog.ts b/packages/typert/generator/src/cordis-catalog.ts
-index 6bc649847e15c8b3ccfb6b6d61dccac0b0a2b213..253d86c7634093443cf38ce3a4fcab483ec91de0 100644
+index 2e36b3ccf6e35ffde5bcdc894dd63ef43f4e0099..253d86c7634093443cf38ce3a4fcab483ec91de0 100644
 --- a/packages/typert/generator/src/cordis-catalog.ts
 +++ b/packages/typert/generator/src/cordis-catalog.ts
 @@ -230,8 +230,14 @@ export class CordisCatalogProjector {
@@ -949,16 +1017,16 @@ index 6bc649847e15c8b3ccfb6b6d61dccac0b0a2b213..253d86c7634093443cf38ce3a4fcab48
 +        // or in a `src/client/index.ts` browser entry.
 +        const entryPattern = /^packages\/[^/]+\/[^/]+\/src\/(?:index|service|agent|tools|prompt|commands|client\/index)\.ts$/
          if (declaration.kind !== 'class'
--          || !/^packages\/[^/]+\/[^/]+\/src\/index\.ts$/.test(service.location.file)
+-          || !/^packages\/[^/]+\/[^/]+\/src\/[^/]+\.ts$/.test(service.location.file)
 +          || !entryPattern.test(service.location.file)
            || declaration.location.file !== service.location.file) continue
          const doc = parseJsDoc(declaration.jsDoc ?? '').doc
          const source = pointer(declaration.location)
 diff --git a/scripts/check-workspace-constraints.ts b/scripts/check-workspace-constraints.ts
-index e0b9344cdf77b47a28a2a9dd524aff4901d2d90e..5210ffbb48ca0089645900888d47038ff06c765e 100644
+index 355b817e68b44ca4226c98453fa1485126521218..863e2729b4afb25378444652b63b632670205a9e 100644
 --- a/scripts/check-workspace-constraints.ts
 +++ b/scripts/check-workspace-constraints.ts
-@@ -136,6 +136,15 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
+@@ -155,6 +155,15 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
      ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
      // runtime's shell-held loader subpath ships as its own bundle beside the client half.
      ...exportDefault(manifest, './loader') === './lib/loader.js' ? ['lib/loader.js'] : [],
@@ -976,10 +1044,10 @@ index e0b9344cdf77b47a28a2a9dd524aff4901d2d90e..5210ffbb48ca0089645900888d47038f
      ...extras,
 diff --git a/scripts/client-bundle-source-transform.spec.ts b/scripts/client-bundle-source-transform.spec.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..5ebde99f411429b7d5fac8c937e83d5abe092545
+index 0000000000000000000000000000000000000000..8a4f1c1e76fd34da2fca6df9d2143e8db4ff5806
 --- /dev/null
 +++ b/scripts/client-bundle-source-transform.spec.ts
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,66 @@
 +/**
 + * The client bundle preset's opt-in source transform receives the plugin's
 + * addWatchFile as its third argument, so file-backed transforms (the Fabric
@@ -1000,9 +1068,10 @@ index 0000000000000000000000000000000000000000..5ebde99f411429b7d5fac8c937e83d5a
 +type SourceTransform = (code: string, id: string, addWatchFile?: (file: string) => void) => { code: string } | null
 +
 +function transformPlugin(transform: SourceTransform): TransformPlugin {
-+  const configs = clientBundle('@deepseek-ai/dsh-client-test', ['lib/types/index.js', 'lib/types/invariant.js'], { transform })
-+  const plugins = (configs[1] as { plugins: TransformPlugin[] }).plugins
-+  const plugin = plugins.find(candidate => candidate.name === 'dsh-client-source-transform')
++  const resolveConfigs = clientBundle('@deepseek-ai/dsh-client-test', ['lib/types/index.js', 'lib/types/invariant.js'], { transform })
++  const configs = resolveConfigs({ env: {} })
++  const clientConfig = configs.at(-1) as { plugins: TransformPlugin[] }
++  const plugin = clientConfig.plugins.find(candidate => candidate.name === 'dsh-client-source-transform')
 +  if (plugin === undefined) throw new Error('source transform plugin missing from client config')
 +  return plugin
 +}
@@ -1132,21 +1201,22 @@ index 0000000000000000000000000000000000000000..3d52aceebb1e1b8ab9bca3fa02490e4d
 +  }
 +}, 30_000)
 diff --git a/scripts/gen-cordis-catalog.ts b/scripts/gen-cordis-catalog.ts
-index bcf90d1e828f6cff30f93d54da766c6af10605b9..25b6368bc97bfc7c9a5bb9f5651e357eb5c631c6 100644
+index 54581a86058f06ee37b23988d947fd686efa8d37..4a5a3d95e1080048c1115987a8a7eedb2c1394a0 100644
 --- a/scripts/gen-cordis-catalog.ts
 +++ b/scripts/gen-cordis-catalog.ts
-@@ -244,6 +244,10 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
+@@ -245,6 +245,11 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
  
  /** Project types deliberately documented outside the core-data catalog. */
  export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
 +  FabricPatch: 'Fabric patch descriptor is owned by packages/cordis/cordis-fabric/src/types.ts',
 +  FabricPatchInfo: 'Fabric patch snapshot is owned by packages/cordis/cordis-fabric/src/types.ts',
 +  FabricHandler: 'Fabric handler contract is owned by packages/cordis/cordis-fabric/src/types.ts',
++  FabricBinding: 'Fabric binding contract is owned by packages/cordis/cordis-fabric/src/types.ts',
 +  PatchId: 'Fabric patch id is owned by packages/cordis/cordis-fabric/src/types.ts',
    AgentFactory: 'agent creation seam is owned by packages/core/agent/README.md',
    z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
    BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-slash/src/types.ts',
-@@ -270,6 +274,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+@@ -271,6 +276,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
    ProjectionSnapshot: 'watermark snapshot shape is owned by packages/session-projection/session-projection/src/index.ts',
    ProjectionCheckpoint: 'persisted checkpoint row map is owned by packages/session-projection/session-projection/src/index.ts',
    CommandExecution: 'executor return contract is owned by packages/ui/commands/src/index.ts',
@@ -1156,10 +1226,10 @@ index bcf90d1e828f6cff30f93d54da766c6af10605b9..25b6368bc97bfc7c9a5bb9f5651e357e
    TypertFace: 'registry face identity is owned by packages/typert/registry/README.md',
    TypertPackageFilter: 'registry package query filter is owned by packages/typert/registry/README.md',
 diff --git a/scripts/gen-doc-graphs.ts b/scripts/gen-doc-graphs.ts
-index b9f445cc22d298a023446ef940e5eb7ba86739ce..e978b05781a15b9612e7561e9ada2193b2f951d1 100644
+index 0715ea06ea73c6336e252c8cdbac7d8b32020ed6..01ecaa2ca164708a3b1581f0924791477c42c1c0 100644
 --- a/scripts/gen-doc-graphs.ts
 +++ b/scripts/gen-doc-graphs.ts
-@@ -473,6 +473,54 @@ const SERVICE_ROLES: ServiceRole[] = [
+@@ -480,6 +480,46 @@ const SERVICE_ROLES: ServiceRole[] = [
      consumers: ['hmr'],
      note: 'Composes the __DSH_BOOT__ entry graph from an incremental dshClient scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers.',
    },
@@ -1203,22 +1273,14 @@ index b9f445cc22d298a023446ef940e5eb7ba86739ce..e978b05781a15b9612e7561e9ada2193
 +    consumers: [],
 +    note: 'Cooperative Mod-facing human command registration over the authoritative command registry.',
 +  },
-+  {
-+    key: 'fabricClient',
-+    pkg: 'cordis-fabric-api',
-+    title: 'Fabric Client API',
-+    mode: 'core',
-+    consumers: [],
-+    note: 'Cooperative Mod-facing browser command and UI-slot registration over the authoritative client services.',
-+  },
    {
      key: 'workflows',
      pkg: 'workflow',
 diff --git a/scripts/verify-package-readme-model-experience.ts b/scripts/verify-package-readme-model-experience.ts
-index 316a4233de9214266ac9a3ad5f96689cff199279..b9723c3652922605ac2841b523c7d7413df31cc0 100644
+index 3ca0317cf44e4fd78ee89d9fde18257a1466dd0b..db87fe08922ba889b070ac945c56daa9862da5bb 100644
 --- a/scripts/verify-package-readme-model-experience.ts
 +++ b/scripts/verify-package-readme-model-experience.ts
-@@ -80,6 +80,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
+@@ -84,6 +84,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
    'packages/fs/fs': { kind: 'indirect', reason: 'The service interface delegates model rendering to dsh-tool-fs.' },
    'packages/fs/fs-local': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-fs.' },
    'packages/hooks/hook-protocol': { kind: 'indirect', reason: 'Only the hook bridge plugins render decoded hook output to a model.' },
@@ -1228,7 +1290,7 @@ index 316a4233de9214266ac9a3ad5f96689cff199279..b9723c3652922605ac2841b523c7d741
    'packages/host/directory-picker': { kind: 'none', reason: 'The GUI-host picking seam registers no model surface.' },
    'packages/host/directory-picker-auto': { kind: 'none', reason: 'The GUI-host picking chooser only mounts a backend row; registers no model surface.' },
 diff --git a/tsconfig.client.json b/tsconfig.client.json
-index e1d4088061a10f5146ad1c7791c0477c53732cd4..0e05821f37ea23c24a440f159519f72d4fccd7de 100644
+index 9ce72753c10680f2a3a4f36687608059f4ae023b..b5f6d8d6ea92af3535f06a0de6845f54725098d9 100644
 --- a/tsconfig.client.json
 +++ b/tsconfig.client.json
 @@ -25,7 +25,8 @@
@@ -1241,7 +1303,7 @@ index e1d4088061a10f5146ad1c7791c0477c53732cd4..0e05821f37ea23c24a440f159519f72d
    ],
    "references": [
      // Shared leaf: web e2e boots the real host webserver (fixture + real-host
-@@ -73,6 +74,8 @@
+@@ -78,6 +79,8 @@
      { "path": "./packages/client/ui-models" },
      { "path": "./packages/client/locale" },
      { "path": "./packages/client/web" },
@@ -1251,10 +1313,10 @@ index e1d4088061a10f5146ad1c7791c0477c53732cd4..0e05821f37ea23c24a440f159519f72d
    ]
  }
 diff --git a/tsconfig.host.json b/tsconfig.host.json
-index 9e63314bc567a9b7577e68631180fa9ef86b9532..57c95d1b74e7edacf3a0a59fc0d88ca57bc0d202 100644
+index 6641a505b93417a51ab9bc96bf14736b913e2487..20ed67ed6505099a2740855cafc2533c1595d65d 100644
 --- a/tsconfig.host.json
 +++ b/tsconfig.host.json
-@@ -72,7 +72,8 @@
+@@ -81,7 +81,8 @@
      "packages/host/directory-picker-native/**",
      "scripts/client-bundle-css.spec.ts",
      "packages/typert/generator/tests/fixtures/**",
@@ -1264,7 +1326,7 @@ index 9e63314bc567a9b7577e68631180fa9ef86b9532..57c95d1b74e7edacf3a0a59fc0d88ca5
    ],
    "references": [
      { "path": "./vendor/cosmokit" },
-@@ -221,7 +222,10 @@
+@@ -236,7 +237,10 @@
      { "path": "./packages/plan/plan-mode" },
      { "path": "./packages/guard/repeat-tool-guard" },
      { "path": "./packages/cordis/tool-cordis" },

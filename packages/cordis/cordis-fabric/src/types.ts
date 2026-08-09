@@ -27,7 +27,14 @@ export interface FabricTarget {
   /** semver range the owning package version must satisfy. */
   versionRange: string
   /** File path or pattern relative to the package root. */
-  filePath: string | RegExp
+  filePath?: string | RegExp
+  /**
+   * Convenience for the dual-form idiom: every package-relative file path in
+   * this list matches under one patch id (each entry expands into its own
+   * instrumentation sharing the id, with one binding record per matched
+   * file). Mutually exclusive with `filePath`.
+   */
+  filePaths?: string[]
   /** Name-based function query (function, method, class, private method…). */
   functionQuery?: FunctionQuery
   /** Raw esquery selector; when set it takes precedence over name matching. */
@@ -111,10 +118,36 @@ export interface FabricPatch {
   target: FabricTarget
   /** Behavior kind of this patch. */
   operation: FabricOperation
+  /**
+   * Load-time contract: when true, the bootstrap must observe at least one
+   * transformed file for this patch after the application boots. A required
+   * patch that bound nothing fails startup loud (naming the patch id)
+   * instead of silently shipping an inert transform — the filePath may be
+   * the wrong launch form (src vs lib) or the function may have moved.
+   * Defaults to false.
+   */
+  required?: boolean
   /** Numeric ordering key; higher priorities run first, equal priorities preserve stable registration order. */
   priority?: number
   /** Runtime behavior installed for this patch. */
   handler: FabricHandler
+}
+
+/** One load-time binding of a patch: a file its transform actually rewrote. */
+export interface FabricBinding {
+  /** Package name of the bound module. */
+  module: string
+  /** Package-relative file path that was transformed. */
+  file: string
+  /** Function nodes rewritten in that file. */
+  nodes: number
+}
+
+/** One file's binding record with its patch id — the shape the browser
+ * transform attaches to its output and the loader-thread channel forwards. */
+export interface FabricBindingReport extends FabricBinding {
+  /** The patch id the node count belongs to. */
+  patchId: PatchId
 }
 
 /** Immutable diagnostic snapshot of one registered patch (no handler functions). */
@@ -129,6 +162,11 @@ export interface FabricPatchInfo {
   priority: number
   /** Whether the patch is currently installed. */
   enabled: boolean
+  /**
+   * Load-time bindings recorded for this patch, in recording order. Always
+   * present on `list()` entries; registration inputs may omit it.
+   */
+  bindings?: readonly FabricBinding[]
 }
 
 /** A patch descriptor without a runtime handler — the static shape

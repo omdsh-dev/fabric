@@ -1,4 +1,4 @@
-import { runtime, validatePatchId, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import { runtime, validatePatchId, validatePatchStatic, FabricService, getFabric } from '@deepseek-ai/dsh-cordis-fabric'
 import { publish, subscribeBridge } from '@deepseek-ai/dsh-cordis-fabric/src/bridge.ts'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { Context } from 'cordis'
@@ -94,6 +94,45 @@ describe('fabric runtime registry', () => {
       operation: 'replace', priority: 0, enabled: false,
     })
   })
+
+  it('records load-time bindings per patch and merges them into list()', () => {
+    runtime.recordBindings('bind/a', [{ module: 'pkg', file: 'index.js', nodes: 2 }])
+    runtime.recordBindings('bind/a', [{ module: 'pkg', file: 'lib.js', nodes: 1 }])
+    runtime.recordBindings('bind/b', [{ module: 'other', file: 'run.js', nodes: 1 }])
+    expect(runtime.bindingsOf('bind/a')).toEqual([
+      { module: 'pkg', file: 'index.js', nodes: 2 },
+      { module: 'pkg', file: 'lib.js', nodes: 1 },
+    ])
+    expect(runtime.bindingsOf('bind/nope')).toEqual([])
+    // allBindings flattens in patch-id order.
+    expect(runtime.allBindings().map(record => record.file)).toEqual(['index.js', 'lib.js', 'run.js'])
+    // list() entries carry the recorded bindings regardless of registration.
+    runtime.register({
+      id: 'bind/a', target: { module: 'pkg', versionRange: '*', filePath: 'index.js' },
+      operation: 'before', priority: 0, enabled: false,
+    })
+    expect(runtime.list().find(info => info.id === 'bind/a')?.bindings).toHaveLength(2)
+  })
+
+  it('validatePatchStatic rejects a non-boolean required flag', () => {
+    const target = { module: 'pkg', versionRange: '*', filePath: 'index.js' }
+    expect(() => {
+      validatePatchStatic({ target, operation: 'before', required: 'yes' as never })
+    }).toThrow(/required must be a boolean/)
+    expect(() => {
+      validatePatchStatic({ target, operation: 'before', required: true })
+    }).not.toThrow()
+  })
+
+  it('validatePatchStatic accepts filePaths and rejects invalid combinations', () => {
+    const base = { module: 'pkg', versionRange: '*' }
+    expect(() => { validatePatchStatic({ target: { ...base, filePaths: ['a.js', 'b.js'] }, operation: 'before' }) }).not.toThrow()
+    expect(() => { validatePatchStatic({ target: { ...base, filePath: 'a.js' }, operation: 'before' }) }).not.toThrow()
+    expect(() => { validatePatchStatic({ target: { ...base, filePath: 'a.js', filePaths: ['b.js'] }, operation: 'before' }) }).toThrow(/not both/)
+    expect(() => { validatePatchStatic({ target: { ...base, filePaths: [] }, operation: 'before' }) }).toThrow(/filePaths/)
+    expect(() => { validatePatchStatic({ target: { ...base, filePaths: [''] }, operation: 'before' }) }).toThrow(/filePaths/)
+    expect(() => { validatePatchStatic({ target: { ...base }, operation: 'before' }) }).toThrow(/filePath or filePaths/)
+  })
 })
 
 describe('FabricService', () => {
@@ -157,6 +196,33 @@ describe('FabricService', () => {
       operation: 'before',
       handler: () => {},
     })).toThrow(/astQuery must not be blank/)
+  })
+
+  it('bindings() snapshots one patch or every recorded binding', () => {
+    const ctx = new Context()
+    const service = new FabricService(ctx)
+    runtime.recordBindings('service/one', [{ module: 'm', file: 'f.js', nodes: 1 }])
+    expect(service.bindings('service/one')).toHaveLength(1)
+    expect(service.bindings('service/none')).toEqual([])
+    expect(service.bindings().some(record => record.file === 'f.js')).toBe(true)
+  })
+
+  it('getFabric mounts once and reuses the mounted service', () => {
+    const ctx = new Context()
+    const first = getFabric(ctx)
+    expect(first).toBeInstanceOf(FabricService)
+    expect(ctx.get('fabric')).toBeInstanceOf(FabricService)
+    // Cordis rejects a second registration of the same service, so the
+    // accessor returning at all proves it reused the mounted registry.
+    expect(() => getFabric(ctx)).not.toThrow()
+    expect(getFabric(ctx)).toBeInstanceOf(FabricService)
+  })
+
+  it('getFabric returns an already-mounted service untouched', async () => {
+    const ctx = new Context()
+    await ctx.plugin(FabricService)
+    expect(getFabric(ctx)).toBeInstanceOf(FabricService)
+    expect(ctx.get('fabric')).toBeInstanceOf(FabricService)
   })
 })
 

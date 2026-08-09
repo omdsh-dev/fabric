@@ -6,7 +6,7 @@
  * `./src/*` export and is launched with tsx from the repository root.
  */
 
-import { installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, runtime, GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
+import { bootstrapFabric, checkRequiredPatches, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, runtime, GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
@@ -36,6 +36,16 @@ async function withPatch(patch, checks) {
 }
 
 const caseName = process.argv[2]
+
+/** Wait until the async hook path's port-delivered binding records for a
+ * patch reach the expected count (they land asynchronously; production
+ * reads them after boot), giving up after about a second. */
+const flushBindings = async (id, count) => {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (runtime.bindingsOf(id).length >= count) return
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+}
 
 switch (caseName) {
   case 'before':
@@ -548,6 +558,136 @@ switch (caseName) {
       runtime.register({ id: patch.id, target: patch.target, operation: patch.operation, priority: 0, enabled: false })
       runtime.enable(patch.id, patch.handler)
       check('workspaceIdentity add(2,3)', mod.add(2, 3), 23)
+    }
+    break
+
+  case 'bindingsReported':
+    {
+      // The load-time binding records must reflect the file the transform
+      // actually rewrote — the ground truth the required-patch check and the
+      // service's bindings() snapshot are built on.
+      const patch = {
+        id: 'e2e/bindings-add',
+        target: { ...target, functionQuery: { functionName: 'add', kind: 'Sync' } },
+        operation: 'before',
+        handler() {},
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      await import(fixtureUrl)
+      await flushBindings(patch.id, 1)
+      const bindings = runtime.bindingsOf(patch.id)
+      check('bindingsReported one record', bindings.length, 1)
+      check('bindingsReported module', bindings[0]?.module, 'fabric-target-fixture')
+      check('bindingsReported file', bindings[0]?.file, 'index.mjs')
+      check('bindingsReported nodes', bindings[0]?.nodes, 1)
+      // list() carries the binding summary after registration too.
+      runtime.register({ id: patch.id, target: patch.target, operation: patch.operation, priority: 0, enabled: false })
+      const listed = runtime.list().find(info => info.id === patch.id)
+      check('bindingsReported list() summary', listed?.bindings.length, 1)
+    }
+    break
+
+  case 'requiredHit':
+    {
+      // A required patch whose target bound passes the post-boot check.
+      const patch = {
+        id: 'e2e/required-add',
+        target: { ...target, functionQuery: { functionName: 'add', kind: 'Sync' } },
+        operation: 'before',
+        required: true,
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      await import(fixtureUrl)
+      await flushBindings(patch.id, 1)
+      let threw = ''
+      try {
+        checkRequiredPatches([patch])
+      } catch (error) {
+        threw = String(error)
+      }
+      check('requiredHit no throw', threw, '')
+      check('requiredHit bindings recorded', runtime.bindingsOf(patch.id).length, 1)
+    }
+    break
+
+  case 'requiredMiss':
+    {
+      // A required patch whose target never matched must fail loud naming
+      // the patch id — the wrong launch form (src vs lib) is the classic
+      // silent-miss case this check exists for.
+      const patch = {
+        id: 'e2e/required-nope',
+        target: { ...target, filePath: 'nope.mjs', functionQuery: { functionName: 'add', kind: 'Sync' } },
+        operation: 'before',
+        required: true,
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      await import(fixtureUrl)
+      let threw = ''
+      try {
+        checkRequiredPatches([patch])
+      } catch (error) {
+        threw = String(error)
+      }
+      check('requiredMiss throws', threw.includes('e2e/required-nope'), true)
+      check('requiredMiss mentions target', threw.includes('nope.mjs'), true)
+      check('requiredMiss zero bindings', runtime.bindingsOf(patch.id).length, 0)
+    }
+    break
+
+  case 'requiredRegExp':
+    {
+      // A RegExp filePath covers several launch forms under one patch id —
+      // the documented dual-form (src vs lib) idiom — and binds once per
+      // matched file.
+      const patch = {
+        id: 'e2e/required-regexp',
+        target: { ...target, filePath: /^(index\.mjs|lib\/index\.js)$/, functionQuery: { functionName: 'add', kind: 'Sync' } },
+        operation: 'before',
+        required: true,
+      }
+      installFabricHooks([patchInstrumentation(patch)])
+      await import(fixtureUrl)
+      await flushBindings(patch.id, 1)
+      let threw = ''
+      try {
+        checkRequiredPatches([patch])
+      } catch (error) {
+        threw = String(error)
+      }
+      check('requiredRegExp no throw', threw, '')
+      check('requiredRegExp bindings recorded', runtime.bindingsOf(patch.id).length, 1)
+    }
+    break
+
+  case 'filePathsDual':
+    {
+      // The filePaths convenience collapses the dual-form (src vs lib)
+      // idiom into one stub: every entry expands into its own
+      // instrumentation under the same patch id, one binding record per
+      // matched file, and handlers bound to the id see both files' calls.
+      const stub = {
+        id: 'e2e/filepaths-add',
+        target: {
+          module: 'fabric-target-fixture',
+          versionRange: '^1.0.0',
+          filePaths: ['index.mjs', 'lib.js'],
+          functionQuery: { functionName: 'add', kind: 'Sync' },
+        },
+        operation: 'before',
+      }
+      bootstrapFabric([stub])
+      const indexMod = await import(fixtureUrl)
+      const libUrl = new URL('./fixtures/node_modules/fabric-target-fixture/lib.js', import.meta.url)
+      const libMod = await import(libUrl)
+      await flushBindings(stub.id, 2)
+      runtime.register({ id: stub.id, target: stub.target, operation: stub.operation, priority: 0, enabled: false })
+      runtime.enable(stub.id, (call) => { call.arguments[0] = call.arguments[0] * 10 })
+      check('filePathsDual index patched', indexMod.add(2, 3), 23)
+      check('filePathsDual lib patched', libMod.add(2, 3), 23)
+      const bindings = runtime.bindingsOf(stub.id)
+      check('filePathsDual two records', bindings.length, 2)
+      check('filePathsDual files', bindings.map(b => b.file).sort().join(','), 'index.mjs,lib.js')
     }
     break
 

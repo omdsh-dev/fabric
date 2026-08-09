@@ -23,13 +23,14 @@ import { readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { MessagePort } from 'node:worker_threads'
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'
 import parse from 'module-details-from-path'
 import { installBridge } from './bridge.ts'
 import { getPackageVersion, packageIdentityFromPath, type PackageIdentity } from './module-identity.ts'
-import { validatePatchId, validatePatchStatic } from './runtime.ts'
+import { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
 import { registerFabricTransform } from './transform.ts'
-import type { FabricPatchStub } from './types.ts'
+import type { FabricBindingReport, FabricPatchStub, PatchId } from './types.ts'
 
 /**
  * An Orchestrion config extended with the Fabric fields the transform reads
@@ -75,12 +76,18 @@ export function patchInstrumentation(patch: FabricPatchStub): FabricInstrumentat
     throw new Error('fabric: patch target astQuery must not be blank')
   }
   const query = rawQuery ?? queryFromFunction(patch)
+  const filePath = target.filePath
+  if (filePath === undefined) {
+    // A filePaths target must be split by expandPatchStub before the
+    // singular instrumentation builder runs.
+    throw new Error('fabric: patch target.filePaths must be expanded before instrumentation (use expandPatchStub)')
+  }
   return {
     channelName: patch.id,
     module: {
       name: target.module,
       versionRange: target.versionRange,
-      filePath: target.filePath,
+      filePath,
     },
     astQuery: query,
     // The function query doubles as the behavior bag: name-based targets carry
@@ -153,6 +160,23 @@ function queryFromFunction(patch: FabricPatchStub): string {
 }
 
 /**
+ * Expand one patch descriptor into its instrumentations: a target with
+ * `filePaths` yields one instrumentation per entry under the same patch id —
+ * the dual-form (src vs lib) idiom collapses into one stub with one binding
+ * record per matched file; a singular `filePath` yields exactly one.
+ * @param patch - the validated patch descriptor.
+ * @returns the instrumentations to install.
+ */
+export function expandPatchStub(patch: FabricPatchStub): FabricInstrumentationConfig[] {
+  const { filePaths, ...target } = patch.target
+  if (filePaths === undefined) return [patchInstrumentation(patch)]
+  return filePaths.map(filePath => patchInstrumentation({
+    ...patch,
+    target: { ...target, filePath },
+  }))
+}
+
+/**
  * Convenience bootstrap for application preparation: validate patches, build
  * their instrumentations, and install the transformation hooks. Call this in
  * the host's `boot()` `prepare` hook (or any point before the target plugin's
@@ -163,7 +187,30 @@ function queryFromFunction(patch: FabricPatchStub): string {
  * @returns a disposer that deactivates the installation.
  */
 export function bootstrapFabric(patches: FabricPatchStub[]): () => void {
-  return installFabricHooks(patches.map(patchInstrumentation))
+  return installFabricHooks(patches.flatMap(expandPatchStub))
+}
+
+/**
+ * Verify that every `required` patch recorded at least one load-time
+ * binding, and fail loud naming the offenders when any did not. Call after
+ * the application boots (the target modules have been imported), so the
+ * check observes the bindings the transformation hooks recorded; a required
+ * patch whose target never matched is a misconfiguration — wrong launch
+ * form (src vs lib), moved function, or renamed module — that would
+ * otherwise ship as an inert transform.
+ * @param patches - the patch descriptors the bootstrap was installed with.
+ * @throws listing every required patch that bound nothing.
+ */
+export function checkRequiredPatches(patches: readonly FabricPatchStub[]): void {
+  const missing = patches
+    .filter(patch => patch.required === true && runtime.bindingsOf(patch.id).length === 0)
+    .map(patch => `${patch.id} (${patch.target.module} ${String(patch.target.filePath)}, ${patch.operation})`)
+  if (missing.length > 0) {
+    throw new Error(
+      'fabric: required patch(es) bound nothing at load time; the target file may be the wrong '
+      + `launch form (src vs lib) or the function may have moved: ${missing.join('; ')}`,
+    )
+  }
 }
 
 /** Loader state shared by every hook installation of this module. */
@@ -178,6 +225,27 @@ interface LoaderState {
   transformers: Map<string, ReturnType<ReturnType<typeof create>['getTransformer']>>
   /** URLs already transformed (guards the CJS double-path). */
   seen: Set<string>
+  /**
+   * Per-patch function-node counts accumulating while one file's transform
+   * runs; flushed into the runtime's binding records after the file.
+   */
+  pending: Map<PatchId, number>
+}
+
+/**
+ * Record the pending per-patch node counts as load-time bindings for one
+ * transformed file. Counts accumulate only while a single file's transform
+ * runs (module loads are sequential), so each flush attributes exactly the
+ * nodes of the file being loaded.
+ * @param state - the active installation.
+ * @param identity - the transformed module's package identity.
+ */
+function flushBindings(state: LoaderState, identity: PackageIdentity): void {
+  if (state.pending.size === 0) return
+  for (const [patchId, nodes] of state.pending) {
+    runtime.recordBindings(patchId, [{ module: identity.name, file: identity.path, nodes }])
+  }
+  state.pending.clear()
 }
 
 /** Active installations in installation order. Each installation's ESM hooks
@@ -259,14 +327,79 @@ function scheduleAsyncConfigCleanup(path: string): void {
  * snapshots therefore become load-time state: a new installation replaces
  * the transform on the next module evaluation, disposing one removes its
  * instrumentations, and `retransformEsm` works exactly as on the sync path.
+ * A MessagePort accompanies the shared config so the loader thread can
+ * report the bindings of the ESM modules it transforms; like the hooks
+ * themselves, the port lives for the process lifetime. The main-thread end
+ * is unref'd — it must not hold the process open once the loop idles.
  * @param configPath - the shared configuration file path.
  */
 function installAsyncHooks(configPath: string): void {
   if (asyncHooksInstalled) return
   asyncHooksInstalled = true
-  register(new URL('./hook-entry.js', import.meta.url).href, import.meta.url, {
-    data: { configPath },
+  const channel = new MessageChannel()
+  // The global MessageChannel is DOM-typed while the host tsconfig keeps the
+  // DOM lib in scope; Node's runtime ports are the worker_threads class,
+  // which carries unref() — the cast is a type-only correction.
+  const port = channel.port1 as unknown as MessagePort
+  port.on('message', (records: unknown) => {
+    if (!Array.isArray(records)) return
+    for (const record of records) {
+      if (typeof record !== 'object' || record === null) continue
+      const report = record as Partial<FabricBindingReport>
+      if (typeof report.patchId === 'string' && typeof report.module === 'string'
+        && typeof report.file === 'string' && typeof report.nodes === 'number') {
+        runtime.recordBindings(report.patchId, [{ module: report.module, file: report.file, nodes: report.nodes }])
+      }
+    }
   })
+  port.unref()
+  register(new URL('./hook-entry.js', import.meta.url).href, import.meta.url, {
+    data: { configPath, port: channel.port2 },
+    transferList: [channel.port2],
+  })
+}
+
+/**
+ * Wire form of one instrumentation through the JSON config channel: a
+ * RegExp `filePath` cannot survive JSON serialization (it would arrive as
+ * `{}`), so it is carried as a marker the hook entry revives.
+ */
+export interface FabricWireInstrumentation extends Omit<FabricInstrumentationConfig, 'module'> {
+  module: Omit<FabricInstrumentationConfig['module'], 'filePath'> & {
+    filePath: string | { fabricRegexp: [source: string, flags: string] }
+  }
+}
+
+/**
+ * Serialize one instrumentation for the JSON config channel, replacing a
+ * RegExp `filePath` with its wire marker.
+ * @param config - the instrumentation to serialize.
+ * @returns the wire form.
+ */
+export function serializeInstrumentation(config: FabricInstrumentationConfig): FabricWireInstrumentation {
+  const filePath = config.module.filePath
+  if (!(filePath instanceof RegExp)) return config as FabricWireInstrumentation
+  return {
+    ...config,
+    module: { ...config.module, filePath: { fabricRegexp: [filePath.source, filePath.flags] } },
+  }
+}
+
+/**
+ * Revive one wire instrumentation: reconstruct a RegExp `filePath` from its
+ * marker, restoring the shape the matcher consumes.
+ * @param config - the wire form read from the config channel.
+ * @returns the instrumentation with a live RegExp where one was carried.
+ */
+export function reviveInstrumentation(config: FabricWireInstrumentation): FabricInstrumentationConfig {
+  const filePath = config.module.filePath
+  if (typeof filePath === 'object') {
+    return {
+      ...config,
+      module: { ...config.module, filePath: new RegExp(filePath.fabricRegexp[0], filePath.fabricRegexp[1]) },
+    }
+  }
+  return config as FabricInstrumentationConfig
 }
 
 /** Serialize the installation stack for the async hook entry. */
@@ -274,7 +407,7 @@ function writeAsyncConfig(): void {
   if (!asyncConfigPath) return
   writeFileSync(asyncConfigPath, JSON.stringify(states.map(state => ({
     active: state.active,
-    instrumentations: state.instrumentations,
+    instrumentations: state.instrumentations.map(serializeInstrumentation),
   }))))
 }
 
@@ -308,15 +441,21 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
   }
 
   const matcher = create(ordered)
-  registerFabricTransform(matcher)
-
   const state: LoaderState = {
     active: true,
     instrumentations: ordered,
     matcher,
     transformers: new Map(),
     seen: new Set(),
+    pending: new Map(),
   }
+  // Every node the transform actually rewrites increments the installation's
+  // pending counts; flushBindings turns them into runtime binding records
+  // after each transformed file.
+  registerFabricTransform(matcher, (patchId) => {
+    state.pending.set(patchId, (state.pending.get(patchId) ?? 0) + 1)
+  })
+
   states.push(state)
   if (!syncHooks) writeAsyncConfig()
 
@@ -347,8 +486,11 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
           const source = readSource(result, url)
           const moduleType = context.format === 'module' ? 'esm' : 'cjs'
           const transformed = transformer.transform(source, moduleType)
+          const identity = moduleIdentity(path)
+          if (identity !== undefined) flushBindings(stateRef, identity)
           return { ...result, source: transformed.code, shortCircuit: true }
         } catch (error) {
+          stateRef.pending.clear()
           stateRef.transformers.delete(url)
           throw new Error(`fabric: failed to transform ${url}`, { cause: error })
         }
@@ -400,7 +542,9 @@ function installCompileWrapper(): void {
         state.seen.add(filename)
         try {
           content = transformer.transform(content, 'cjs').code
+          flushBindings(state, identity)
         } catch (error) {
+          state.pending.clear()
           state.seen.delete(filename)
           throw new Error(`fabric: failed to transform ${filename}`, { cause: error })
         }

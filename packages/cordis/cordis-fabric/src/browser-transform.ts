@@ -21,8 +21,9 @@ import { fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import ts from 'typescript'
 import { detectModuleType, getPackageVersion, packageIdentityFromPath } from './module-identity.ts'
-import { orderInstrumentations, patchInstrumentation } from './node-loader.ts'
+import { expandPatchStub, orderInstrumentations } from './node-loader.ts'
 import { registerFabricTransform } from './transform.ts'
+import type { FabricBindingReport } from './types.ts'
 import type { FabricInstrumentationConfig } from './node-loader.ts'
 import type { FabricPatchStub } from './types.ts'
 
@@ -118,6 +119,8 @@ export interface TransformOutput {
   code: string
   /** Source map when the underlying transformer produced one. */
   map?: string
+  /** Per-patch binding reports for this module, when anything was rewritten. */
+  bindings?: FabricBindingReport[]
 }
 
 /**
@@ -125,7 +128,10 @@ export interface TransformOutput {
  *
  * The returned function can be wired into a bundler's `transform` hook
  * (tsdown/Rolldown, Rollup, Vite); it returns `null` for modules the
- * instrumentations do not target.
+ * instrumentations do not target. When the transform rewrote anything, the
+ * output carries `bindings` (per-patch function-node counts for this
+ * module), which the async loader-thread path forwards to the main-thread
+ * runtime.
  * @param instrumentations - Fabric instrumentations (see
  * {@link patchInstrumentation}).
  * @param resolve - module identity resolver for the build's source layout.
@@ -136,7 +142,12 @@ export function createBrowserTransform(
   resolve: IdentityResolver,
 ): (code: string, id: string) => TransformOutput | null {
   const matcher = create(orderInstrumentations(instrumentations))
-  registerFabricTransform(matcher)
+  // Per-call pending counts: the transform function below runs once per
+  // module, so counts accumulated during one call belong to that module.
+  const pending = new Map<string, number>()
+  registerFabricTransform(matcher, (patchId) => {
+    pending.set(patchId, (pending.get(patchId) ?? 0) + 1)
+  })
 
   return (code, id) => {
     const identity = resolve(id)
@@ -146,8 +157,18 @@ export function createBrowserTransform(
     // TypeScript sources are stripped to plain JavaScript first; the source
     // map is intentionally not chained through the strip step.
     const source = /\.tsx?$/.test(id) ? stripTypes(code, id) : code
+    pending.clear()
     const result = transformer.transform(source, detectModuleType(id))
-    return result.map === undefined ? { code: result.code } : { code: result.code, map: result.map }
+    const output: TransformOutput = result.map === undefined ? { code: result.code } : { code: result.code, map: result.map }
+    if (pending.size > 0) {
+      output.bindings = [...pending].map(([patchId, nodes]) => ({
+        patchId,
+        module: identity.name,
+        file: identity.path,
+        nodes,
+      }))
+    }
+    return output
   }
 }
 
@@ -221,7 +242,7 @@ export function createWatchedBrowserTransform(
   let cached: { content: string; transform: (code: string, id: string) => TransformOutput | null } | undefined
   const transformFor = (content: string): ((code: string, id: string) => TransformOutput | null) => {
     if (cached?.content === content) return cached.transform
-    const instrumentations = parsePatchesFile(content, patchesPath).map(patchInstrumentation)
+    const instrumentations = parsePatchesFile(content, patchesPath).flatMap(expandPatchStub)
     const transform = createBrowserTransform(instrumentations, resolve)
     cached = { content, transform }
     return transform

@@ -17,7 +17,7 @@
  */
 
 import { subscribeBridge, type FabricBridgeCall } from './bridge.ts'
-import type { FabricCall, FabricHandler, FabricOperation, FabricPatchInfo, FabricTarget, PatchId } from './types.ts'
+import type { FabricBinding, FabricCall, FabricHandler, FabricOperation, FabricPatchInfo, FabricTarget, PatchId } from './types.ts'
 
 /** Runtime state of one registered patch. */
 interface PatchEntry {
@@ -47,7 +47,7 @@ export function validatePatchId(id: PatchId): void {
  * @param patch - the descriptor's static part.
  * @throws when a target field or the operation is malformed.
  */
-export function validatePatchStatic(patch: { target: FabricTarget; operation: FabricOperation }): void {
+export function validatePatchStatic(patch: { target: FabricTarget; operation: FabricOperation; required?: boolean }): void {
   const target = patch.target
   if (typeof target.module !== 'string' || target.module.length === 0) {
     throw new Error('fabric: patch target.module must be a non-empty string')
@@ -55,8 +55,20 @@ export function validatePatchStatic(patch: { target: FabricTarget; operation: Fa
   if (typeof target.versionRange !== 'string' || target.versionRange.length === 0) {
     throw new Error('fabric: patch target.versionRange must be a non-empty string')
   }
-  if (typeof target.filePath !== 'string' && !(target.filePath instanceof RegExp)) {
-    throw new Error('fabric: patch target.filePath must be a string or RegExp')
+  const hasFilePath = typeof target.filePath === 'string' || target.filePath instanceof RegExp
+  if (!hasFilePath && target.filePaths === undefined) {
+    throw new Error('fabric: patch target must carry filePath or filePaths')
+  }
+  if (hasFilePath && target.filePaths !== undefined) {
+    throw new Error('fabric: patch target must carry filePath or filePaths, not both')
+  }
+  if (target.filePaths !== undefined
+    && (!Array.isArray(target.filePaths) || target.filePaths.length === 0
+      || target.filePaths.some(path => typeof path !== 'string' || path.length === 0))) {
+    throw new Error('fabric: patch target.filePaths must be a non-empty array of non-empty strings')
+  }
+  if (patch.required !== undefined && typeof patch.required !== 'boolean') {
+    throw new Error('fabric: patch.required must be a boolean when present')
   }
   if (!isValidIndex(target.index)) {
     throw new Error('fabric: patch target.index must be a non-negative integer or null')
@@ -85,6 +97,8 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
  */
 export class FabricRuntime {
   private readonly entries = new Map<PatchId, PatchEntry>()
+  /** Load-time bindings per patch, recorded by the transformation hooks. */
+  private readonly bindings = new Map<PatchId, FabricBinding[]>()
   private subscribed = false
 
   /**
@@ -167,12 +181,46 @@ export class FabricRuntime {
   }
 
   /**
+   * Record load-time bindings for a patch: the files its transform actually
+   * rewrote. The transformation hooks call this once per transformed file;
+   * records append, so one patch accumulates one entry per file across the
+   * process lifetime (re-transforms of the same file append again).
+   * @param id - the patch id the bindings belong to.
+   * @param records - per-file binding records.
+   */
+  recordBindings(id: PatchId, records: readonly FabricBinding[]): void {
+    const existing = this.bindings.get(id)
+    if (existing) existing.push(...records)
+    else this.bindings.set(id, [...records])
+  }
+
+  /**
+   * Snapshot of a patch's recorded load-time bindings.
+   * @param id - the patch id.
+   * @returns the recorded bindings, or an empty array when none were recorded.
+   */
+  bindingsOf(id: PatchId): readonly FabricBinding[] {
+    return this.bindings.get(id) ?? []
+  }
+
+  /**
+   * Snapshot of every recorded binding, flattened in patch-id order.
+   * @returns all recorded bindings across patches.
+   */
+  allBindings(): readonly FabricBinding[] {
+    return [...this.bindings.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .flatMap(([, records]) => records)
+  }
+
+  /**
    * Ordered diagnostic snapshot of all registered patches.
-   * @returns the patch infos sorted by priority then id.
+   * @returns the patch infos sorted by priority then id, each carrying its
+   * recorded load-time bindings.
    */
   list(): FabricPatchInfo[] {
     return [...this.entries.values()]
-      .map(entry => ({ ...entry.info, enabled: entry.handler !== undefined }))
+      .map(entry => ({ ...entry.info, enabled: entry.handler !== undefined, bindings: this.bindingsOf(entry.info.id) }))
       .sort((a, b) => a.priority - b.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   }
 
@@ -190,7 +238,8 @@ export class FabricRuntime {
 /** Stable identity of a patch target for conflict detection. */
 function targetKey(target: FabricTarget): string {
   const selector = target.astQuery ?? JSON.stringify(target.functionQuery ?? null)
-  return [target.module, target.versionRange, String(target.filePath), selector].join('|')
+  const files = target.filePath ?? (target.filePaths === undefined ? null : target.filePaths.join('|'))
+  return [target.module, target.versionRange, String(files), selector].join('|')
 }
 
 /**

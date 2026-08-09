@@ -44,15 +44,21 @@ const OUTER_ARGUMENTS = 'dshFabricOuterArguments'
  * Node loader and the browser build register the same operator, which reads
  * the patch id and operation from the merged state.
  * @param matcher - the Orchestrion matcher to extend.
+ * @param onMatch - optional callback invoked with the patch id for every
+ * node the transform actually rewrites; the Node loader counts these into
+ * its load-time binding records.
  */
-export function registerFabricTransform(matcher: ReturnType<typeof create>): void {
+export function registerFabricTransform(
+  matcher: ReturnType<typeof create>,
+  onMatch?: (patchId: string) => void,
+): void {
   matcher.addTransform('fabric', (state, node, parent, ancestry) => {
     const patchId = state.fabricPatchId
     const operation = state.fabricOperation
     if (typeof patchId !== 'string' || typeof operation !== 'string') {
       throw new Error('fabric: transform config must carry fabricPatchId and fabricOperation strings')
     }
-    createFabricTransform(patchId, operation)(state, node, parent, ancestry)
+    if (createFabricTransform(patchId, operation)(state, node, parent, ancestry)) onMatch?.(patchId)
   })
 }
 
@@ -76,12 +82,13 @@ interface MatchedFunction {
  * Build the Fabric custom transform for a patch.
  * @param patchId - the patch id stamped into the generated call.
  * @param operation - the operation kind stamped into the generated call.
- * @returns the custom transform to register on the matcher.
+ * @returns the per-node rewrite function, returning whether the node was
+ * actually rewritten (false for selected non-function nodes).
  */
 export function createFabricTransform(
   patchId: string,
   operation: string,
-): CustomTransform {
+): (state: Parameters<CustomTransform>[0], node: Node, parent: Node, ancestry: Node[]) => boolean {
   return (_state, node, parent, ancestry) => {
     if (isConstructorTarget(node, parent)) {
       // A constructor body cannot move into the traced closure: a derived
@@ -94,14 +101,14 @@ export function createFabricTransform(
       )
     }
     const matched = matchFunction(node)
-    if (!matched) return
+    if (!matched) return false
     const program = ancestry[ancestry.length - 1]
-    if (!program || program.type !== 'Program') return
+    if (!program || program.type !== 'Program') return false
 
     // Expression-bodied arrows get a synthesized block body so the injected
     // statements have a statement list to live in. Both the node and the
     // local `body` reference must move to the new block.
-    if (!matched.body) return
+    if (!matched.body) return false
     if (matched.body.type !== 'BlockStatement') {
       const statements: Statement[] = [{ type: 'ReturnStatement', argument: matched.body as Expression }]
       const synthesized: Node = { type: 'BlockStatement', body: statements }
@@ -370,7 +377,7 @@ export function createFabricTransform(
       }
       const delegatedBody: (Statement | undefined)[] = [capture, args, traced, call, publish, delegate, fallbackReturn]
       block.body = delegatedBody.filter((statement): statement is Statement => statement !== undefined)
-      return
+      return true
     }
 
     publish = {
@@ -380,6 +387,7 @@ export function createFabricTransform(
 
     const injected: (Statement | undefined)[] = [capture, args, traced, call, publish]
     block.body = injected.filter((statement): statement is Statement => statement !== undefined)
+    return true
   }
 }
 

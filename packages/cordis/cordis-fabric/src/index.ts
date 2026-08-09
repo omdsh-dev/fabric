@@ -17,7 +17,7 @@ export {
   publish,
   type FabricBridgeCall,
 } from './bridge.ts'
-export { bootstrapFabric, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
+export { bootstrapFabric, checkRequiredPatches, expandPatchStub, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
 export {
   createBrowserTransform,
   createWatchedBrowserTransform,
@@ -29,12 +29,15 @@ export {
   type TransformOutput,
   type WatchedBrowserTransform,
 } from './browser-transform.ts'
-export { runtime, validatePatchId } from './runtime.ts'
+export { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
+export { serveBrowserTransform, type ServeBrowserTransformOptions } from './serve.ts'
 export { createFabricTransform } from './transform.ts'
 export type {
   FabricAfterHandler,
   FabricAroundHandler,
   FabricBeforeHandler,
+  FabricBinding,
+  FabricBindingReport,
   FabricCall,
   FabricHandler,
   FabricInvoke,
@@ -47,4 +50,4 @@ export type {
   PatchId,
 } from './types.ts'
 
-export { FabricService } from './service.ts'
+export { FabricService, getFabric } from './service.ts'

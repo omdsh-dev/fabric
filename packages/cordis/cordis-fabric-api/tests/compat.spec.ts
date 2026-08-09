@@ -32,4 +32,40 @@ describe('FabricCompatService (child processes)', () => {
     const out = runCase('unknownTarget')
     expect(out).toContain('PASS unknown target throws: true')
   })
+
+  it('registers runtime patches with an exclusive id namespace', () => {
+    const out = runCase('registerPatch')
+    expect(out).toContain('PASS registerPatch returns id: "compat/greet-upper"')
+    expect(out).toContain('PASS registerPatch rewrites: "HELLO WORLD"')
+    expect(out).toContain('PASS registerPatch target-id conflict throws: true')
+    expect(out).toContain('PASS registerPatch self conflict throws: true')
+    expect(out).toContain('PASS unregister delegates to original: "hello world"')
+  })
+})
+
+describe('FabricCompatService (unit)', () => {
+  it('rejects a patch id already claimed by a declared observation target, even without a bridge', async () => {
+    // The conflict check runs before the bridge check, so a claimed id fails
+    // loud in any process; the bridge check only guards actual registration.
+    const { Context } = await import('cordis')
+    const { FabricService } = await import('@deepseek-ai/dsh-cordis-fabric')
+    const FabricCompatService = (await import('@deepseek-ai/dsh-cordis-fabric-api/src/compat.ts')).default
+    const ctx = new Context()
+    await ctx.plugin(FabricService)
+    await ctx.plugin(FabricCompatService, {
+      targets: [{
+        name: 'greet',
+        patch: { id: 'compat/greet-observe', target: { module: 'fabric-compat-target', versionRange: '*', filePath: 'index.mjs' }, operation: 'after' },
+      }],
+    })
+    expect(() => {
+      ctx.fabricCompat.registerPatch({
+        id: 'compat/greet-observe',
+        target: { module: 'fabric-compat-target', versionRange: '*', filePath: 'index.mjs' },
+        operation: 'after',
+        handler: () => {},
+      })
+    }).toThrow(/already claimed/)
+    await ctx.fiber.dispose()
+  })
 })

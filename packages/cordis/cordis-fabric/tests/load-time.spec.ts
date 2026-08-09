@@ -155,4 +155,40 @@ describe('cordis-fabric load-time transformation (child processes)', () => {
     expect(out).toContain('PASS retransformCjsDual esm re-import shares reload: true')
     expect(out).toContain('PASS retransformCjsDual esm add(2,3): 203')
   })
+
+  it('records load-time bindings for the files a transform actually rewrote', () => {
+    const out = runCase('bindingsReported')
+    expect(out).toContain('PASS bindingsReported one record: 1')
+    expect(out).toContain('PASS bindingsReported module: "fabric-target-fixture"')
+    expect(out).toContain('PASS bindingsReported file: "index.mjs"')
+    expect(out).toContain('PASS bindingsReported nodes: 1')
+    expect(out).toContain('PASS bindingsReported list() summary: 1')
+  })
+
+  it('passes the post-boot check when a required patch bound', () => {
+    const out = runCase('requiredHit')
+    expect(out).toContain('PASS requiredHit no throw: ""')
+    expect(out).toContain('PASS requiredHit bindings recorded: 1')
+  })
+
+  it('fails loud naming the patch id when a required patch bound nothing', () => {
+    const out = runCase('requiredMiss')
+    expect(out).toContain('PASS requiredMiss throws: true')
+    expect(out).toContain('PASS requiredMiss mentions target: true')
+    expect(out).toContain('PASS requiredMiss zero bindings: 0')
+  })
+
+  it('lets a RegExp filePath cover several launch forms under one patch id', () => {
+    const out = runCase('requiredRegExp')
+    expect(out).toContain('PASS requiredRegExp no throw: ""')
+    expect(out).toContain('PASS requiredRegExp bindings recorded: 1')
+  })
+
+  it('expands filePaths into one instrumentation per entry under one patch id', () => {
+    const out = runCase('filePathsDual')
+    expect(out).toContain('PASS filePathsDual index patched: 23')
+    expect(out).toContain('PASS filePathsDual lib patched: 23')
+    expect(out).toContain('PASS filePathsDual two records: 2')
+    expect(out).toContain('PASS filePathsDual files: "index.mjs,lib.js"')
+  })
 })

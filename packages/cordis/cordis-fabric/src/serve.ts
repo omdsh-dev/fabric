@@ -1,0 +1,202 @@
+/**
+ * Runtime browser-bundle serving for Fabric: serve a browser bundle with a
+ * Fabric transform applied, through the webserver's exact route table — the
+ * runtime counterpart of {@link createBrowserTransform} for compositions
+ * whose target bundle cannot be transformed at build time.
+ *
+ * The exact route outranks the module host's `/plugins` prefix (the exact
+ * table wins before longest-prefix), so one package can own a single
+ * bundle path without a route conflict. The served bytes are cached per
+ * source content; only GET/HEAD are served (405 otherwise); an unreadable
+ * bundle is 404; a transform that matches nothing or fails is loud by
+ * default (500 naming the patch id) and serves the raw bundle only with
+ * `fallback: 'raw'`.
+ * @module @deepseek-ai/dsh-cordis-fabric/serve
+ */
+
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Context } from 'cordis'
+import { createBrowserTransform, nodePackageResolver } from './browser-transform.ts'
+import { expandPatchStub } from './node-loader.ts'
+import type { TransformOutput } from './browser-transform.ts'
+import type { FabricPatchStub } from './types.ts'
+
+/** Options for {@link serveBrowserTransform}. */
+export interface ServeBrowserTransformOptions {
+  /**
+   * Exact webserver path serving the transformed bundle (e.g.
+   * `/plugins/@deepseek-ai/dsh-client-ui-conversation/client.js`).
+   */
+  route: string
+  /**
+   * Static patch descriptor(s) whose targets select the rewrites. Each
+   * patch id names its emitted bridge channel and binding records; every
+   * target must resolve to the SAME bundle file (same `module` and
+   * `filePath` — the route serves one file), and the patches stack on that
+   * file exactly like Node-side patches: ascending priority wraps
+   * outermost, equal priorities keep registration order. A single patch
+   * is the common case; several plugins can thus enhance the same bundle
+   * without owning it.
+   */
+  patch: FabricPatchStub | readonly FabricPatchStub[]
+  /**
+   * Degradation when the transform matches nothing or fails: `'error'`
+   * (default) fails the request loud with a 500 naming the patch id;
+   * `'raw'` serves the bundle untouched (the app keeps working, the
+   * feature degrades).
+   */
+  fallback?: 'raw' | 'error'
+}
+
+/** Error marking an unreadable target bundle (answered as 404). */
+class BundleUnreadableError extends Error {
+  constructor() {
+    super('fabric: serveBrowserTransform bundle file unreadable')
+    this.name = 'BundleUnreadableError'
+  }
+}
+
+/** Whether the patch option is an array (multiple rewrites on one file). */
+function isPatchArray(value: FabricPatchStub | readonly FabricPatchStub[]): value is readonly FabricPatchStub[] {
+  return Array.isArray(value)
+}
+
+/**
+ * Serve a browser bundle with one or more Fabric transforms applied,
+ * through an exact webserver route owned by the calling fiber.
+ *
+ * The route is registered as a fiber effect: disposing the fiber removes
+ * it. The returned disposer removes it immediately (idempotent with the
+ * fiber cleanup). The bundle path is resolved from the patches' `module`
+ * package through the Loader composition anchor (`ctx.baseUrl`), not through
+ * Fabric's own dependency tree; the transforms and matcher are built once at
+ * registration, and the served bytes are cached per source content.
+ * @param ctx - the Host context providing the webserver and composition base URL.
+ * @param options - route, patch(es), and degradation policy.
+ * @returns a disposer removing the route.
+ * @throws when the context has no `httpServer` service or composition base URL,
+ * the target package cannot resolve, a descriptor is malformed, or the patches
+ * do not all target the same bundle file.
+ */
+export function serveBrowserTransform(ctx: Context, options: ServeBrowserTransformOptions): () => void {
+  const httpServer = ctx.get('httpServer') as
+    | { register(route: { kind: 'exact'; path: string; handler: (req: IncomingMessage, res: ServerResponse) => void }): () => void }
+    | undefined
+  if (httpServer === undefined) {
+    throw new Error('fabric: serveBrowserTransform requires the httpServer service on the context')
+  }
+  const fallback = options.fallback ?? 'error'
+  const patches = isPatchArray(options.patch) ? [...options.patch] : [options.patch]
+  // Every patch must rewrite the SAME file the route serves: the bundle
+  // path comes from the shared module + filePath, so a divergent target
+  // would silently never bind. Fail loud at registration instead.
+  const filePath = patches[0]?.target.filePath
+  if (filePath === undefined || filePath instanceof RegExp) {
+    throw new Error('fabric: serveBrowserTransform needs a concrete filePath (RegExp or filePaths cannot name a file to read)')
+  }
+  const moduleName = patches[0]?.target.module
+  for (const patch of patches) {
+    if (patch.target.module !== moduleName || patch.target.filePath !== filePath) {
+      throw new Error(
+        'fabric: serveBrowserTransform patches must all target the same file '
+        + `(${moduleName} ${filePath}); ${patch.id} targets ${patch.target.module} ${String(patch.target.filePath)}`,
+      )
+    }
+  }
+  const patchIds = [...new Set(patches.map(patch => patch.id))]
+  // The target is a sibling in the assembled composition, not a dependency of
+  // Fabric itself. Resolve through the Loader's config-tree anchor, whose
+  // package manifest owns the composed plugin dependencies.
+  if (ctx.baseUrl === undefined) {
+    throw new Error('fabric: serveBrowserTransform requires ctx.baseUrl to resolve the target package from the composition')
+  }
+  const require = createRequire(ctx.baseUrl)
+  const pkgDir = dirname(require.resolve(`${moduleName}/package.json`))
+  const bundlePath = join(pkgDir, filePath)
+  // Validation and matcher construction happen once: a malformed descriptor
+  // fails at registration, and every request reuses the same matcher.
+  const transform = createBrowserTransform(patches.flatMap(expandPatchStub), nodePackageResolver())
+  let cached: { source: string; code: string } | undefined
+
+  /** The bytes to serve: the transformed bundle, cached per source content. */
+  const bundleCode = (): string => {
+    const path = bundlePath
+    let source: string
+    try {
+      source = readFileSync(path, 'utf8')
+    } catch {
+      throw new BundleUnreadableError()
+    }
+    if (cached !== undefined && cached.source === source) return cached.code
+    // The upstream transformer throws when the selector finds no injection
+    // points — its miss signal, like a null return for a non-matching file.
+    let output: TransformOutput | null
+    try {
+      output = transform(source, path)
+    } catch {
+      output = null
+    }
+    // A patch is bound when its id appears in the output's binding reports;
+    // any patch that rewrote nothing is a misconfiguration (wrong launch
+    // form or moved function) that must not ship silently as an inert
+    // bundle — even when the other patches bound.
+    const bound = new Set((output?.bindings ?? []).map(record => record.patchId))
+    const missing = patchIds.filter(id => !bound.has(id))
+    if (output === null || missing.length > 0) {
+      if (fallback === 'raw') {
+        cached = { source, code: source }
+        return source
+      }
+      throw new Error(
+        `fabric: serveBrowserTransform patch(es) ${missing.join(', ')} rewrote nothing in `
+        + `${moduleName} ${filePath}; `
+        + 'the selector may miss the function or the file may be the wrong launch form',
+      )
+    }
+    cached = { source, code: output.code }
+    return output.code
+  }
+
+  const handler = (req: IncomingMessage, res: ServerResponse): void => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405)
+      res.end()
+      return
+    }
+    // Compute the body before writing headers: a failure must answer with
+    // its own status, never after 200 was already sent.
+    let body: string
+    try {
+      body = bundleCode()
+    } catch (error) {
+      if (error instanceof BundleUnreadableError) {
+        res.writeHead(404)
+        res.end()
+        return
+      }
+      res.writeHead(500)
+      res.end(String(error instanceof Error ? error.message : error))
+      return
+    }
+    res.writeHead(200, {
+      'content-type': 'text/javascript; charset=utf-8',
+      'cache-control': 'no-cache',
+    })
+    res.end(body)
+  }
+
+  const route = { kind: 'exact' as const, path: options.route, handler }
+  let removeRoute: (() => void) | undefined
+  ctx.effect(() => {
+    removeRoute = httpServer.register(route)
+    return () => {
+      removeRoute?.()
+    }
+  }, `fabric:serveBrowserTransform(${options.route})`)
+  return () => {
+    removeRoute?.()
+  }
+}

@@ -29,7 +29,9 @@ const disposeHooks = bootstrapFabric([patch])
 await ctx.plugin(FabricService)
 ```
 
-`bootstrapFabric` 校验 patches、构建它们的 Orchestrion instrumentation 并安装变换 hooks。在 `dsh` 宿主中，带 `config.patches`（静态描述——handler 是注册时绑定的受信任代码）的 `cordis-fabric` composition 行会在 `boot()` 准备阶段自动 bootstrap，早于任何 config-tree entry 挂载；当 instrumentation 已经构建好时，`installFabricHooks` 是更底层的形态。
+`bootstrapFabric` 校验 patches、构建它们的 Orchestrion instrumentation 并安装变换 hooks。在 `dsh` 宿主中，`cordis-fabric` composition 行在 `config.fabric.patches` 下携带静态描述（id/target/operation——handler 是注册时绑定的受信任代码）时，会在 `boot()` 准备阶段自动 bootstrap，早于任何 config-tree entry 挂载；已弃用的 `config.patches` 键仍被兼容并记录警告。当 instrumentation 已经构建好时，`installFabricHooks` 是更底层的形态。
+
+patch 可以设置 `required: true`：一旦应用启动完成、所有目标模块都已导入，`checkRequiredPatches(patches)` 会在某个 required patch 的变换从未重写过任何东西时 loud 失败，并点名该 patch id 与其目标——`filePath` 可能是错误的启动形态（`src/index.ts` 对 `lib/index.js`），或函数已移动。`dsh` 宿主在 `boot()` 完成后自动运行此检查。一个 patch id 覆盖多种启动形态，既可用 RegExp `filePath`（如 `/^(src\/index\.ts|lib\/index\.js)$/`），也可用 `filePaths` 数组便捷项（每项展开为同 id 下的一份 instrumentation，每个命中的文件一条绑定记录）。检查所依赖的加载期绑定按被变换的文件逐条记录，可通过 `ctx.fabric.bindings(id?)` 和每条 `list()` 条目查看。
 
 ```yaml
 # User overlay (e.g. $DSH_HOME/config.yaml or a --config file): enable the row
@@ -38,14 +40,15 @@ await ctx.plugin(FabricService)
 - id: cordis-fabric
   disabled: false
   config:
-    patches:
-      - id: vendor/rewrite-greeting
-        target:
-          module: '@example/target-package'
-          versionRange: '^1.0.0'
-          filePath: 'lib/index.js'
-          functionQuery: { functionName: 'greet', kind: 'Sync' }
-        operation: 'before'
+    fabric:
+      patches:
+        - id: vendor/rewrite-greeting
+          target:
+            module: '@example/target-package'
+            versionRange: '^1.0.0'
+            filePath: 'lib/index.js'
+            functionQuery: { functionName: 'greet', kind: 'Sync' }
+          operation: 'before'
 ```
 
 同一行的浏览器 half（`./client`）在该行启用时于 web 树中挂载 `ctx.fabric`；client bundle 在构建期变换，只有在该 entry 物化后才生效。
@@ -75,7 +78,7 @@ export function apply(ctx: Context): void {
 }
 ```
 
-注册是 fiber effect：销毁插件会禁用并移除 patch。`ctx.fabric.list()` 返回有序诊断快照；`ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` 可切换 patch 而不移除它。
+注册是 fiber effect：销毁插件会禁用并移除 patch。`ctx.fabric.list()` 返回有序诊断快照，条目携带该 patch 记录的加载期绑定；`ctx.fabric.bindings(id?)` 直接返回绑定记录；`ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` 可切换 patch 而不移除它。无法声明可选服务的插件可通过 `getFabric(ctx)` 挂载它——挂载感知：复用既有注册并返回该 context 视角下的 registry。
 
 ## 安全与信任模型
 
@@ -109,6 +112,14 @@ export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/ind
 patches 文件是一个静态 patch stub 的 JSON 数组（与 launcher 的 `config.patches` 行同形；JSON 无法表达 `RegExp` `filePath`，因此文件路径是字符串），文件畸形会在构建期失败即显式。变换在每个模块上把该文件注册进打包器的 watch 图，因此在 `tsdown --watch`（`pnpm run dev:web`）下编辑它会用新 patch 集合重建 bundle——这就是构建触发器——重建产物经 client-hmr 链（stat 轮询、`rebuilt` 帧、invalidate/prefetch/换纤）送达浏览器。静态内存 patch 集合仍可直接使用 `createBrowserTransform`。
 
 resolver 把包自身的源码树映射到包身份；不使用上游 adapter，因为它要求 `node_modules` 边界，而仓库源码构建没有该边界。TypeScript 源码会在变换前剥离类型注解（transformer 解析编译后的 JavaScript）。
+
+### 运行时 bundle 服务
+
+当目标 bundle 无法在构建期变换时（它的构建属于另一个包），`serveBrowserTransform(ctx, options)` 在运行时提供变换后的副本：它注册一条 EXACT webserver 路由（精确表胜过最长前缀，因此可压过模块宿主的 `/plugins` 路由而无冲突），通过 Loader 组合锚点（`ctx.baseUrl`）而非 Fabric 自身的依赖树解析 patches 的 `module` 包，按源内容缓存逐请求应用各 patch 的重写，非 GET 回答 405、bundle 不可读回答 404，且任一选择器未重写任何内容时默认 loud 失败（500 并点名每个未绑定的 patch id）——只有 `fallback: 'raw'` 才降级为原始 bundle。组合锚点缺失或目标包不可解析会在注册时失败。`patch` 接受单个描述符或数组：多个 patch 在同一文件上按与 Node 侧相同的语义叠加（升序 priority 包裹最外层），因此多个插件可以增强同一 bundle 而无须拥有它——路由保持单一属主，重写叠加。路由是 fiber effect；返回的 disposer 可立即移除它。
+
+### 测试 patches
+
+变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`@deepseek-ai/dsh-cordis-fabric/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
 
 ## Model Experience
 

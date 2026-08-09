@@ -20,11 +20,16 @@
  */
 
 import { readFileSync } from 'node:fs'
+import type { MessagePort } from 'node:worker_threads'
 import { createBrowserTransform, nodePackageResolver } from './browser-transform.ts'
-import type { FabricInstrumentationConfig } from './node-loader.ts'
+import type { FabricBindingReport } from './types.ts'
+import { reviveInstrumentation, type FabricWireInstrumentation } from './node-loader.ts'
 
 /** Shared configuration path, passed through `module.register` data. */
 let configPath: string | undefined
+
+/** Main-thread binding channel end, passed through `module.register` data. */
+let bindingPort: MessagePort | undefined
 
 /** One installation's transform in the per-installation chain. */
 type TransformFn = ReturnType<typeof createBrowserTransform>
@@ -34,10 +39,12 @@ let cached: { config: string; transforms: TransformFn[] } | undefined
 
 /**
  * Initialize the loader-thread entry.
- * @param data - `module.register` data carrying the shared config path.
+ * @param data - `module.register` data carrying the shared config path and
+ * the main-thread binding channel end.
  */
-export function initialize(data: { configPath?: string } = {}): void {
+export function initialize(data: { configPath?: string; port?: MessagePort } = {}): void {
   configPath = data.configPath
+  bindingPort = data.port
 }
 
 /**
@@ -57,7 +64,7 @@ function readTransforms(): TransformFn[] {
     return cached?.transforms ?? []
   }
   if (cached?.config === raw) return cached.transforms
-  let parsed: Array<{ active?: boolean; instrumentations?: FabricInstrumentationConfig[] }> = []
+  let parsed: Array<{ active?: boolean; instrumentations?: FabricWireInstrumentation[] }> = []
   try {
     parsed = JSON.parse(raw) as typeof parsed
   } catch {
@@ -66,7 +73,7 @@ function readTransforms(): TransformFn[] {
   const transforms = parsed
     .filter(entry => entry.active === true)
     .map((entry) => {
-      const instrumentations = entry.instrumentations ?? []
+      const instrumentations = (entry.instrumentations ?? []).map(reviveInstrumentation)
       return instrumentations.length === 0
         ? undefined
         : createBrowserTransform(instrumentations, nodePackageResolver())
@@ -98,13 +105,19 @@ export async function load(
     ? result.source
     : result.source == null ? '' : Buffer.from(result.source).toString('utf8')
   let transformed = false
+  const reports: FabricBindingReport[] = []
   for (const transform of transforms) {
     const output = transform(source, url)
     if (output) {
       source = output.code
       transformed = true
+      if (output.bindings !== undefined) reports.push(...output.bindings)
     }
   }
+  // The loader thread owns the ESM transform, so the main thread would never
+  // see these files' bindings; forward them over the shared channel so the
+  // binding reports and the required-patch check match the sync path.
+  if (reports.length > 0) bindingPort?.postMessage(reports)
   if (!transformed) return result
   return { ...result, source, shortCircuit: true }
 }
