@@ -14,8 +14,7 @@
 
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
-import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-command/client'
-import type { SlotEntryDef, SlotLabel, SlotSpec, StoreDecl } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostCommandContribution } from '../host-contracts.ts'
 
 declare module 'cordis' {
   interface Context {
@@ -38,9 +37,9 @@ export interface FabricSlotOptions {
   /** The declared slot name to contribute to. */
   readonly name: string
   /** Child-slot declaration table: keys are the declared (and claimed) holes. */
-  readonly children?: Record<string, SlotSpec<SlotEntryDef>>
+  readonly children?: Record<string, unknown>
   /** Optional store seat whose handle joins the composed props. */
-  readonly store?: StoreDecl
+  readonly store?: unknown
   /** Optional business-face factory; parameters derive from the declaration. */
   /* oxlint-disable-next-line typescript/no-explicit-any --
    * narrow-contract position only; the authoritative typing lives in the
@@ -53,7 +52,7 @@ export interface FabricSlotOptions {
   /** List-kind ordering. */
   readonly order?: number
   /** List-kind label. */
-  readonly label?: SlotLabel
+  readonly label?: unknown
   /** Chain-kind routing priority. */
   readonly priority?: number
 }
@@ -138,7 +137,7 @@ export class FabricClientService extends Service {
    * @param contribution - slash-menu entry whose behavior lives entirely on the client.
    * @returns the exact effect disposer that unregisters it.
    */
-  registerCommand(contribution: CommandContribution): () => void {
+  registerCommand(contribution: HostCommandContribution): () => void {
     return this.ctx.command.register(contribution)
   }
 

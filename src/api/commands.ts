@@ -11,8 +11,11 @@
 
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { CommandDefinition, CommandDescriptor } from '@deepseek-ai/dsh-commands'
+import type {
+  HostAgent,
+  HostCommandDefinition,
+  HostCommandDescriptor,
+} from '../host-contracts.ts'
 
 declare module 'cordis' {
   interface Context {
@@ -47,7 +50,7 @@ export class FabricCommandsService extends Service {
    * @param definition - discovery metadata and direct UI handler.
    * @returns the exact effect disposer that unregisters this definition.
    */
-  register(definition: CommandDefinition): () => void {
+  register(definition: HostCommandDefinition): () => void {
     return this.ctx.commands.register(definition)
   }
 
@@ -56,7 +59,7 @@ export class FabricCommandsService extends Service {
    * @param agent - exact receiving agent and scoped-layer key.
    * @returns name-sorted descriptors after scoped shadowing.
    */
-  list(agent: Agent): readonly CommandDescriptor[] {
+  list(agent: HostAgent): readonly HostCommandDescriptor[] {
     return this.ctx.commands.list(agent)
   }
 }

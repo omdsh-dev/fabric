@@ -6,7 +6,7 @@
  * resolves next to the built loader.
  */
 
-import { installFabricHooks, patchInstrumentation, retransformEsm, runtime } from '@deepseek-ai/dsh-cordis-fabric'
+import { installFabricHooks, patchInstrumentation, retransformEsm, runtime } from '../../lib/index.js'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 

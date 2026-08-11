@@ -5,7 +5,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runPatchFixture } from '@deepseek-ai/dsh-cordis-fabric/src/testkit.ts'
+import { runPatchFixture } from '../../src/testkit.ts'
 
 /** The fixture entry, as an absolute file URL the child can import. */
 const entry = new URL('./fixtures/testkit-entry.mjs', import.meta.url).href

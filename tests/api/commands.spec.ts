@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import CommandService from '@deepseek-ai/dsh-commands'
+import type { HostAgent } from '../../src/host-contracts.ts'
+import { FakeCommandRegistryService } from '../fakes.ts'
 import { FabricCommandsService } from '../../src/api/commands.ts'
 
-const fakeAgent = {} as Agent
+const fakeAgent = {} as HostAgent
 
 async function setup() {
   const ctx = new Context()
-  await ctx.plugin(CommandService)
+  await ctx.plugin(FakeCommandRegistryService)
   await ctx.plugin(FabricCommandsService)
   return ctx
 }

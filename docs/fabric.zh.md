@@ -2,7 +2,7 @@
 
 [English](fabric.md) | 中文
 
-基于 [Orchestrion-JS](https://github.com/nodejs/orchestrion-js) 的Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认 DSH composition 不会挂载它，patch 通过受信任代码注册。
+基于 Orchestrion-JS 的 Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认 DSH composition 不会挂载它，patch 通过受信任代码注册。
 
 ## 它能做什么
 
@@ -98,18 +98,15 @@ export function apply(ctx: Context & { fabric: FabricService }): void {
 
 ## Browser 构建用法
 
+宿主构建接缝（`clientBundle`）由 profile 选择的 DSH 版本提供；本包只提供 transform。宿主集成把 transform 接入自己的 bundle 步骤：
+
 ```ts ignore-check
 import { createWatchedBrowserTransform, repoSourceResolver } from '@deepseek-ai/dsh-cordis-fabric'
-import { clientBundle } from '../tsdown.client.js'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
   repoSourceResolver('@deepseek-ai/dsh-client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
 )
-
-export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/index.js', 'lib/types/invariant.js'], {
-  transform: fabric,
-})
 ```
 
 patches 文件是一个静态 patch stub 的 JSON 数组（与 launcher 的 `config.patches` 行同形；JSON 无法表达 `RegExp` `filePath`，因此文件路径是字符串），文件畸形会在构建期失败即显式。变换在每个模块上把该文件注册进打包器的 watch 图，因此在 `tsdown --watch`（`pnpm run dev:web`）下编辑它会用新 patch 集合重建 bundle——这就是构建触发器——重建产物经 client-hmr 链（stat 轮询、`rebuilt` 帧、invalidate/prefetch/换纤）送达浏览器。静态内存 patch 集合仍可直接使用 `createBrowserTransform`。

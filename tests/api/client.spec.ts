@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
-import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-command/client'
-import { CommandService } from '@deepseek-ai/dsh-client-ui-command/client'
-import type { SlashSource } from '@deepseek-ai/dsh-client-ui-slash/client'
+import type { HostCommandContribution } from '../../src/host-contracts.ts'
+import { FakeClientCommandRegistryService } from '../fakes.ts'
 import { FabricClientService, apply, name, type FabricSlotOptions } from '../../src/client/api.ts'
 
 /** Real CommandService over fake slash/sessions/connection faces, plus a fake slots registry. */
@@ -11,7 +10,7 @@ async function bench() {
   const slots = new Map<string, { options: FabricSlotOptions; component: unknown; dispose: () => void }>()
   const registrations: Array<{ options: FabricSlotOptions; component: unknown; disposed: boolean }> = []
   ctx.provide('slash', {
-    registerSource(_source: SlashSource) { return () => {} },
+    registerSource(_source: unknown) { return () => {} },
   })
   ctx.provide('sessions', {
     scope: () => undefined,
@@ -32,12 +31,12 @@ async function bench() {
       return () => { record.disposed = true; slots.delete(options.name) }
     },
   })
-  await ctx.plugin(CommandService)
+  await ctx.plugin(FakeClientCommandRegistryService)
   await apply(ctx)
   return { ctx, slots, registrations }
 }
 
-const commandContribution = (name: string): CommandContribution => ({
+const commandContribution = (name: string): HostCommandContribution => ({
   name,
   description: 'fixture command',
   available: () => true,
@@ -87,7 +86,7 @@ describe('cordis-fabric-api browser entry', () => {
   it('removes a command when its contributing fiber disposes (HMR safety)', async () => {
     const ctx = new Context()
     ctx.provide('slash', {
-      registerSource(_source: SlashSource) { return () => {} },
+      registerSource(_source: unknown) { return () => {} },
     })
     ctx.provide('sessions', {
       scope: () => undefined,
@@ -99,7 +98,7 @@ describe('cordis-fabric-api browser entry', () => {
     ctx.provide('slots', {
       register() { return () => {} },
     })
-    await ctx.plugin(CommandService)
+    await ctx.plugin(FakeClientCommandRegistryService)
     await apply(ctx)
     const mod = await ctx.plugin({
       name: 'mod-client',

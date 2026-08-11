@@ -16,16 +16,16 @@
 
 import { Service } from 'cordis'
 import type { Context, Fiber } from 'cordis'
-import { getFabric, isFabricInstalled, patchInstrumentation, serveBrowserTransform } from '@deepseek-ai/dsh-cordis-fabric'
-import type { FabricService } from '@deepseek-ai/dsh-cordis-fabric'
-import type { FabricInstrumentationConfig } from '@deepseek-ai/dsh-cordis-fabric'
+import { getFabric, isFabricInstalled, patchInstrumentation, serveBrowserTransform } from '../index.ts'
+import type { FabricService } from '../index.ts'
+import type { FabricInstrumentationConfig } from '../index.ts'
 import type {
   FabricCall, FabricHandler, FabricOperation, FabricPatch, FabricTarget, PatchId, ServeBrowserTransformOptions,
-} from '@deepseek-ai/dsh-cordis-fabric'
+} from '../index.ts'
 
 export type {
   FabricCall, FabricHandler, FabricInvoke, FabricOperation, FabricPatch, FabricTarget, PatchId, ServeBrowserTransformOptions,
-} from '@deepseek-ai/dsh-cordis-fabric'
+} from '../index.ts'
 
 declare module 'cordis' {
   interface Context {

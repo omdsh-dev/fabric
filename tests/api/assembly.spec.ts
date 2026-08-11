@@ -1,22 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import Loader from '@cordisjs/plugin-loader'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRegistry from '@deepseek-ai/dsh-tools'
-import CommandService from '@deepseek-ai/dsh-commands'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { HostAgent } from '../../src/host-contracts.ts'
+import { FakeCommandRegistryService, FakeSystemPromptService, FakeToolRegistryService } from '../fakes.ts'
 import * as api from '../../src/api/index.ts'
 
-const fakeAgent = {} as Agent
+const fakeAgent = { id: 'assembly-agent', status: 'idle' } as HostAgent
 
-/** Boot a real Loader composition: authoritative services + the Host bundle + the fixture Mod. */
+/** Boot a real Loader composition: fake authoritative services + the Host bundle + the fixture Mod. */
 async function assemble() {
   const ctx = new Context()
   const fixtureUrl = new URL('./fixtures/node_modules/fabric-api-fixture-mod/index.mjs', import.meta.url).href
   ctx.baseUrl = new URL('./fixtures/', import.meta.url).href
-  await ctx.plugin(SystemPrompt)
-  await ctx.plugin(ToolRegistry)
-  await ctx.plugin(CommandService)
+  await ctx.plugin(FakeSystemPromptService)
+  await ctx.plugin(FakeToolRegistryService)
+  await ctx.plugin(FakeCommandRegistryService)
   await ctx.plugin(api)
   await ctx.plugin(Loader)
   const id = await ctx.loader.create({ name: fixtureUrl })
@@ -46,7 +44,7 @@ describe('Fabric API assembled composition', () => {
 
     // Agent listener through the real event bus: the facade-registered
     // listener observes a dispatched status transition.
-    ctx.emit('agent/status', { agent: { id: 'assembly-agent' } as Agent, status: 'running' })
+    ctx.emit('agent/status', { agent: fakeAgent, status: 'running' })
     expect((globalThis as Record<string, unknown>).__fabricApiFixtureSeen).toContain('assembly-agent:running')
 
     await ctx.fiber.dispose()

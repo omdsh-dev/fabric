@@ -1,4 +1,4 @@
-import { createBrowserTransform, repoSourceResolver, nodeModulesResolver, patchInstrumentation } from '@deepseek-ai/dsh-cordis-fabric'
+import { createBrowserTransform, repoSourceResolver, nodeModulesResolver, patchInstrumentation } from '../../src/index.ts'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'

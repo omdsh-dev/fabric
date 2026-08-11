@@ -15,12 +15,12 @@
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
 import type {
-  PostToolDecision,
-  PreToolDecision,
-  ToolDefinition,
-  ToolExecution,
-  ToolExecutionResult,
-} from '@deepseek-ai/dsh-tools'
+  HostPostToolDecision,
+  HostPreToolDecision,
+  HostToolDefinition,
+  HostToolExecution,
+  HostToolExecutionResult,
+} from '../host-contracts.ts'
 
 declare module 'cordis' {
   interface Context {
@@ -56,7 +56,7 @@ export class FabricToolsService extends Service {
    * @param definition - tool schema, execution, and optional finalization/presentation callbacks.
    * @returns the exact disposer that unregisters the tool.
    */
-  register(definition: ToolDefinition): () => void {
+  register(definition: HostToolDefinition): () => void {
     return this.ctx.tools.register(definition)
   }
 
@@ -65,7 +65,7 @@ export class FabricToolsService extends Service {
    * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
-  onPreExecute(listener: (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>): () => boolean {
+  onPreExecute(listener: (exec: HostToolExecution, next: () => Promise<HostPreToolDecision>) => Promise<HostPreToolDecision>): () => boolean {
     return this.ctx.on('tools/pre-execute', listener)
   }
 
@@ -76,10 +76,10 @@ export class FabricToolsService extends Service {
    */
   onPostExecute(
     listener: (
-      exec: ToolExecution,
-      result: Readonly<ToolExecutionResult>,
-      next: () => Promise<PostToolDecision>,
-    ) => Promise<PostToolDecision>,
+      exec: HostToolExecution,
+      result: Readonly<HostToolExecutionResult>,
+      next: () => Promise<HostPostToolDecision>,
+    ) => Promise<HostPostToolDecision>,
   ): () => boolean {
     return this.ctx.on('tools/post-execute', listener)
   }

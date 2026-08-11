@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import Loader from '@cordisjs/plugin-loader'
-import type { SlashSource } from '@deepseek-ai/dsh-client-ui-slash/client'
-import { CommandService } from '@deepseek-ai/dsh-client-ui-command/client'
-import { SlotsService } from '@deepseek-ai/dsh-client-runtime/client'
-import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-command/client'
+import type { HostCommandContribution } from '../../src/host-contracts.ts'
+import { FakeClientCommandRegistryService, FakeSlotRegistryService } from '../fakes.ts'
 import { apply, FabricClientService } from '../../src/client/api.ts'
 
 /**
@@ -17,7 +15,7 @@ import { apply, FabricClientService } from '../../src/client/api.ts'
 async function assemble() {
   const ctx = new Context()
   ctx.provide('slash', {
-    registerSource(_source: SlashSource) { return () => {} },
+    registerSource(_source: unknown) { return () => {} },
   })
   ctx.provide('sessions', {
     scope: () => undefined,
@@ -26,8 +24,8 @@ async function assemble() {
   ctx.provide('connection', {
     api: { commands: { list: () => Promise.resolve({ result: { ok: true, value: { commands: [] } } }) } },
   })
-  await ctx.plugin(SlotsService)
-  await ctx.plugin(CommandService)
+  await ctx.plugin(FakeSlotRegistryService)
+  await ctx.plugin(FakeClientCommandRegistryService)
   await apply(ctx)
   // Observe the slot registry notifications from the Mod's registration.
   const changed: string[] = []
@@ -40,7 +38,7 @@ async function assemble() {
   return { ctx, id, changed, listen }
 }
 
-const sameCommand = (): CommandContribution => ({
+const sameCommand = (): HostCommandContribution => ({
   name: 'modclientcmd',
   description: 'fixture client command',
   available: () => true,

@@ -2,7 +2,7 @@
 
 English | [中文](fabric.zh.md)
 
-Fabric/Mixin-style extension layer over [Orchestrion-JS](https://github.com/nodejs/orchestrion-js) for trusted Cordis plugins. The service is opt-in: nothing in the default DSH composition mounts it, and patches register through trusted code.
+Fabric/Mixin-style extension layer over Orchestrion-JS for trusted Cordis plugins. The service is opt-in: nothing in the default DSH composition mounts it, and patches register through trusted code.
 
 ## What it does
 
@@ -98,18 +98,15 @@ The registration is a fiber effect owned by the registering plugin: disposing th
 
 ## Browser build usage
 
+The host build seam (`clientBundle`) is owned by the DSH version selected by the profile; this package only provides the transform. A host integration wires the transform into its bundle step:
+
 ```ts ignore-check
 import { createWatchedBrowserTransform, repoSourceResolver } from '@deepseek-ai/dsh-cordis-fabric'
-import { clientBundle } from '../tsdown.client.js'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
   repoSourceResolver('@deepseek-ai/dsh-client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
 )
-
-export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/index.js', 'lib/types/invariant.js'], {
-  transform: fabric,
-})
 ```
 
 The patches file holds a JSON array of static patch stubs (the same shape the launcher's `config.patches` row carries; JSON cannot express a `RegExp` `filePath`, so file paths are strings), and a malformed file fails the build loudly. The transform registers the file in the bundler's watch graph on every module, so under `tsdown --watch` (`pnpm run dev:web`) an edit rebuilds the bundle with the new patch set — the build trigger — and the client-hmr chain (stat poll, `rebuilt` frame, invalidate/prefetch/fiber swap) delivers it to the browser. A static in-memory patch set can still use `createBrowserTransform` directly.

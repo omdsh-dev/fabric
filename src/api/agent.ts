@@ -13,8 +13,7 @@
 
 import { Service } from 'cordis'
 import type { Context } from 'cordis'
-import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
-import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { HostAgent, HostAgentStatus, HostUserMessage } from '../host-contracts.ts'
 
 declare module 'cordis' {
   interface Context {
@@ -48,7 +47,7 @@ export class FabricAgentService extends Service {
    * @param listener - called with the created agent.
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
-  onCreated(listener: (agent: Agent) => void): () => boolean {
+  onCreated(listener: (agent: HostAgent) => void): () => boolean {
     return this.ctx.on('agent/created', (payload) => { listener(payload.agent) })
   }
 
@@ -57,7 +56,7 @@ export class FabricAgentService extends Service {
    * @param listener - called with the disposed agent.
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
-  onDisposed(listener: (agent: Agent) => void): () => boolean {
+  onDisposed(listener: (agent: HostAgent) => void): () => boolean {
     return this.ctx.on('agent/disposed', (payload) => { listener(payload.agent) })
   }
 
@@ -66,7 +65,7 @@ export class FabricAgentService extends Service {
    * @param listener - called with the agent and its new status.
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
-  onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean {
+  onStatus(listener: (agent: HostAgent, status: HostAgentStatus) => void): () => boolean {
     return this.ctx.on('agent/status', (payload) => { listener(payload.agent, payload.status) })
   }
 
@@ -80,7 +79,7 @@ export class FabricAgentService extends Service {
    * @param agent - the live agent to inject into.
    * @param message - the sourced user message to append.
    */
-  inject(agent: Agent, message: UserMessage): void {
+  inject(agent: HostAgent, message: HostUserMessage): void {
     agent.inject(message)
   }
 }

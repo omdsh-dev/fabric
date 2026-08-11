@@ -1,5 +1,5 @@
-import { runtime, validatePatchId, validatePatchStatic, FabricService, getFabric } from '@deepseek-ai/dsh-cordis-fabric'
-import { publish, subscribeBridge } from '@deepseek-ai/dsh-cordis-fabric/src/bridge.ts'
+import { runtime, validatePatchId, validatePatchStatic, FabricService, getFabric } from '../../src/index.ts'
+import { publish, subscribeBridge } from '../../src/bridge.ts'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { Context } from 'cordis'
 

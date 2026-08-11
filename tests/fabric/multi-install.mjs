@@ -5,7 +5,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { installFabricHooks, patchInstrumentation, runtime } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
+import { installFabricHooks, patchInstrumentation, runtime } from '../../src/index.ts'
 
 const require = createRequire(import.meta.url)
 

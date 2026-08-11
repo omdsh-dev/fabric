@@ -22,7 +22,7 @@ export default [
     target: 'es2024',
     fixedExtension: false,
     dts: false,
-    clean: true,
+    clean: false,
   }),
   defineConfig({
     entry: {

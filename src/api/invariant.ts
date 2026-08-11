@@ -5,7 +5,7 @@
 
 /* jscpd:ignore-start */
 import type { Context } from 'cordis'
-import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+import type { HostInvariantInstaller, HostInvariantRegistry } from '../host-contracts.ts'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-cordis-fabric/api'
 
@@ -20,7 +20,24 @@ export const inject = ['invariants']
  * browser command/slot services), which owns the checked relationships;
  * facade conformance tests pin the delegation instead.
  */
-const install: InvariantInstaller = () => {}
+const install: HostInvariantInstaller = () => {}
+
+/**
+ * Resolve the host registry through Cordis's named service lookup. Keeping
+ * this narrow local contract lets the package build without the private host
+ * source package; a composed DSH profile still supplies the real
+ * `invariants` service.
+ * @param ctx - Cordis context carrying the host service.
+ * @returns the host invariant registry.
+ * @throws {Error} when the companion is loaded without its host service.
+ */
+function getInvariantRegistry(ctx: Context): HostInvariantRegistry {
+  const registry = ctx.get('invariants') as HostInvariantRegistry | undefined
+  if (registry === undefined) {
+    throw new Error(`invariant companion requires the "invariants" service for ${PACKAGE_NAME}`)
+  }
+  return registry
+}
 
 /**
  * Register this package's invariant companion.
@@ -28,5 +45,5 @@ const install: InvariantInstaller = () => {}
  * @returns the installed registration's disposer after setup succeeds.
  */
 export const apply = (ctx: Context): Promise<() => void> =>
-  Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
+  Promise.resolve(getInvariantRegistry(ctx).register(PACKAGE_NAME, install))
 /* jscpd:ignore-end */

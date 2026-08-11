@@ -10,8 +10,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
-import HttpServerService from '@deepseek-ai/dsh-host-webserver'
-import { serveBrowserTransform, type ServeBrowserTransformOptions } from '@deepseek-ai/dsh-cordis-fabric'
+import { FakeHttpServerService } from '../fakes.ts'
+import { serveBrowserTransform, type ServeBrowserTransformOptions } from '../../src/index.ts'
 
 const contexts: Context[] = []
 const worlds: string[] = []
@@ -21,7 +21,7 @@ async function boot(options: ServeBrowserTransformOptions, baseUrl = import.meta
   const ctx = new Context()
   ctx.baseUrl = baseUrl
   contexts.push(ctx)
-  await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+  await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
   serveBrowserTransform(ctx, options)
   return { ctx, port: ctx.httpServer.port }
 }
@@ -78,7 +78,7 @@ describe('serveBrowserTransform', () => {
   it('requires the composition base URL at registration', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
     expect(() => { serveBrowserTransform(ctx, { route: ROUTE, patch: neutralizer }) })
       .toThrow(/requires ctx\.baseUrl/)
   })
@@ -219,7 +219,7 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
     expect(() => {
       serveBrowserTransform(ctx, {
         route: ROUTE,
@@ -232,7 +232,7 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
     // The route owner lives on its own plugin fiber, so disposing it removes
     // the route while the webserver keeps serving.
     const routeFiber = await ctx.plugin((c) => {

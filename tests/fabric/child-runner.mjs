@@ -6,7 +6,7 @@
  * `./src/*` export and is launched with tsx from the repository root.
  */
 
-import { bootstrapFabric, checkRequiredPatches, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, runtime, GLOBAL_BRIDGE_KEY } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
+import { bootstrapFabric, checkRequiredPatches, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, runtime, GLOBAL_BRIDGE_KEY } from '../../src/index.ts'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 

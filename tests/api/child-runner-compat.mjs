@@ -7,8 +7,8 @@
  */
 
 import { Context } from 'cordis'
-import { installFabricHooks, FabricService, getFabric } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
-import FabricCompatService, { buildCompatInstrumentations } from '@deepseek-ai/dsh-cordis-fabric/api/compat'
+import { installFabricHooks, FabricService, getFabric } from '../../src/index.ts'
+import FabricCompatService, { buildCompatInstrumentations } from '../../src/api/compat.ts'
 
 const fixtureUrl = new URL('./fixtures/node_modules/fabric-compat-target/index.mjs', import.meta.url)
 
