@@ -31,11 +31,10 @@ tests/api/                 # 合作式 Host/client facade 测试
 
 ## 开发
 
-完整 typecheck 需要 sibling checkout：
+完整 typecheck 需要把 DSH checkout 放在本仓库旁边：
 
 ```text
-~/git/deepseek-harness
-~/git/fabric
+../deepseek-harness
 ```
 
 ```sh

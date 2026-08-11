@@ -1,6 +1,6 @@
 # `@deepseek-ai/dsh-cordis-fabric`
 
-English | [中文](README.zh.md)
+English | [中文](fabric.zh.md)
 
 Fabric/Mixin-style extension layer over [Orchestrion-JS](https://github.com/nodejs/orchestrion-js) for trusted Cordis plugins. The service is opt-in: nothing in the default DSH composition mounts it, and patches register through trusted code.
 
@@ -19,14 +19,14 @@ The mechanism is load-time code transformation: the transform hooks rewrite the 
 
 ## Installation and bootstrap
 
-```ts ignore-check
+```ts
 import { bootstrapFabric, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import type { Context } from 'cordis'
 
-// 1. Before any target module is imported (application preparation):
-const disposeHooks = bootstrapFabric([patch])
-
-// 2. Mount the service so plugins can register handlers:
+declare const ctx: Context
+const disposeHooks = bootstrapFabric([])
 await ctx.plugin(FabricService)
+disposeHooks()
 ```
 
 `bootstrapFabric` validates the patches, builds their Orchestrion instrumentations, and installs the transformation hooks. In the `dsh` host, a `cordis-fabric` composition row carrying static descriptors under `config.fabric.patches` (id/target/operation — handlers are trusted code bound at registration) is bootstrapped automatically during `boot()` preparation, before any config-tree entry mounts; the deprecated `config.patches` key is still honored with a warning. `installFabricHooks` is the lower-level form when instrumentations are already built.
@@ -58,10 +58,13 @@ The hooks must be installed before the target module's first evaluation; a patch
 
 ## Registering a patch
 
-```ts ignore-check
+```ts
+import type { Context } from 'cordis'
+import type { FabricCall, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+
 export const inject = ['fabric']
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context & { fabric: FabricService }): void {
   ctx.fabric.register({
     id: 'my-vendor/rewrite-greeting',
     target: {
@@ -71,14 +74,14 @@ export function apply(ctx: Context): void {
       functionQuery: { functionName: 'greet', kind: 'Sync' },
     },
     operation: 'before',
-    handler(call: { arguments: unknown[] }) {
+    handler(call: FabricCall) {
       call.arguments[0] = String(call.arguments[0]).toUpperCase()
     },
   })
 }
 ```
 
-The registration is a fiber effect: disposing the plugin disables and removes the patch. `ctx.fabric.list()` returns an ordered diagnostic snapshot whose entries carry the patch's recorded load-time bindings; `ctx.fabric.bindings(id?)` returns the binding records directly; `ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` toggle a patch without removing it. Plugins that cannot declare the optional service mount it through `getFabric(ctx)` — mount-aware: it reuses an existing registration and returns the context's view of the registry.
+The registration is a fiber effect owned by the registering plugin: disposing the plugin disables and removes the patch, and a patch id is exclusive to one owner — a different plugin claiming an already-registered id fails loud instead of silently overwriting the incumbent's hook. Every registration attaches its own disposal to the registering fiber, and the disposer only removes the entry while that fiber still owns it: a hot reload's new generation takes its plugin's patches back (same owner, transfer), so the old generation's unload becomes a no-op instead of unregistering the new generation's hooks. `ctx.fabric.list()` returns an ordered diagnostic snapshot whose entries carry the patch's recorded load-time bindings; `ctx.fabric.bindings(id?)` returns the binding records directly; `ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` toggle a patch without removing it, and `ctx.fabric.remove(id)` removes it entirely. Plugins that cannot declare the optional service mount it through `getFabric(ctx)` — mount-aware: it reuses an existing registration and returns the context's view of the registry.
 
 ## Security and trust model
 

@@ -6,10 +6,15 @@ const runner = fileURLToPath(new URL('./child-runner-compat.mjs', import.meta.ur
 
 /** Run one compat child case and return its stdout. */
 function runCase(name: string): string {
+  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
+  // tsconfig (whose paths lack these packages); children must resolve
+  // against this repo's own tsconfig so source-mode imports stay on src.
+  const childEnv = { ...process.env }
+  delete childEnv.TSX_TSCONFIG_PATH
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner, name], {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     encoding: 'utf8',
-    env: { ...process.env },
+    env: childEnv,
   })
   expect(result.status, `child ${name} exited 0\n${result.stdout}\n${result.stderr}`).toBe(0)
   return result.stdout
@@ -40,6 +45,31 @@ describe('FabricCompatService (child processes)', () => {
     expect(out).toContain('PASS registerPatch target-id conflict throws: true')
     expect(out).toContain('PASS registerPatch self conflict throws: true')
     expect(out).toContain('PASS unregister delegates to original: "hello world"')
+    expect(out).toContain('PASS re-register after unregister rewrites: "HELLO WORLD"')
+  })
+
+  it('a single-plugin hot reload keeps the new generation\'s hook after the old generation unloads', () => {
+    const out = runCase('hmr')
+    expect(out).toContain('PASS hmr gen1 rewrites: "HELLO WORLD"')
+    expect(out).toContain('PASS hmr gen2 rewrites: "HELLO FABRIC"')
+    expect(out).toContain('PASS hmr gen2 survives gen1 unload: "HELLO AFTER"')
+    expect(out).toContain('PASS hmr gen2 unload restores original: "hello again"')
+  })
+
+  it('re-applying the facade plugin leaves the new generation fully functional', () => {
+    const out = runCase('compatHmr')
+    expect(out).toContain('PASS compatHmr gen1 rewrites: "HELLO WORLD"')
+    expect(out).toContain('PASS compatHmr gen1 unload restores original: "hello world"')
+    expect(out).toContain('PASS compatHmr gen2 rewrites: "HELLO FABRIC"')
+    expect(out).toContain('PASS compatHmr gen2 observed: "hello world|hello fabric"')
+    expect(out).toContain('PASS compatHmr gen2 unload restores original: "hello again"')
+  })
+
+  it('rejects the same patch id claimed by a different plugin', () => {
+    const out = runCase('sameId')
+    expect(out).toContain('PASS sameId cross-plugin claim throws: true')
+    expect(out).toContain('PASS sameId incumbent still hooks: "HELLO WORLD"')
+    expect(out).toContain('PASS sameId incumbent unload restores original: "hello world"')
   })
 })
 
@@ -66,6 +96,27 @@ describe('FabricCompatService (unit)', () => {
         handler: () => {},
       })
     }).toThrow(/already claimed/)
+    await ctx.fiber.dispose()
+  })
+
+  it('unregisterPatch removes the entry so a re-registration starts a fresh ownership cycle', async () => {
+    const { Context } = await import('cordis')
+    const { FabricService } = await import('@deepseek-ai/dsh-cordis-fabric')
+    const FabricCompatService = (await import('@deepseek-ai/dsh-cordis-fabric/api/compat')).default
+    const ctx = new Context()
+    await ctx.plugin(FabricService)
+    await ctx.plugin(FabricCompatService, {})
+    const patch = {
+      id: 'compat/cycle',
+      target: { module: 'm', versionRange: '*', filePath: 'f.js', functionQuery: { functionName: 'g', kind: 'Sync' as const } },
+      operation: 'after' as const,
+      handler: () => {},
+    }
+    ctx.fabricCompat.registerPatch(patch)
+    ctx.fabricCompat.unregisterPatch('compat/cycle')
+    // Unregistering removed the entry and freed the id: a re-registration
+    // starts fresh instead of inheriting the first registration's disposal.
+    expect(() => ctx.fabricCompat.registerPatch({ ...patch, handler: () => {} })).not.toThrow()
     await ctx.fiber.dispose()
   })
 })

@@ -6,10 +6,15 @@ const runner = fileURLToPath(new URL('./child-runner.mjs', import.meta.url))
 
 /** Run one Fabric child case and return its stdout. */
 function runCase(name: string): string {
+  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
+  // tsconfig (whose paths lack these packages); children must resolve
+  // against this repo's own tsconfig so source-mode imports stay on src.
+  const childEnv = { ...process.env }
+  delete childEnv.TSX_TSCONFIG_PATH
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner, name], {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     encoding: 'utf8',
-    env: { ...process.env },
+    env: childEnv,
   })
   expect(result.status, `child ${name} exited 0\n${result.stdout}\n${result.stderr}`).toBe(0)
   return result.stdout

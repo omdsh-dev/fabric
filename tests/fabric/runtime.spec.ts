@@ -34,6 +34,30 @@ describe('fabric runtime registry', () => {
     expect(runtime.register(baseInfo('a'))).toBe(false)
   })
 
+  it('rejects an id registered by a different owner', () => {
+    runtime.register({ ...baseInfo('own/a') }, 'owner-a')
+    // A patch id is exclusive to one plugin; a different owner's claim fails
+    // loud where the entry would otherwise be silently shared.
+    expect(() => {
+      runtime.register({ ...baseInfo('own/a') }, 'owner-b')
+    }).toThrow(/already registered by another owner/)
+    // The same owner may re-register: an HMR generation takes its patch back.
+    expect(runtime.register({ ...baseInfo('own/a') }, 'owner-a')).toBe(false)
+  })
+
+  it('same-owner re-registration transfers fiber ownership', () => {
+    runtime.register({ ...baseInfo('own/b') }, 'owner', 'fiber-1')
+    expect(runtime.isOwnedBy('own/b', 'fiber-1')).toBe(true)
+    expect(runtime.isOwnedBy('own/b', 'fiber-2')).toBe(false)
+    expect(runtime.register({ ...baseInfo('own/b') }, 'owner', 'fiber-2')).toBe(false)
+    // The previous fiber's disposer must no longer own the entry...
+    expect(runtime.isOwnedBy('own/b', 'fiber-1')).toBe(false)
+    expect(runtime.isOwnedBy('own/b', 'fiber-2')).toBe(true)
+    // ...and removal clears the ownership for every fiber.
+    runtime.remove('own/b')
+    expect(runtime.isOwnedBy('own/b', 'fiber-2')).toBe(false)
+  })
+
   it('list() orders by priority then id and reflects enabled state', () => {
     runtime.register({ ...baseInfo('b', false), priority: 2 })
     runtime.register({ ...baseInfo('a', false), priority: 1 })
@@ -223,6 +247,98 @@ describe('FabricService', () => {
     await ctx.plugin(FabricService)
     expect(getFabric(ctx)).toBeInstanceOf(FabricService)
     expect(ctx.get('fabric')).toBeInstanceOf(FabricService)
+  })
+
+  it('a same-plugin re-registration takes over; the stale disposer does not unregister it', async () => {
+    const ctx = new Context()
+    const patch = {
+      id: 'service/hmr',
+      target: { module: 'pkg', versionRange: '*', filePath: 'index.js', functionQuery: { functionName: 'f', kind: 'Sync' as const } },
+      operation: 'after' as const,
+      handler: () => {},
+    }
+    const host = async (app: Context) => { getFabric(app).register(patch) }
+    // Generation 2 of the same plugin (the same callback, re-applied)
+    // registers while generation 1 still owns the patch — the overlapping
+    // window of a hot reload.
+    const gen1 = await ctx.plugin(host)
+    const gen2 = await ctx.plugin(host)
+    expect(runtime.isEnabled('service/hmr')).toBe(true)
+    // Generation 1's cleanup must not unregister generation 2's hook.
+    await gen1.dispose()
+    expect(runtime.isEnabled('service/hmr')).toBe(true)
+    await gen2.dispose()
+    expect(runtime.isEnabled('service/hmr')).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects the same patch id from a different plugin', async () => {
+    const ctx = new Context()
+    const patch = {
+      id: 'service/x',
+      target: { module: 'pkg', versionRange: '*', filePath: 'index.js', functionQuery: { functionName: 'f', kind: 'Sync' as const } },
+      operation: 'after' as const,
+      handler: () => {},
+    }
+    const pluginA = async (app: Context) => { getFabric(app).register(patch) }
+    const pluginB = async (app: Context) => { getFabric(app).register({ ...patch, handler: () => {} }) }
+    const fiberA = await ctx.plugin(pluginA)
+    let threw = ''
+    try {
+      await ctx.plugin(pluginB)
+    } catch (error) {
+      threw = error instanceof Error ? error.message : String(error)
+    }
+    expect(threw).toMatch(/already registered by another owner/)
+    // Plugin A's registration is untouched by the rejected claim.
+    expect(runtime.isEnabled('service/x')).toBe(true)
+    await fiberA.dispose()
+    expect(runtime.isEnabled('service/x')).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it('resolves the registration owner from the loader entry when present', async () => {
+    const ctx = new Context()
+    const patch = {
+      id: 'service/entry-owned',
+      target: { module: 'pkg', versionRange: '*', filePath: 'index.js', functionQuery: { functionName: 'f', kind: 'Sync' as const } },
+      operation: 'after' as const,
+      handler: () => {},
+    }
+    // The Loader stamps `fiber.entry` (the composition row) before apply
+    // runs; it is the stable identity across that row's HMR generations.
+    const plugin = async (app: Context) => {
+      ;(app.fiber as { entry?: unknown }).entry = { id: 'web-config-crawler' }
+      getFabric(app).register(patch)
+    }
+    const fiber = await ctx.plugin(plugin)
+    expect(runtime.isEnabled('service/entry-owned')).toBe(true)
+    await fiber.dispose()
+    expect(runtime.isEnabled('service/entry-owned')).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it('remove() frees the entry and owns() reflects the owning fiber', async () => {
+    const ctx = new Context()
+    const patch = {
+      id: 'service/removable',
+      target: { module: 'pkg', versionRange: '*', filePath: 'index.js', functionQuery: { functionName: 'f', kind: 'Sync' as const } },
+      operation: 'after' as const,
+      handler: () => {},
+    }
+    const plugin = async (app: Context) => { getFabric(app).register(patch) }
+    const fiber = await ctx.plugin(plugin)
+    const service = ctx.get('fabric') as FabricService
+    // The plugin call returns a wrapper; the ownership token is the real
+    // fiber behind the wrapper's context.
+    const owner = (fiber as { ctx: Context }).ctx.fiber
+    expect(service.owns('service/removable', owner)).toBe(true)
+    service.remove('service/removable')
+    expect(service.owns('service/removable', owner)).toBe(false)
+    expect(runtime.isEnabled('service/removable')).toBe(false)
+    // The registering fiber's disposal no-ops on the already-removed entry.
+    await fiber.dispose()
+    await ctx.fiber.dispose()
   })
 })
 

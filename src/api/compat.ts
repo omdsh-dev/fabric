@@ -15,7 +15,7 @@
  */
 
 import { Service } from 'cordis'
-import type { Context } from 'cordis'
+import type { Context, Fiber } from 'cordis'
 import { getFabric, isFabricInstalled, patchInstrumentation, serveBrowserTransform } from '@deepseek-ai/dsh-cordis-fabric'
 import type { FabricService } from '@deepseek-ai/dsh-cordis-fabric'
 import type { FabricInstrumentationConfig } from '@deepseek-ai/dsh-cordis-fabric'
@@ -92,6 +92,14 @@ export class FabricCompatService extends Service {
 
   /** The low-level Fabric registry this facade drives (mounted on demand). */
   private readonly fabric: FabricService
+  /**
+   * The fiber that mounted this facade (this fiber's parent): the ownership
+   * token the low-level registry records for every registration made through
+   * this service, and the token this service's disposers check before
+   * disabling — so a stale HMR generation's cleanup cannot disable a newer
+   * generation's registration.
+   */
+  private readonly ownerFiber: Fiber
   private readonly targets = new Map<string, FabricCompatTarget>()
   /** Patch ids claimed by the declared observation targets (a stable namespace). */
   private readonly targetIds = new Set<PatchId>()
@@ -107,8 +115,14 @@ export class FabricCompatService extends Service {
   constructor(ctx: Context, config: FabricCompatConfig) {
     super(ctx, 'fabricCompat')
     // The low-level registry is optional and mounted on demand: a consumer
-    // mounts this facade alone and never imports the low-level package.
-    this.fabric = getFabric(ctx)
+    // mounts this facade alone and never imports the low-level package. It
+    // resolves from the MOUNTING fiber's context (this fiber's parent), so
+    // patch registrations are owned by the plugin that mounted the facade —
+    // the identity the low-level service uses to keep a patch id exclusive
+    // to one owner across HMR generations — instead of by this child fiber.
+    const owner = ctx.fiber.parent
+    this.ownerFiber = owner.fiber
+    this.fabric = getFabric(owner)
     for (const target of config.targets ?? []) {
       if (this.targets.has(target.name)) {
         throw new Error(`fabric-compat: target "${target.name}" is declared more than once`)
@@ -125,7 +139,9 @@ export class FabricCompatService extends Service {
    * already claimed — by another registration or by a declared observation
    * target — fails loud, where the low-level registry would silently update
    * the existing patch. The patch is enabled immediately and removed with
-   * the calling fiber (the low-level registration is the fiber's effect).
+   * the calling fiber (the low-level registration is the fiber's effect);
+   * the low-level registry additionally rejects an id already owned by a
+   * different plugin, so the exclusivity holds across facade instances too.
    * @param patch - the patch descriptor with its trusted handler.
    * @returns the registered patch id.
    * @throws when the id is already claimed.
@@ -144,11 +160,16 @@ export class FabricCompatService extends Service {
 
   /**
    * Disable and remove a patch registered through this service.
+   *
+   * Removal frees the id for re-registration and empties the runtime entry,
+   * so a later registration starts a fresh ownership cycle instead of
+   * inheriting this one's disposal effect.
    * @param id - the patch id.
    */
   unregisterPatch(id: PatchId): void {
     if (!this.registered.has(id)) return
     this.fabric.disable(id)
+    this.fabric.remove(id)
     this.registered.delete(id)
   }
 
@@ -186,7 +207,10 @@ export class FabricCompatService extends Service {
    *
    * Fails loud when the Fabric bridge is not installed: resolving `ctx.fabric`
    * alone does not imply the load-time hooks or browser bridge are active, and
-   * an adapter must not register a patch that can never take effect.
+   * an adapter must not register a patch that can never take effect. The
+   * low-level registration is owned by the plugin that mounted this facade;
+   * another plugin's observe of the same target patch id fails loud at the
+   * low-level registry (a patch id is exclusive to one owner).
    * @param name - the declared target name.
    * @param listener - called with each observed call record.
    * @returns a disposer removing this listener (the patch stays enabled while
@@ -201,9 +225,10 @@ export class FabricCompatService extends Service {
       throw new Error('fabric-compat: the Fabric bridge is not installed; install the compat instrumentations (buildCompatInstrumentations) before loading the target module')
     }
     const listeners = this.observers.get(name) ?? new Set<(call: FabricCall) => void>()
-    listeners.add(listener)
-    this.observers.set(name, listeners)
-    if (listeners.size === 1) {
+    if (listeners.size === 0) {
+      // First listener for this name: claim the low-level patch. The claim
+      // fails loud BEFORE the listener joins (a cross-owner claim would
+      // otherwise leave a stale listener behind).
       this.fabric.register({
         id: target.patch.id,
         target: target.patch.target,
@@ -213,11 +238,18 @@ export class FabricCompatService extends Service {
         },
       })
     }
+    listeners.add(listener)
+    this.observers.set(name, listeners)
     return () => {
       listeners.delete(listener)
       if (listeners.size === 0) {
         this.observers.delete(name)
-        this.fabric.disable(target.patch.id)
+        // Only disable while this facade's generation still owns the patch:
+        // a newer HMR generation may have taken the entry over, and its
+        // observation must survive this cleanup.
+        if (this.fabric.owns(target.patch.id, this.ownerFiber)) {
+          this.fabric.disable(target.patch.id)
+        }
       }
     }
   }

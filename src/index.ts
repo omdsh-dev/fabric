@@ -17,7 +17,7 @@ export {
   publish,
   type FabricBridgeCall,
 } from './bridge.ts'
-export { bootstrapFabric, checkRequiredPatches, expandPatchStub, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
+export { bootstrapFabric, checkRequiredPatches, expandPatchStub, flushBindingReports, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
 export {
   createBrowserTransform,
   createWatchedBrowserTransform,

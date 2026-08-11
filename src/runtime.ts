@@ -25,6 +25,20 @@ interface PatchEntry {
   info: FabricPatchInfo
   /** Currently installed handler, when the patch is enabled. */
   handler: FabricHandler | undefined
+  /**
+   * Identity of the registration owner: a patch id is exclusive to one
+   * owner, and only the same owner may re-register it (an HMR generation
+   * replaces its plugin's own patch; a different plugin's same-id claim is
+   * rejected). The Cordis service resolves the owner from the registering
+   * fiber (loader entry, plugin callback, or the fiber itself).
+   */
+  owner: unknown
+  /**
+   * The fiber whose disposal currently owns the entry's removal. A same-owner
+   * re-registration transfers ownership, so the previous fiber's disposer
+   * becomes a no-op and cannot unregister the newer registration.
+   */
+  fiber: unknown
 }
 
 /**
@@ -105,11 +119,26 @@ export class FabricRuntime {
    * Register a patch's static metadata; the patch stays disabled until
    * {@link FabricRuntime.enable} installs its handler.
    * @param info - validated patch metadata.
+   * @param owner - identity of the registration owner; defaults to the patch
+   * id for raw-runtime callers. Re-registering an id owned by a different
+   * owner fails loud — a patch id is exclusive to one plugin — while the same
+   * owner may re-register (an HMR generation takes its plugin's patch back)
+   * and transfer {@link PatchEntry.fiber fiber} ownership.
+   * @param fiber - the fiber whose disposal owns the entry's removal; the
+   * Cordis service passes the registering fiber so its disposer can check
+   * {@link FabricRuntime.isOwnedBy}.
    * @returns whether the id was newly registered (false re-registers metadata).
-   * @throws when another `replace` patch already claims the same target.
+   * @throws when another `replace` patch already claims the same target, or
+   * when the id is already registered by a different owner.
    */
-  register(info: FabricPatchInfo): boolean {
+  register(info: FabricPatchInfo, owner: unknown = info.id, fiber?: unknown): boolean {
     const previous = this.entries.get(info.id)
+    if (previous && previous.owner !== owner) {
+      throw new Error(
+        `fabric: patch ${JSON.stringify(info.id)} is already registered by another owner; `
+        + 'a patch id is exclusive to one plugin (HMR re-registration reuses the same owner)',
+      )
+    }
     if (info.operation === 'replace') {
       const key = targetKey(info.target)
       // A re-registration of this id that already holds replace on the same
@@ -130,7 +159,7 @@ export class FabricRuntime {
         }
       }
     }
-    this.entries.set(info.id, { info, handler: previous?.handler })
+    this.entries.set(info.id, { info, handler: previous?.handler, owner, fiber })
     return previous === undefined
   }
 
@@ -169,6 +198,19 @@ export class FabricRuntime {
    */
   remove(id: PatchId): void {
     this.entries.delete(id)
+  }
+
+  /**
+   * Whether the given fiber still owns the entry — the identity check a
+   * registration disposer runs before removing, so a stale generation's
+   * cleanup cannot unregister a newer registration that took the entry over.
+   * @param id - the patch id.
+   * @param fiber - the fiber token the registering service passed.
+   * @returns true while the entry exists and is owned by that fiber.
+   */
+  isOwnedBy(id: PatchId, fiber: unknown): boolean {
+    const entry = this.entries.get(id)
+    return entry !== undefined && entry.fiber === fiber
   }
 
   /**

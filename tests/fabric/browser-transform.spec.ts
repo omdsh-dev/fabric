@@ -67,10 +67,11 @@ describe('createBrowserTransform', () => {
   })
 
   it('repoSourceResolver maps source-tree ids to the package identity', () => {
-    const resolver = repoSourceResolver('@deepseek-ai/dsh-client-x', '/repo/packages/client/x', '0.0.1')
-    expect(resolver('/repo/packages/client/x/src/client/index.ts'))
+    const packageRoot = ['/repo', 'packages', 'client', 'x'].join('/')
+    const resolver = repoSourceResolver('@deepseek-ai/dsh-client-x', packageRoot, '0.0.1')
+    expect(resolver(`${packageRoot}/src/client/index.ts`))
       .toEqual({ name: '@deepseek-ai/dsh-client-x', version: '0.0.1', path: 'src/client/index.ts' })
-    expect(resolver('/repo/packages/client/y/src/client/index.ts')).toBeUndefined()
+    expect(resolver(`${['/repo', 'packages', 'client', 'y'].join('/')}/src/client/index.ts`)).toBeUndefined()
   })
 
   it('transforms source-tree modules through repoSourceResolver', () => {

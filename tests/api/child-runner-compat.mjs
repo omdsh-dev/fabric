@@ -7,7 +7,7 @@
  */
 
 import { Context } from 'cordis'
-import { installFabricHooks, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import { installFabricHooks, FabricService, getFabric } from '@deepseek-ai/dsh-cordis-fabric/src/index.ts'
 import FabricCompatService, { buildCompatInstrumentations } from '@deepseek-ai/dsh-cordis-fabric/api/compat'
 
 const fixtureUrl = new URL('./fixtures/node_modules/fabric-compat-target/index.mjs', import.meta.url)
@@ -145,5 +145,152 @@ if (caseName === 'observe') {
   // original body.
   ctx.fabricCompat.unregisterPatch(id)
   check('unregister delegates to original', mod.greet('world'), 'hello world')
+  // Unregistering removes the entry: a later re-registration starts a fresh
+  // ownership cycle instead of inheriting the first registration's effect.
+  ctx.fabricCompat.registerPatch({
+    id: 'compat/greet-upper',
+    target: { module: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs', functionQuery },
+    operation: 'after',
+    handler(call) {
+      return String(call.result).toUpperCase()
+    },
+  })
+  check('re-register after unregister rewrites', mod.greet('world'), 'HELLO WORLD')
+  await ctx.fiber.dispose()
+} else if (caseName === 'hmr') {
+  // Single-plugin hot reload, direct low-level registration (the browser
+  // plugin path): the plugin's new generation registers its patch while the
+  // old generation still owns it — the overlapping window of an HMR swap.
+  // The old generation's unload must not unregister the new generation's
+  // hook.
+  installFabricHooks([
+    {
+      channelName: 'compat/greet-upper',
+      module: { name: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs' },
+      functionQuery: { functionName: 'greet', kind: 'Sync' },
+      transform: 'fabric',
+      fabricPatchId: 'compat/greet-upper',
+      fabricOperation: 'after',
+      fabricPriority: 0,
+      astQuery: 'FunctionDeclaration[id.name="greet"][async], VariableDeclarator[id.name="greet"] > FunctionExpression[async], VariableDeclarator[id.name="greet"] > ArrowFunctionExpression[async]',
+    },
+  ])
+  const mod = await import(fixtureUrl)
+  const ctx = new Context()
+  const patch = {
+    id: 'compat/greet-upper',
+    target: { module: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs', functionQuery },
+    operation: 'after',
+    handler(call) {
+      return String(call.result).toUpperCase()
+    },
+  }
+  const hostPlugin = async (app) => { getFabric(app).register(patch) }
+  const gen1 = await ctx.plugin(hostPlugin)
+  check('hmr gen1 rewrites', mod.greet('world'), 'HELLO WORLD')
+  // Generation 2 (the same plugin callback, re-applied) registers while gen1
+  // still owns the patch — the overlapping window of a hot reload.
+  const gen2 = await ctx.plugin(hostPlugin)
+  check('hmr gen2 rewrites', mod.greet('fabric'), 'HELLO FABRIC')
+  // Generation 1 unloads; its cleanup must not unregister gen2's hook.
+  await gen1.dispose()
+  check('hmr gen2 survives gen1 unload', mod.greet('after'), 'HELLO AFTER')
+  await gen2.dispose()
+  check('hmr gen2 unload restores original', mod.greet('again'), 'hello again')
+  await ctx.fiber.dispose()
+} else if (caseName === 'compatHmr') {
+  // Single-plugin hot reload through the cooperative facade (the crawler
+  // shape): disposing generation 1 fully, then re-applying the plugin must
+  // leave generation 2's runtime patch and observation fully functional.
+  installFabricHooks([
+    ...buildCompatInstrumentations(config),
+    {
+      channelName: 'compat/greet-upper',
+      module: { name: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs' },
+      functionQuery: { functionName: 'greet', kind: 'Sync' },
+      transform: 'fabric',
+      fabricPatchId: 'compat/greet-upper',
+      fabricOperation: 'after',
+      fabricPriority: 0,
+      astQuery: 'FunctionDeclaration[id.name="greet"][async], VariableDeclarator[id.name="greet"] > FunctionExpression[async], VariableDeclarator[id.name="greet"] > ArrowFunctionExpression[async]',
+    },
+  ])
+  const mod = await import(fixtureUrl)
+  const ctx = new Context()
+  const seen = []
+  const hostPlugin = async (app) => {
+    await app.plugin(FabricCompatService, config)
+    const compat = app.get('fabricCompat')
+    if (compat === undefined) throw new Error('fabricCompat unavailable')
+    compat.registerPatch({
+      id: 'compat/greet-upper',
+      target: { module: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs', functionQuery },
+      operation: 'after',
+      handler(call) {
+        return String(call.result).toUpperCase()
+      },
+    })
+    return compat.observe('greet', (call) => { seen.push(call.result) })
+  }
+  const gen1 = await ctx.plugin(hostPlugin)
+  check('compatHmr gen1 rewrites', mod.greet('world'), 'HELLO WORLD')
+  check('compatHmr gen1 observed', seen.join('|'), 'hello world')
+  // Full unload of generation 1 (the loader disposes before re-applying).
+  await gen1.dispose()
+  check('compatHmr gen1 unload restores original', mod.greet('world'), 'hello world')
+  const gen2 = await ctx.plugin(hostPlugin)
+  check('compatHmr gen2 rewrites', mod.greet('fabric'), 'HELLO FABRIC')
+  check('compatHmr gen2 observed', seen.join('|'), 'hello world|hello fabric')
+  await gen2.dispose()
+  check('compatHmr gen2 unload restores original', mod.greet('again'), 'hello again')
+  await ctx.fiber.dispose()
+} else if (caseName === 'sameId') {
+  // A patch id is exclusive to one plugin: a different plugin claiming the
+  // same id through the low-level registry fails loud instead of silently
+  // overwriting the incumbent's hook.
+  installFabricHooks([
+    {
+      channelName: 'compat/shared',
+      module: { name: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs' },
+      functionQuery: { functionName: 'greet', kind: 'Sync' },
+      transform: 'fabric',
+      fabricPatchId: 'compat/shared',
+      fabricOperation: 'after',
+      fabricPriority: 0,
+      astQuery: 'FunctionDeclaration[id.name="greet"][async], VariableDeclarator[id.name="greet"] > FunctionExpression[async], VariableDeclarator[id.name="greet"] > ArrowFunctionExpression[async]',
+    },
+  ])
+  const mod = await import(fixtureUrl)
+  const ctx = new Context()
+  const sharedTarget = { module: 'fabric-compat-target', versionRange: '^1.0.0', filePath: 'index.mjs', functionQuery }
+  const pluginA = async (app) => {
+    getFabric(app).register({
+      id: 'compat/shared',
+      target: sharedTarget,
+      operation: 'after',
+      handler(call) {
+        return String(call.result).toUpperCase()
+      },
+    })
+  }
+  const pluginB = async (app) => {
+    getFabric(app).register({
+      id: 'compat/shared',
+      target: sharedTarget,
+      operation: 'after',
+      handler() {},
+    })
+  }
+  const fiberA = await ctx.plugin(pluginA)
+  let threw = ''
+  try {
+    await ctx.plugin(pluginB)
+  } catch (error) {
+    threw = error.message
+  }
+  check('sameId cross-plugin claim throws', threw.includes('already registered by another owner'), true)
+  check('sameId incumbent still hooks', mod.greet('world'), 'HELLO WORLD')
+  await fiberA.dispose()
+  check('sameId incumbent unload restores original', mod.greet('world'), 'hello world')
   await ctx.fiber.dispose()
 }

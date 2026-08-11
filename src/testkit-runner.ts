@@ -11,7 +11,7 @@
  * @module @deepseek-ai/dsh-cordis-fabric/testkit-runner
  */
 
-import { bootstrapFabric, runtime } from './index.ts'
+import { bootstrapFabric, flushBindingReports, runtime } from './index.ts'
 import type { FabricPatchStub } from './types.ts'
 
 /** Read the whole stdin stream. */
@@ -66,6 +66,10 @@ try {
       message: thrown instanceof Error ? thrown.message : String(thrown),
     }
   }
+  // The async hook path delivers binding records over a MessagePort; wait for
+  // the loader thread's flush reply so every report from the entry's loads has
+  // landed before the envelope is read (a no-op on the sync path).
+  await flushBindingReports()
   const bindings: Record<string, ReturnType<typeof runtime.bindingsOf>> = {}
   for (const patch of payload.patches) bindings[patch.id] = runtime.bindingsOf(patch.id)
   process.stdout.write(JSON.stringify({

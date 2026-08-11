@@ -1,6 +1,6 @@
-# `@deepseek-ai/dsh-cordis-fabric-api`
+# `@deepseek-ai/dsh-cordis-fabric/api`
 
-[English](README.md) | 中文
+[English](fabric-api.md) | 中文
 
 协作式 Fabric API 模块：稳定、面向 Mod 的 Cordis 扩展契约，委托给 DSH 权威 service。该 package 是 DSH 对 Minecraft Fabric API 的对应物——位于 loader 与 Mixin 子系统之上的一层可选库——且是 opt-in：默认 DSH composition 不挂载它。
 
@@ -11,7 +11,7 @@ Fabric 风格扩展架构由三层组成。前两层已存在；本 package 是�
 | 层 | 所有者 | 契约 |
 |---|---|---|
 | Mod loader | Cordis Loader | 发现配置中的插件、解析注入、挂载 fiber 并销毁 effect。 |
-| Mixin 子系统 | [`@deepseek-ai/dsh-cordis-fabric`](../cordis-fabric/README.md) | 变换目标代码并分发受信任的底层 patch。 |
+| Mixin 子系统 | [`@deepseek-ai/dsh-cordis-fabric`](fabric.md) | 变换目标代码并分发受信任的底层 patch。 |
 | 协作式 Mod API | 本 package | 由现有 DSH 所有者支撑的稳定 domain-level registration 和 event。 |
 
 Mod 仍然是普通 Cordis 插件，只声明它所消费的 Fabric API 模块 service 的注入。每个 facade 委托给权威 service——`ctx.tools`、`ctx.systemPrompt`、`ctx.commands`、`agent/*` 事件以及浏览器侧的 `ctx.command`/`ctx.slots`——并返回底层 effect 的精确 disposer。Facade 不保存 domain state 的平行副本，也不能绕过 policy、approval、timeout、日志、取消或权威 executor。
@@ -34,10 +34,11 @@ root entry 是标准 Host bundle；每个 subpath 也可以单独挂载，适合
 
 在权威 service 存在的位置挂载 Host bundle（或某个 subpath）：
 
-```ts ignore-check
-import * as fabricApi from '@deepseek-ai/dsh-cordis-fabric-api'
+```ts
+import * as fabricApi from '@deepseek-ai/dsh-cordis-fabric/api'
+import type { Context } from 'cordis'
 
-// mounts ctx.fabricAgent, ctx.fabricTools, ctx.fabricPrompt, ctx.fabricCommands
+declare const ctx: Context
 await ctx.plugin(fabricApi)
 ```
 
@@ -49,11 +50,14 @@ await ctx.plugin(fabricApi)
 
 Mod 只声明它消费的模块：
 
-```ts ignore-check
+```ts
+import type { Context } from 'cordis'
+import type { FabricAgentService, FabricPromptService } from '@deepseek-ai/dsh-cordis-fabric/api'
+
 export const name = 'my-mod'
 export const inject = ['fabricAgent', 'fabricPrompt']
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context & { fabricAgent: FabricAgentService; fabricPrompt: FabricPromptService }): void {
   ctx.fabricAgent.onStatus((agent, status) => {
     ctx.logger.info('agent %s is %s', agent.id, status)
   })
@@ -73,7 +77,7 @@ export function apply(ctx: Context): void {
 - **Tool API。** 通过 `ctx.tools` 注册 tool 以及执行前后 listener。Fabric API tool 与原生 DSH tool 具有相同的 schema 和 result 义务，包括 model-visible logging 和 render intent。Waterfall listener 必须调用 `next()`，除非它有意否决。
 - **Prompt API。** 通过 `ctx.systemPrompt` 注册有序 system section、可安全缓存的 context、tool-schema provider 和 prompt variable。没有插入未记录 model-visible 文本或直接组装 provider request 的捷径。
 - **Command API。** 通过 `ctx.commands` 注册人类用户 command；除非权威契约启动 turn，否则 command 保持在 model turn 之外。
-- **Compat API。** 低层补丁机制的协作式入口。两个面：`observe(name, listener)` 保留静态观察适配器（面向没有协作式扩展点的目标 domain；目标在模块 config 中声明，`buildCompatInstrumentations` 生成加载期 instrumentations，对外契约只暴露声明的目标名）。`registerPatch(patch)` / `unregisterPatch` / `disablePatch` / `enablePatch` 打开完整的运行时补丁面——handler 在运行时绑定到 launcher bootstrap 已安装的变换（web roster 的 `config.fabric.patches` 桩）——并带**排他的 id 命名空间**：已被声明的观察目标或更早的注册占用的 id 会失败即显式（低层注册表是静默更新）。`serveBundle(options)` 暴露运行时浏览器 bundle 原语（`serveBrowserTransform`），bundle 重写也经协作式门面进入。所有面都校验 bridge installation capability（`isFabricInstalled`），hooks 缺失时失败即显式。
+- **Compat API。** 低层补丁机制的协作式入口。两个面：`observe(name, listener)` 保留静态观察适配器（面向没有协作式扩展点的目标 domain；目标在模块 config 中声明，`buildCompatInstrumentations` 生成加载期 instrumentations，对外契约只暴露声明的目标名）。`registerPatch(patch)` / `unregisterPatch` / `disablePatch` / `enablePatch` 打开完整的运行时补丁面——handler 在运行时绑定到 launcher bootstrap 已安装的变换（web roster 的 `config.fabric.patches` 桩）——并带**排他的 id 命名空间**：已被声明的观察目标或更早的注册占用的 id 会失败即显式，且 facade 背后的低层注册表还会拒绝已被其他插件占用的 id，因此排他性跨 facade 实例成立。注册归挂载该 facade 的插件所有；`unregisterPatch` 会禁用**并移除** patch，释放 id 以开始全新的所有权周期。`serveBundle(options)` 暴露运行时浏览器 bundle 原语（`serveBrowserTransform`），bundle 重写也经协作式门面进入。所有面都校验 bridge installation capability（`isFabricInstalled`），hooks 缺失时失败即显式。
 - **Client API。** 通过 `ctx.command` 和 `ctx.slots` 注册 client command 和命名 UI slot。Slot registration face 刻意保持窄（`FabricSlotOptions`）：完整的 SlotMap 类型机制位于 `@deepseek-ai/dsh-client-ui-slots`，其声明合并只能看到每个 consumer 导入的包。`registerKeyedSlot(name, key, options, component)` 为 keyed 槽位增加**仲裁**：宿主不变式（每 key 一个属主、重复 loud）保持不变，但属主由声明的 `priority` 决定而非挂载时序——败者排队并在属主销毁时自动接管（`onGain`），更高优先级认领者接替在位者而不强制卸载它（`onLost` 通知它），同优先级保持注册序并告警。直接 `ctx.slots.register` 的用户仍得到宿主抛错。
 
 Public surface 不导出 AST selector、模块文件路径、`FabricPatch`、raw bridge handle，也不提供绕过 tool/command/prompt policy 的路径。底层 patch 仍然是 Mixin 子系统的 escape hatch，绝不是本 package 契约的一部分。

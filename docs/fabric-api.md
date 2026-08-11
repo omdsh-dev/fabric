@@ -1,6 +1,6 @@
-# `@deepseek-ai/dsh-cordis-fabric-api`
+# `@deepseek-ai/dsh-cordis-fabric/api`
 
-English | [中文](README.zh.md)
+English | [中文](fabric-api.zh.md)
 
 Cooperative Fabric API modules: stable, Mod-facing Cordis extension contracts that delegate to the authoritative DSH services. The package is the DSH counterpart of Minecraft's Fabric API — an optional library above the loader and the Mixin subsystem — and it is opt-in: nothing in the default DSH composition mounts it.
 
@@ -11,7 +11,7 @@ Three layers make up the Fabric-style extension architecture. The first two alre
 | Layer | Owner | Contract |
 |---|---|---|
 | Mod loader | Cordis Loader | Discovers configured plugins, resolves injection, mounts fibers, and disposes effects. |
-| Mixin subsystem | [`@deepseek-ai/dsh-cordis-fabric`](../cordis-fabric/README.md) | Transforms target code and dispatches trusted low-level patches. |
+| Mixin subsystem | [`@deepseek-ai/dsh-cordis-fabric`](fabric.md) | Transforms target code and dispatches trusted low-level patches. |
 | Cooperative Mod API | this package | Stable, domain-level registrations and events backed by existing DSH owners. |
 
 A Mod remains an ordinary Cordis plugin that declares injection of only the Fabric API module services it consumes. Each facade delegates to the authoritative service — `ctx.tools`, `ctx.systemPrompt`, `ctx.commands`, the `agent/*` events, and the browser `ctx.command`/`ctx.slots` — and returns the exact disposer of the underlying effect. No facade stores a parallel copy of domain state, and none can bypass policy, approval, timeout, logging, cancellation, or the authoritative executor.
@@ -34,10 +34,11 @@ The root entry is the standard Host bundle; every subpath is also directly mount
 
 Mount the Host bundle (or one subpath) where the authoritative services are present:
 
-```ts ignore-check
-import * as fabricApi from '@deepseek-ai/dsh-cordis-fabric-api'
+```ts
+import * as fabricApi from '@deepseek-ai/dsh-cordis-fabric/api'
+import type { Context } from 'cordis'
 
-// mounts ctx.fabricAgent, ctx.fabricTools, ctx.fabricPrompt, ctx.fabricCommands
+declare const ctx: Context
 await ctx.plugin(fabricApi)
 ```
 
@@ -49,11 +50,14 @@ await ctx.plugin(fabricApi)
 
 A Mod declares only the modules it consumes:
 
-```ts ignore-check
+```ts
+import type { Context } from 'cordis'
+import type { FabricAgentService, FabricPromptService } from '@deepseek-ai/dsh-cordis-fabric/api'
+
 export const name = 'my-mod'
 export const inject = ['fabricAgent', 'fabricPrompt']
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context & { fabricAgent: FabricAgentService; fabricPrompt: FabricPromptService }): void {
   ctx.fabricAgent.onStatus((agent, status) => {
     ctx.logger.info('agent %s is %s', agent.id, status)
   })
@@ -73,7 +77,7 @@ Every registration is a fiber effect: disposing the contributing plugin removes 
 - **Tool API.** `register` and pre/post execution listeners through `ctx.tools`. A Fabric API tool has the same schema and result obligations as a native DSH tool, including model-visible logging and render intent. A waterfall listener must call `next()` unless it intentionally vetoes.
 - **Prompt API.** Ordered system sections, cache-safe contexts, tool-schema providers, and prompt variables through `ctx.systemPrompt`. There is no shortcut that inserts unlogged model-visible text or assembles provider requests directly.
 - **Command API.** Human commands through `ctx.commands`; commands remain outside model turns unless the owning contract starts one.
-- **Compat API.** The cooperative entry for the low-level patch machinery. Two faces: `observe(name, listener)` keeps the static observation adapter for target domains with no cooperative extension point (targets declared in the module config, `buildCompatInstrumentations` produces the load-time instrumentations, and the public contract exposes only the declared target names). `registerPatch(patch)` / `unregisterPatch` / `disablePatch` / `enablePatch` open the full runtime patch surface — handlers bound at runtime to transforms the launcher bootstrap already installed (the web roster's `config.fabric.patches` stubs) — with an EXCLUSIVE id namespace: an id already claimed by a declared observation target or an earlier registration fails loud, where the low-level registry silently updates. `serveBundle(options)` exposes the runtime browser-bundle primitive (`serveBrowserTransform`) so bundle rewrites also enter through the cooperative facade. All faces verify the bridge installation capability (`isFabricInstalled`) and fail loud when the hooks are absent.
+- **Compat API.** The cooperative entry for the low-level patch machinery. Two faces: `observe(name, listener)` keeps the static observation adapter for target domains with no cooperative extension point (targets declared in the module config, `buildCompatInstrumentations` produces the load-time instrumentations, and the public contract exposes only the declared target names). `registerPatch(patch)` / `unregisterPatch` / `disablePatch` / `enablePatch` open the full runtime patch surface — handlers bound at runtime to transforms the launcher bootstrap already installed (the web roster's `config.fabric.patches` stubs) — with an EXCLUSIVE id namespace: an id already claimed by a declared observation target or an earlier registration fails loud, and the low-level registry behind the facade additionally rejects an id owned by a different plugin, so exclusivity holds across facade instances. Registrations are owned by the plugin that mounted the facade; `unregisterPatch` disables AND removes the patch, freeing the id for a fresh ownership cycle. `serveBundle(options)` exposes the runtime browser-bundle primitive (`serveBrowserTransform`) so bundle rewrites also enter through the cooperative facade. All faces verify the bridge installation capability (`isFabricInstalled`) and fail loud when the hooks are absent.
 - **Client API.** Client commands and named UI slots through `ctx.command` and `ctx.slots`. The slot registration face is intentionally narrow (`FabricSlotOptions`): the full SlotMap type machinery lives in `@deepseek-ai/dsh-client-ui-slots`, whose declaration merging only sees the packages each consumer imports. `registerKeyedSlot(name, key, options, component)` adds ARBITRATION for keyed slots: the host invariant (one owner per key, loud on duplicates) stays, but the owner is decided by declared `priority` instead of mount timing — losing claimants queue and take over automatically when the owner disposes (`onGain`), a higher-priority claimant displaces the incumbent without force-disposing it (`onLost` informs it), and equal priorities keep registration order with a warning. Direct `ctx.slots.register` users still get the host throw.
 
 The public surface exports no AST selector, module file path, `FabricPatch`, raw bridge handle, or bypass around tool/command/prompt policy. Low-level patches remain the Mixin subsystem's escape hatch and are never part of this package's contract.

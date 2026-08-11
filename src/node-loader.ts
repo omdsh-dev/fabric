@@ -279,11 +279,23 @@ function moduleIdentity(urlOrPath: string): PackageIdentity | undefined {
  * also present, which crashes Node's load validation; the stable API lands
  * in 22.22.3 and 24.11.1. Below those, the async fallback keeps every hook
  * on one loader-thread chain.
+ *
+ * Bug sources: the CJS/loader-hook coexistence crash is tracked in
+ * https://github.com/nodejs/node/issues/63060 ("CJS module customized by
+ * synchronous customization hooks uses synthetic `require` with any use of
+ * `--loader`"); the registerHooks API's known caveats and the
+ * 22.22.3/24.11.1 stabilization boundary are tracked in
+ * https://github.com/nodejs/node/issues/56241 (module.registerHooks()
+ * tracking issue).
  */
 function supportsSyncHooks(): boolean {
   // DSH_FABRIC_FORCE_ASYNC_HOOKS exercises the async `module.register`
   // fallback on runtimes that do have `registerHooks` (test seam).
   if (process.env.DSH_FABRIC_FORCE_ASYNC_HOOKS === '1') return false
+  // DSH_FABRIC_FORCE_SYNC_HOOKS exercises the synchronous hooks on runtimes
+  // without a competing loader-thread hook (test seam, symmetric with the
+  // async override above; source-mode tests have no tsx `module.register`).
+  if (process.env.DSH_FABRIC_FORCE_SYNC_HOOKS === '1') return true
   if (typeof registerHooks !== 'function') return false
   const [major = 0, minor = 0, patch = 0] = process.versions.node.split('.').map(Number)
   if (major === 22) return minor > 22 || (minor === 22 && patch >= 3)
@@ -296,6 +308,12 @@ let asyncHooksInstalled = false
 
 /** Shared configuration file the loader-thread entry reads on every load. */
 let asyncConfigPath: string | undefined
+
+/** Main-thread end of the binding-report channel, when the async path is active. */
+let asyncBindingPort: MessagePort | undefined
+
+/** Flush requests awaiting the loader thread's `flush-done` reply. */
+const flushWaiters: Array<() => void> = []
 
 /**
  * Remove the shared configuration file on process exit (once). The loader
@@ -341,9 +359,17 @@ function installAsyncHooks(configPath: string): void {
   // DOM lib in scope; Node's runtime ports are the worker_threads class,
   // which carries unref() — the cast is a type-only correction.
   const port = channel.port1 as unknown as MessagePort
-  port.on('message', (records: unknown) => {
-    if (!Array.isArray(records)) return
-    for (const record of records) {
+  asyncBindingPort = port
+  port.on('message', (message: unknown) => {
+    // A flush reply acknowledges that every binding report posted before it
+    // on the channel has landed on this thread (same-channel ordering).
+    if (typeof message === 'object' && message !== null && (message as { type?: string }).type === 'flush-done') {
+      const waiters = flushWaiters.splice(0)
+      for (const resolve of waiters) resolve()
+      return
+    }
+    if (!Array.isArray(message)) return
+    for (const record of message) {
       if (typeof record !== 'object' || record === null) continue
       const report = record as Partial<FabricBindingReport>
       if (typeof report.patchId === 'string' && typeof report.module === 'string'
@@ -356,6 +382,34 @@ function installAsyncHooks(configPath: string): void {
   register(new URL('./hook-entry.js', import.meta.url).href, import.meta.url, {
     data: { configPath, port: channel.port2 },
     transferList: [channel.port2],
+  })
+}
+
+/**
+ * Wait until every binding report the loader thread posted for completed
+ * loads has landed on the main thread. A no-op on the synchronous-hooks path
+ * (bindings are recorded inline) and when no hooks were installed.
+ *
+ * The loader thread answers a `flush` request with `flush-done` on the same
+ * channel; same-channel ordering guarantees every earlier report precedes
+ * the reply. The reply may never come when the entry failed to load (the
+ * registration is fire-and-forget), so the timeout keeps the caller from
+ * hanging; the caller then sees the reports that did arrive.
+ * @param timeoutMs - how long to wait for the reply before proceeding.
+ */
+export async function flushBindingReports(timeoutMs = 200): Promise<void> {
+  if (asyncBindingPort === undefined) return
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      const index = flushWaiters.indexOf(resolve)
+      if (index >= 0) flushWaiters.splice(index, 1)
+      resolve()
+    }, timeoutMs)
+    flushWaiters.push(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+    asyncBindingPort?.postMessage({ type: 'flush' })
   })
 }
 

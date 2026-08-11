@@ -44,27 +44,37 @@ export class FabricService extends Service {
   /**
    * Register a patch and enable its handler for the current fiber.
    *
-   * The registration is an effect: disposing the fiber disables and removes
-   * the patch, so transformed code falls back to the original body. The
-   * effect attaches on the first registration of an id only; a later
-   * re-registration from another fiber updates metadata and handler without
-   * changing disposal ownership.
+   * Every registration is an effect on the calling fiber: disposing the
+   * fiber disables and removes the patch, so transformed code falls back to
+   * the original body. The disposer only removes the entry while this fiber
+   * still owns it — a same-owner re-registration (an HMR generation taking
+   * its plugin's patch back) transfers fiber ownership, so the previous
+   * generation's cleanup becomes a no-op instead of unregistering the newer
+   * registration. Registering an id already owned by a different plugin
+   * fails loud: a patch id is exclusive to one owner.
    * @param patch - validated patch descriptor.
    * @returns the registered patch id.
+   * @throws when the id is already registered by a different plugin owner.
    */
   register(patch: FabricPatch): PatchId {
     validatePatchId(patch.id)
     validatePatch(patch)
-    const first = runtime.register(patchInfo(patch))
-    runtime.enable(patch.id, patch.handler)
-    if (first) {
-      this.ctx.effect(() => {
-        return () => {
+    const fiber = this.ctx.fiber
+    const owner = registrationOwner(this.ctx)
+    // The effect goes first: a disposed (or unloading) fiber rejects the
+    // registration before it can leave a half-installed entry behind, and a
+    // later cross-owner throw from the runtime still leaves a disposer that
+    // no-ops (it never owned the entry).
+    this.ctx.effect(() => {
+      return () => {
+        if (runtime.isOwnedBy(patch.id, fiber)) {
           runtime.disable(patch.id)
           runtime.remove(patch.id)
         }
-      }, `fabric:register(${patch.id})`)
-    }
+      }
+    }, `fabric:register(${patch.id})`)
+    runtime.register(patchInfo(patch), owner, fiber)
+    runtime.enable(patch.id, patch.handler)
     return patch.id
   }
 
@@ -92,6 +102,30 @@ export class FabricService extends Service {
    */
   enable(id: string, handler: FabricHandler): void {
     runtime.enable(id, handler)
+  }
+
+  /**
+   * Remove a patch entirely; transformed code delegates to the original body
+   * until the patch is registered again. The registering fiber's effect
+   * still owns the entry, so a removal here cannot be undone by a later
+   * fiber disposal (the disposer no-ops once the entry is gone).
+   * @param id - the patch id.
+   */
+  remove(id: string): void {
+    runtime.remove(id)
+  }
+
+  /**
+   * Whether the entry for a patch id is still owned by the given fiber —
+   * the ownership check a cooperative disposer (e.g. the compat facade's
+   * observer) runs before disabling, so a stale generation's cleanup cannot
+   * disable a newer generation's registration that took the entry over.
+   * @param id - the patch id.
+   * @param fiber - the fiber token the registration was made on.
+   * @returns true while the entry exists and is owned by that fiber.
+   */
+  owns(id: string, fiber: unknown): boolean {
+    return runtime.isOwnedBy(id, fiber)
   }
 
   /**
@@ -124,6 +158,29 @@ export function getFabric(ctx: Context): FabricService {
   const existing = ctx.get('fabric')
   if (existing !== undefined) return existing
   return new FabricService(ctx)
+}
+
+/**
+ * Resolve the identity a registration belongs to — the token the runtime
+ * uses to keep a patch id exclusive to one owner while letting that owner's
+ * HMR generations take it back.
+ *
+ * Under the Loader, every fiber in an entry tree carries the entry row
+ * (`fiber.entry`), which is stable across that row's HMR generations and
+ * distinct across rows, so it is the exact identity. Without a Loader
+ * (unit/child harnesses), the plugin callback is the fallback: re-applying
+ * the same plugin reuses its runtime record, while different plugins keep
+ * distinct callbacks. The fiber itself is the last resort (root context).
+ * @param ctx - the context the registration was made on.
+ * @returns the registration owner token.
+ */
+function registrationOwner(ctx: Context): unknown {
+  // The Loader augments Fiber with `entry` (see @cordisjs/plugin-loader); it
+  // is a plain property, so no type-level dependency is needed here.
+  const entry = (ctx.fiber as { entry?: unknown }).entry
+  if (entry !== undefined) return entry
+  const runtime = ctx.fiber.runtime
+  return runtime?.callback ?? ctx.fiber
 }
 
 /** Validate the static fields of a patch descriptor. */

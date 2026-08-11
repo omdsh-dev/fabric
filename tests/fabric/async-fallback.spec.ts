@@ -10,10 +10,14 @@ const hookEntry = fileURLToPath(new URL('../../lib/hook-entry.js', import.meta.u
 // loader, so this suite requires `pnpm run build` to have run.
 describe.skipIf(!existsSync(hookEntry))('cordis-fabric async module.register fallback (built lib)', () => {
   it('transforms ESM and CommonJS targets on the async hook path', () => {
+    // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
+    // tsconfig; the child must resolve against this repo's own tsconfig.
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, DSH_FABRIC_FORCE_ASYNC_HOOKS: '1' }
+    delete childEnv.TSX_TSCONFIG_PATH
     const result = spawnSync(process.execPath, [runner], {
       cwd: fileURLToPath(new URL('../..', import.meta.url)),
       encoding: 'utf8',
-      env: { ...process.env, DSH_FABRIC_FORCE_ASYNC_HOOKS: '1' },
+      env: childEnv,
     })
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(result.stdout).toContain('PASS async-fallback add(2,3): 23')

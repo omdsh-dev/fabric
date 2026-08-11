@@ -45,6 +45,14 @@ let cached: { config: string; transforms: TransformFn[] } | undefined
 export function initialize(data: { configPath?: string; port?: MessagePort } = {}): void {
   configPath = data.configPath
   bindingPort = data.port
+  // Answer a main-thread flush request: every binding report posted before
+  // this reply precedes it on the same channel, so the main thread can treat
+  // the reply as "all reports from completed loads have landed".
+  bindingPort?.on('message', (message: unknown) => {
+    if (typeof message === 'object' && message !== null && (message as { type?: string }).type === 'flush') {
+      bindingPort?.postMessage({ type: 'flush-done' })
+    }
+  })
 }
 
 /**

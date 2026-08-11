@@ -45,11 +45,10 @@ The bundle patch only composes these package rows. Profile bootstrap, browser tr
 
 ## Development
 
-A full typecheck expects sibling checkouts:
+A full typecheck expects the DSH checkout beside this repository:
 
 ```text
-~/git/deepseek-harness
-~/git/fabric
+../deepseek-harness
 ```
 
 ```sh

@@ -1,6 +1,6 @@
 # `@deepseek-ai/dsh-cordis-fabric`
 
-[English](README.md) | 中文
+[English](fabric.md) | 中文
 
 基于 [Orchestrion-JS](https://github.com/nodejs/orchestrion-js) 的Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认 DSH composition 不会挂载它，patch 通过受信任代码注册。
 
@@ -19,14 +19,14 @@
 
 ## 安装和 bootstrap
 
-```ts ignore-check
+```ts
 import { bootstrapFabric, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import type { Context } from 'cordis'
 
-// 1. Before any target module is imported (application preparation):
-const disposeHooks = bootstrapFabric([patch])
-
-// 2. Mount the service so plugins can register handlers:
+declare const ctx: Context
+const disposeHooks = bootstrapFabric([])
 await ctx.plugin(FabricService)
+disposeHooks()
 ```
 
 `bootstrapFabric` 校验 patches、构建它们的 Orchestrion instrumentation 并安装变换 hooks。在 `dsh` 宿主中，`cordis-fabric` composition 行在 `config.fabric.patches` 下携带静态描述（id/target/operation——handler 是注册时绑定的受信任代码）时，会在 `boot()` 准备阶段自动 bootstrap，早于任何 config-tree entry 挂载；已弃用的 `config.patches` 键仍被兼容并记录警告。当 instrumentation 已经构建好时，`installFabricHooks` 是更底层的形态。
@@ -58,10 +58,13 @@ hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对�
 
 ## 注册 patch
 
-```ts ignore-check
+```ts
+import type { Context } from 'cordis'
+import type { FabricCall, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+
 export const inject = ['fabric']
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context & { fabric: FabricService }): void {
   ctx.fabric.register({
     id: 'my-vendor/rewrite-greeting',
     target: {
@@ -71,14 +74,14 @@ export function apply(ctx: Context): void {
       functionQuery: { functionName: 'greet', kind: 'Sync' },
     },
     operation: 'before',
-    handler(call: { arguments: unknown[] }) {
+    handler(call: FabricCall) {
       call.arguments[0] = String(call.arguments[0]).toUpperCase()
     },
   })
 }
 ```
 
-注册是 fiber effect：销毁插件会禁用并移除 patch。`ctx.fabric.list()` 返回有序诊断快照，条目携带该 patch 记录的加载期绑定；`ctx.fabric.bindings(id?)` 直接返回绑定记录；`ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` 可切换 patch 而不移除它。无法声明可选服务的插件可通过 `getFabric(ctx)` 挂载它——挂载感知：复用既有注册并返回该 context 视角下的 registry。
+注册是注册插件拥有的 fiber effect：销毁插件会禁用并移除 patch，且一个 patch id 只属于一个属主——其他插件注册已占用的 id 会失败即显式，而不是静默覆盖在位者的 hook。每次注册都会在注册 fiber 上挂载独立的销毁 effect，disposer 只在 entry 仍归该 fiber 所有时才移除它：热重载的新一代以相同属主收回其插件的 patch（所有权移交），因此旧一代的卸载变成 no-op，不会把新一代的 hook 一起注销。`ctx.fabric.list()` 返回有序诊断快照，条目携带该 patch 记录的加载期绑定；`ctx.fabric.bindings(id?)` 直接返回绑定记录；`ctx.fabric.disable(id)` / `ctx.fabric.enable(id, handler)` 可切换 patch 而不移除它，`ctx.fabric.remove(id)` 则彻底移除。无法声明可选服务的插件可通过 `getFabric(ctx)` 挂载它——挂载感知：复用既有注册并返回该 context 视角下的 registry。
 
 ## 安全与信任模型
 

@@ -1,8 +1,7 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-command/client'
-import { CommandService } from '@deepseek-ai/dsh-client-ui-command/src/client/service.ts'
+import { CommandService } from '@deepseek-ai/dsh-client-ui-command/client'
 import type { SlashSource } from '@deepseek-ai/dsh-client-ui-slash/client'
 import { FabricClientService, apply, name, type FabricSlotOptions } from '../../src/client/api.ts'
 
