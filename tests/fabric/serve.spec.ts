@@ -43,7 +43,7 @@ const neutralizer = {
   id: 'serve-test/neutralize-sample',
   target: {
     module: '@deepseek-ai/dsh-cordis-fabric',
-    versionRange: '*',
+    versionRange: '>=0.0.1-0',
     filePath: 'tests/fabric/fixtures/serve-target/browser.js',
     astQuery: 'VariableDeclarator[id.name="bashToolviewSample"] > ObjectExpression > Property[key.name="apply"] > FunctionExpression',
   },
@@ -55,7 +55,7 @@ const missing = {
   id: 'serve-test/missing',
   target: {
     module: '@deepseek-ai/dsh-cordis-fabric',
-    versionRange: '*',
+    versionRange: '>=0.0.1-0',
     filePath: 'tests/fabric/fixtures/serve-target/browser.js',
     functionQuery: { functionName: 'noSuchFunction', kind: 'Sync' },
   },
@@ -67,7 +67,7 @@ const planNeutralizer = {
   id: 'serve-test/neutralize-plan',
   target: {
     module: '@deepseek-ai/dsh-cordis-fabric',
-    versionRange: '*',
+    versionRange: '>=0.0.1-0',
     filePath: 'tests/fabric/fixtures/serve-target/browser.js',
     astQuery: 'VariableDeclarator[id.name="planToolviewSample"] > ObjectExpression > Property[key.name="apply"] > FunctionExpression',
   },
@@ -103,7 +103,7 @@ describe('serveBrowserTransform', () => {
       id: 'serve-test/composition-anchor',
       target: {
         module: '@fixture/browser-target',
-        versionRange: '*',
+        versionRange: '>=0.0.1-0',
         filePath: 'browser.js',
         astQuery: 'VariableDeclarator[id.name="fixtureSample"] > ObjectExpression > Property[key.name="apply"] > FunctionExpression',
       },
