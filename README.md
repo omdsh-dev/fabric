@@ -28,7 +28,7 @@ packages/
   cordis-fabric/          # pure transformation service + browser client entry
   cordis-fabric-api/      # pure compat facade (peer-only library)
   cordis-fabric-dsh/      # DSH facades, invariant, profile bootstrap
-lib/                      # generated install artifacts (per package)
+lib/                      # build outputs (ignored; each package prepares its own on install)
 ```
 
 ## Repository boundary
@@ -55,6 +55,23 @@ Fabric patch handlers are trusted code registered through `ctx.fabric.register()
 
 The bundle patch only composes these package rows. The launcher/bootstrap and browser build seams the trio needs to RUN are host-side code outside the three packages and are carried as `patches/fabric-host-integration.patch` (apply it to a deepseek-harness checkout at snapshot `4ee4ae88`; see `patches/README.md`). A host already at the split commit needs nothing.
 
+## Installation
+
+The bundle installs through DSH's official bundle-plugin channel; the trio resolves from this same GitHub repository through git subdirectory specs, so nothing is published:
+
+```sh
+dsh plugin --profile web add github:dsh-external/fabric
+```
+
+Restart the web app afterwards. The profile rows are disabled opt-ins; enable `cordis-fabric` / `cordis-fabric-dsh` in the profile composition to activate the Fabric layer.
+
+The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`.
+
+Two prerequisites:
+
+- pnpm resolves GitHub dependencies over SSH, so the installing machine needs GitHub SSH access for `dsh-external/fabric`.
+- The load-time transformation hooks must be installed by the host launcher before any target module import. Official DSH master does not call them yet; on such hosts the bundle mounts but transformations do not engage. The wiring for source hosts at snapshot `4ee4ae88` ships as `patches/fabric-host-integration.patch` (see `patches/README.md`); once official DSH includes the wiring, the bundle is fully functional with no host changes.
+
 ## Development
 
 ```sh
@@ -65,7 +82,7 @@ pnpm test
 pnpm run build
 ```
 
-`pnpm run prepare` is the consumer-side artifact build for Git and tarball installation: it emits declarations and runtime bundles for all three packages using only this repository's installed dependencies, so a Git install does not require sibling project references or another checkout. pnpm may require the profile to allow the package's prepare script; only approve a pinned, trusted checkout.
+`lib/` is a build output, never committed: it is recreated by the trio's `prepare` scripts (the root `build` script runs them locally). In this workspace, the root manifest's git subdirectory specs for the trio are redirected to the local packages through `pnpm-workspace.yaml` overrides, so `pnpm install` never re-clones the repository.
 
 ## Model Experience
 
@@ -75,4 +92,4 @@ The low-level transformer contributes no model-visible content. The cooperative 
 
 - Node load-time transformation requires precompiled JavaScript; browser transforms strip TypeScript before applying handlers.
 - The browser faces are split across the two dual-face packages (`cordis-fabric/client` for the bridge and service, `cordis-fabric-dsh/client` for the Mod-facing facade); consumers that need the complete typed SlotMap should use the authoritative DSH slot service instead of widening the facade.
-- The former host integration patch for older DSH snapshots was removed with the restructure; a bundle cannot add missing loader or browser build seams.
+- On official DSH master (which lacks the launcher bootstrap call), the load-time and browser build seams do not engage; the wiring for source hosts at snapshot `4ee4ae88` ships as `patches/fabric-host-integration.patch`, and a bundle cannot add missing loader or browser build seams.

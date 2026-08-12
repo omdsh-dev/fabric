@@ -3,5 +3,13 @@ packages:
 
 autoInstallPeers: false
 
+# Consumers resolve the trio from the GitHub repository via the git
+# subdirectory specs in the root manifest; inside this workspace, installs
+# resolve them to the local packages instead of re-cloning the repository.
+overrides:
+  cordis-fabric: workspace:*
+  cordis-fabric-api: workspace:*
+  cordis-fabric-dsh: workspace:*
+
 allowBuilds:
   esbuild: true

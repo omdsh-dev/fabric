@@ -1,0 +1,55 @@
+{
+  "name": "fabric-host-integration",
+  "baseline": "4ee4ae888fb8e5c2fb2f81ebd7064d02034e3792",
+  "upstream": "0e1065d4",
+  "out": "patches/fabric-host-integration.patch",
+  "exclude": [
+    "packages/self-modification/cordis-fabric",
+    "packages/self-modification/cordis-fabric-api",
+    "packages/self-modification/cordis-fabric-dsh",
+    "README.md",
+    "README.zh.md",
+    "README.i18n.yaml",
+    "docs",
+    ".agents"
+  ],
+  "revert": [
+    "packages/bundle/web-app/cordis.patch.yml",
+    "packages/bundle/web-app/package.json",
+    "tsconfig.base.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "THIRD_PARTY_NOTICES.md",
+    "packages/typert/generator/src/analyzer.ts",
+    "packages/typert/generator/src/cordis-catalog.ts",
+    "scripts/gen-cordis-catalog.ts",
+    "scripts/gen-doc-graphs.ts",
+    "scripts/check-workspace-constraints.ts",
+    "scripts/package-invariants.ts",
+    "scripts/test-invariants.ts",
+    "scripts/verify-built-package-invariants.mjs",
+    "scripts/verify-package-readme-model-experience.ts"
+  ],
+  "seams": [
+    {
+      "file": ".gitignore",
+      "old": "node_modules/\nlib/",
+      "new": "node_modules/\n# Test fixtures that must mimic an installed package tree.\n!apps/cli/tests/fixtures/node_modules/\n!apps/cli/tests/fixtures/node_modules/**\nlib/"
+    },
+    {
+      "file": "knip.json",
+      "old": "    \"apps/cli\": {\n      \"entry\": [\n        \"tests/**/*.spec.ts\",\n        \"tests/**/*.e2e.ts\",\n        \"tests/**/*.snapshot.ts\"\n      ],\n      \"project\": [\n        \"src/**/*.ts\",\n        \"tests/**/*.ts\"\n      ],\n      \"ignoreDependencies\": [\n        \"@deepseek-ai/.+\"\n      ]\n    },",
+      "new": "    \"apps/cli\": {\n      \"entry\": [\n        \"tests/**/*.spec.ts\",\n        \"tests/**/*.e2e.ts\",\n        \"tests/**/*.snapshot.ts\"\n      ],\n      \"project\": [\n        \"src/**/*.ts\",\n        \"tests/**/*.ts\"\n      ],\n      \"ignoreDependencies\": [\n        \"@deepseek-ai/.+\",\n        \"fabric-bootstrap-fixture\"\n      ]\n    },"
+    },
+    {
+      "file": "tsconfig.client.json",
+      "old": "    \"scripts/client-bundle-css.spec.ts\",\n    \"scripts/client-bundle-purity.spec.ts\"\n  ],",
+      "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
+    },
+    {
+      "file": "tsconfig.host.json",
+      "old": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\"\n  ],",
+      "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
+    }
+  ]
+}

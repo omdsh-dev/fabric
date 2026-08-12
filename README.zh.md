@@ -28,7 +28,7 @@ packages/
   cordis-fabric/          # 纯变换服务 + 浏览器 client entry
   cordis-fabric-api/      # 纯 compat facade(peer-only 库)
   cordis-fabric-dsh/      # DSH facades、invariant、profile bootstrap
-lib/                      # 生成的安装产物(每个包各自生成)
+lib/                      # 构建产物(已忽略;每个包在安装时自行 prepare)
 ```
 
 ## 仓库边界
@@ -55,6 +55,23 @@ Patch handler 是通过 `ctx.fabric.register()` 注册的可信代码;YAML 或�
 
 新的 bundle 层只负责组合 package rows。三包要真正运行所需的 launcher/bootstrap 与 browser build 接缝是宿主侧代码,不属于三包,以 `patches/fabric-host-integration.patch` 携带(对快照 `4ee4ae88` 的 deepseek-harness checkout 执行 `git apply`;见 `patches/README.md`)。已到拆分提交的宿主无需任何补丁。
 
+## 安装
+
+bundle 通过 DSH 官方 bundle 插件通道安装;三包通过 git 子目录 spec 从本 GitHub 仓库解析,无需发布:
+
+```sh
+dsh plugin --profile web add github:dsh-external/fabric
+```
+
+装完重启 web。profile 行为默认禁用的 opt-in;在 profile 组合中启用 `cordis-fabric` / `cordis-fabric-dsh` 即激活 Fabric 层。
+
+仓库不带任何构建产物:三包的 `prepare` 脚本在 Git 安装时构建 `lib/`(pnpm 会安装该包的 devDependencies 并在消费者机器上运行 `prepare`)。安装跟随 `main`。
+
+两个前提:
+
+- pnpm 通过 SSH 解析 GitHub 依赖,安装机器需要对 `dsh-external/fabric` 有 GitHub SSH 访问权;
+- load-time 变换钩子必须在任何目标模块导入前由宿主 launcher 安装。官方 DSH master 尚未调用它们;在这类宿主上 bundle 能挂载但变换不生效。面向快照 `4ee4ae88` 源码宿主的接线以 `patches/fabric-host-integration.patch` 携带(见 `patches/README.md`);官方 DSH 合入接线后,bundle 无需任何宿主改动即可完全生效。
+
 ## 开发
 
 ```sh
@@ -65,7 +82,7 @@ pnpm test
 pnpm run build
 ```
 
-`pnpm run prepare` 是 Git 和 tarball 安装的消费侧产物构建:它使用本仓库已安装的依赖为三个包生成声明与运行时 bundle,因此 Git 安装不需要 sibling project references 或其他 checkout。pnpm 可能要求 profile 允许 prepare 脚本;只应批准固定且可信的 checkout。
+`lib/` 是构建产物,永不提交:由三包的 `prepare` 脚本重建(根 `build` 脚本在本地执行它们)。本 workspace 中,root manifest 对三包的 git 子目录 spec 通过 `pnpm-workspace.yaml` 的 overrides 指回本地包,`pnpm install` 不会重复克隆仓库。
 
 ## 模型体验
 
@@ -75,4 +92,4 @@ pnpm run build
 
 - Node 加载期变换要求预编译 JavaScript;browser transform 会在应用 handler 前剥离 TypeScript。
 - 浏览器面分布在两个双面包中(`cordis-fabric/client` 提供 bridge 与 service,`cordis-fabric-dsh/client` 提供 Mod-facing facade);需要完整 SlotMap 类型的 consumer 应直接使用 DSH authoritative slot service。
-- 面向旧 DSH 快照的宿主接线补丁已随重构移除;bundle 不能新增缺失的 loader 或 browser build 接缝。
+- 官方 DSH master(缺少 launcher bootstrap 调用)上,load-time 与 browser build 接缝不生效;面向快照 `4ee4ae88` 源码宿主的接线以 `patches/fabric-host-integration.patch` 携带,bundle 不能新增缺失的 loader 或 browser build 接缝。

@@ -77,6 +77,9 @@ for (const filePath of textFiles) {
 }
 
 const workspaceMembers = new Set(['cordis-fabric', 'cordis-fabric-api', 'cordis-fabric-dsh'])
+// The bundle carrier resolves the trio through git subdirectory specs into
+// this same repository; anything else must be registry-only.
+const gitSpecPattern = /^github:dsh-external\/fabric#([^&]*)&path:\/(packages\/cordis-fabric(?:-api|-dsh)?)$/
 const manifestPaths = ['package.json', ...['cordis-fabric', 'cordis-fabric-api', 'cordis-fabric-dsh'].map(name => join('packages', name, 'package.json'))]
 for (const manifestPath of manifestPaths) {
   const manifest = JSON.parse(readFileSync(join(root, manifestPath), 'utf8'))
@@ -86,6 +89,15 @@ for (const manifestPath of manifestPaths) {
         failures.push(`${manifestPath}: ${field}.${name} uses non-registry spec ${spec}`)
       } else if (/^workspace:/i.test(spec) && !workspaceMembers.has(name)) {
         failures.push(`${manifestPath}: ${field}.${name} uses workspace spec for a non-workspace member ${spec}`)
+      } else if (/^github:/i.test(spec)) {
+        const match = gitSpecPattern.exec(spec)
+        if (match === null) {
+          failures.push(`${manifestPath}: ${field}.${name} uses an unrecognized git spec ${spec}`)
+        } else if (match[1] !== 'main') {
+          failures.push(`${manifestPath}: ${field}.${name} git spec must track main: ${spec}`)
+        } else if (!existsSync(join(root, match[2], 'package.json'))) {
+          failures.push(`${manifestPath}: ${field}.${name} git spec path is not a workspace package: ${spec}`)
+        }
       }
     }
   }

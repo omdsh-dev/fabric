@@ -19,16 +19,13 @@ This workspace ships exactly three packages: `cordis-fabric`, `cordis-fabric-api
 
 `fabric-host-integration.patch` carries the deepseek-harness host-side changes the three packages need in order to RUN. The three packages only know how to install hooks and mount facades; a DSH host at the pre-split snapshot does not call them, so the bundle would be inert without this patch.
 
-The patch is the **complete** upstream diff `4ee4ae88..0e1065d4` restricted to everything outside the shipped packages: the only excluded paths are the three package directories themselves, so a host at `4ee4ae88` plus this patch becomes `0e1065d4` minus the trio. Nothing outside the packages is dropped. The 69-file diff covers:
+The patch keeps only the seams the official plugin registration system cannot provide. Everything the official channels handle is deliberately excluded: installing the trio (`dsh plugin --profile <p> add github:dsh-external/fabric`), bundle roster rows and dependencies, catalog generation over the workspace, invariant/gate exemptions for trio-in-workspace, and documentation (`README*`, `docs/`, `.agents/`). The 15-file diff covers the seams only:
 
-- `apps/cli/` — launcher wiring and bootstrap verification: `src/profile-boot.ts` calls `installFabricBootstrap` in the boot prepare phase (before any target module import) and `checkFabricRequiredPatches` after boot; `ProfileRows` becomes the fabric row type; `tests/fabric-bootstrap-*` and its fixture verify it; `package.json` / `tsconfig.json` wire the CLI build.
-- `packages/bundle/web-app/` — `cordis.patch.yml` roster rows `cordis-fabric` and `cordis-fabric-dsh` (disabled opt-ins) and `package.json` bundle dependencies on the three packages.
-- `packages/client/tsdown.client.ts` — the `clientBundle` opt-in source `transform` (the browser build seam Fabric bundles rewrite through).
-- `packages/self-modification/tool-cordis/src/api-catalog.ts` — the official package's catalog entries for the fabric services and types; the host needs them for the fabric APIs to be visible in its catalog.
-- `packages/typert/generator/` and `scripts/gen-cordis-catalog.ts` — catalog generation adapts to the three packages.
-- `scripts/` — host-side tests (`client-bundle-source-transform.spec.ts`, `dev-web-fabric.spec.ts`), workspace-constraint and doc-graph updates, invariant and README gate exemptions.
-- `tsconfig.base.json` (source paths for the trio), `tsconfig.host.json` / `tsconfig.client.json` (project references), root `package.json` (dev dependency `unrun`, catalog script `tsx --tsconfig`), `pnpm-lock.yaml`, `knip.json`, `.gitignore` (fixture `node_modules` negations).
-- Documentation that changed with the feature: root `README*`, `THIRD_PARTY_NOTICES.md`, `docs/`, and `.agents/notes/implemented/` (architecture and testing notes, including the Fabric HMR e2e proof).
+- `apps/cli/` — launcher wiring and bootstrap verification: `src/profile-boot.ts` calls `installFabricBootstrap` in the boot prepare phase (before any target module import) and `checkFabricRequiredPatches` after boot; `ProfileRows` becomes the fabric row type; `tests/fabric-bootstrap-*` and its fixture verify it; `package.json` / `tsconfig.json` wire the CLI build (the static `cordis-fabric-dsh` import resolves from the workspace, so this seam is for source hosts until the official host merges the wiring).
+- `packages/client/tsdown.client.ts` — the `clientBundle` opt-in source `transform` (the browser build seam; `dsh.client` has no transform field, so the host build tool must expose it).
+- `packages/self-modification/tool-cordis/src/api-catalog.ts` — the official package's catalog entries for the fabric services and types; the catalog is compiled into the official package with no runtime registration path, so the entries must be patched in.
+- `scripts/` — host-side seam tests (`client-bundle-source-transform.spec.ts`, `dev-web-fabric.spec.ts`).
+- `tsconfig.host.json` / `tsconfig.client.json` (include/exclude the new seam spec), `knip.json` and `.gitignore` (the `apps/cli` bootstrap fixture).
 
 Apply it from a deepseek-harness checkout at snapshot `4ee4ae88` (or any tree that lacks the wiring):
 
@@ -36,12 +33,18 @@ Apply it from a deepseek-harness checkout at snapshot `4ee4ae88` (or any tree th
 git apply patches/fabric-host-integration.patch
 ```
 
-A host already at `0e1065d4` or later already contains this wiring and needs nothing. Regenerate the patch from upstream when the fabric host integration changes again:
+or with the applier (idempotent: detects hosts that already contain the wiring):
 
 ```sh
-git -C <deepseek-harness> diff 4ee4ae888fb8e5c2fb2f81ebd7064d02034e3792 0e1065d4 -- . \
-  ':(exclude)packages/self-modification/cordis-fabric' \
-  ':(exclude)packages/self-modification/cordis-fabric-api' \
-  ':(exclude)packages/self-modification/cordis-fabric-dsh' \
-  > patches/fabric-host-integration.patch
+pnpm run patch:host -- <deepseek-harness-checkout>
 ```
+
+The bundle itself installs through the official plugin channel: `dsh plugin --profile <p> add github:dsh-external/fabric`.
+
+A host already at `0e1065d4` or later already contains this wiring and needs nothing. Regenerate the patch with the extraction script instead of by hand — it reproduces the seam-only diff mechanically (worktree at the upstream commit, reverts the registry-handled files to the baseline, reduces the four partially-kept files to their seam lines, excludes trio and documentation, and verifies forward and reverse apply). The values live in `patches/host-patch.config.json`:
+
+```sh
+pnpm run extract:patch -- --harness <fork-checkout>
+```
+
+The `--harness` checkout must contain both snapshots (the fork worktree, e.g. the `feat-fabric` branch). The script fails loud when a seam anchor has drifted upstream.

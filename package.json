@@ -11,10 +11,11 @@
   "license": "BSD-3-Clause",
   "scripts": {
     "build": "node scripts/prepare.mjs",
-    "prepare": "node scripts/prepare.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.vitest.json --pretty false",
-    "verify:self-contained": "node scripts/verify-self-contained.mjs"
+    "verify:self-contained": "node scripts/verify-self-contained.mjs",
+    "extract:patch": "node scripts/extract-patch.mjs",
+    "patch:host": "bash scripts/patch.sh"
   },
   "dsh": {
     "bundle": {
@@ -22,9 +23,9 @@
     }
   },
   "dependencies": {
-    "cordis-fabric": "workspace:^",
-    "cordis-fabric-api": "workspace:^",
-    "cordis-fabric-dsh": "workspace:^"
+    "cordis-fabric": "github:dsh-external/fabric#main&path:/packages/cordis-fabric",
+    "cordis-fabric-api": "github:dsh-external/fabric#main&path:/packages/cordis-fabric-api",
+    "cordis-fabric-dsh": "github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
