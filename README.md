@@ -77,9 +77,7 @@ pnpm run patch:host -- .          # from this bundle repo; or git apply the patc
 pnpm install --no-frozen-lockfile # first install: lockfile gains the two git deps,
                                   # pulls the trio from GitHub, prepare builds it
 pnpm run build
-pnpm dsh plugin --profile web add github:dsh-external/fabric
-# enable the cordis-fabric / cordis-fabric-dsh rows in the profile composition
-pnpm dsh --profile web
+pnpm dsh web            # the web-app bundle layer already composes the fabric rows
 ```
 
 **npm-installed official `dsh`** — cannot take the source patch (the CLI ships prebuilt); it works once the official repository merges the wiring (the fork at `0e1065d4` contains it).

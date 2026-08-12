@@ -54,11 +54,6 @@
     },
     {
       "file": "packages/boot/app-boot/src/profile.ts",
-      "old": "# overrides, disables, and insert lists; \\`!!js\\` expressions allowed).\n[]\n`",
-      "new": "# overrides, disables, and insert lists; \\`!!js\\` expressions allowed).\n# The Fabric extension rows (source-host wiring) are pre-declared here:\n# the trio resolves from the source worktree's node_modules.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n`"
-    },
-    {
-      "file": "packages/boot/app-boot/src/profile.ts",
       "old": "nodeLinker: hoisted\nautoInstallPeers: false\n`",
       "new": "nodeLinker: hoisted\nautoInstallPeers: false\n# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):\n# the Fabric trio arrives through git specs, so the profile allows them.\nblockExoticSubdeps: false\n`"
     },
@@ -76,6 +71,11 @@
       "file": "apps/cli/package.json",
       "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
       "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
+    },
+    {
+      "file": "packages/bundle/web-app/cordis.patch.yml",
+      "old": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n",
+      "new": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n\n# The Fabric extension rows: the trio resolves from the source worktree's\n# node_modules, so every profile booting this bundle gets them without a\n# profile-layer edit.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n"
     }
   ]
 }

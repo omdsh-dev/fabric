@@ -77,9 +77,7 @@ pnpm run patch:host -- .          # 在本 bundle 仓库里执行;或 git apply 
 pnpm install --no-frozen-lockfile # 首次安装:lockfile 新增两个 git 依赖,
                                   # 从 GitHub 拉三包,prepare 现造 lib
 pnpm run build
-pnpm dsh plugin --profile web add github:dsh-external/fabric
-# 在 profile 组合中启用 cordis-fabric / cordis-fabric-dsh 两行
-pnpm dsh --profile web
+pnpm dsh web            # web-app bundle 层已组合 fabric 两行
 ```
 
 **npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `0e1065d4` 已包含)。
