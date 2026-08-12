@@ -53,6 +53,11 @@
       "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
     },
     {
+      "file": "packages/boot/app-boot/src/profile.ts",
+      "old": "nodeLinker: hoisted\nautoInstallPeers: false\n`",
+      "new": "nodeLinker: hoisted\nautoInstallPeers: false\n# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):\n# the Fabric trio arrives through git specs, so the profile allows them.\nblockExoticSubdeps: false\n`"
+    },
+    {
       "file": "pnpm-workspace.yaml",
       "old": "# (git hooks) genuinely need theirs.\nallowBuilds:\n  esbuild: true",
       "new": "# (git hooks) genuinely need theirs.\n# The Fabric trio resolves from git subdirectory specs and builds itself\n# through its prepare scripts; pnpm 11 allowBuilds only accepts exact\n# git+url#commit keys (the commit changes on every push), so the git\n# installs are allowed wholesale.\ndangerouslyAllowAllBuilds: true\n\nallowBuilds:\n  esbuild: true"

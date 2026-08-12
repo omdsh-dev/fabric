@@ -26,6 +26,7 @@ The patch keeps only the seams the official plugin registration system cannot pr
 - `packages/self-modification/tool-cordis/src/api-catalog.ts` — the official package's catalog entries for the fabric services and types; the catalog is compiled into the official package with no runtime registration path, so the entries must be patched in.
 - `scripts/` — host-side seam tests (`client-bundle-source-transform.spec.ts`, `dev-web-fabric.spec.ts`).
 - `tsconfig.host.json` / `tsconfig.client.json` (include/exclude the new seam spec), `knip.json` and `.gitignore` (the `apps/cli` bootstrap fixture), and `pnpm-workspace.yaml` (`dangerouslyAllowAllBuilds: true` — pnpm 11 allowBuilds only accepts exact `git+url#commit` keys for git installs, so the trio's prepare builds are allowed wholesale; the lockfile changes because the CLI gains two git deps, so the first install runs with `--no-frozen-lockfile`).
+- `packages/boot/app-boot/src/profile.ts` — the profile init template gains `blockExoticSubdeps: false`: pnpm 11 blocks git-resolved subdependencies by default, and the carrier's trio arrives through git specs.
 
 Apply it from a deepseek-harness checkout that lacks the wiring (works on the pinned snapshot `4ee4ae88` and the current official main):
 

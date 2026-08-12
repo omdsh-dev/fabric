@@ -222,6 +222,20 @@ index 1f3dcefe..c6d9eca4 100644
        ]
      },
      "packages/client/modules": {
+diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
+index 6eecfc1e..0219397a 100644
+--- a/packages/boot/app-boot/src/profile.ts
++++ b/packages/boot/app-boot/src/profile.ts
+@@ -140,6 +140,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
+ 
+ nodeLinker: hoisted
+ autoInstallPeers: false
++# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):
++# the Fabric trio arrives through git specs, so the profile allows them.
++blockExoticSubdeps: false
+ `
+ 
+ /**
 diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
 index 13df9f3d..8acdc300 100644
 --- a/packages/client/tsdown.client.ts
