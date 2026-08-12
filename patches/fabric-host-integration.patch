@@ -223,10 +223,25 @@ index 1f3dcefe..c6d9eca4 100644
      },
      "packages/client/modules": {
 diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
-index 6eecfc1e..0219397a 100644
+index 6eecfc1e..0ba86d69 100644
 --- a/packages/boot/app-boot/src/profile.ts
 +++ b/packages/boot/app-boot/src/profile.ts
-@@ -140,6 +140,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
+@@ -127,7 +127,13 @@ export const DEFAULT_PROFILE_BUNDLES: readonly string[] = ['@deepseek-ai/dsh-bas
+ const PROFILE_PATCH_TEMPLATE = `# Your patch layer for this dsh profile, applied after every bundle layer:
+ # a top-level YAML array of loader patch entries (id-targeted config
+ # overrides, disables, and insert lists; \`!!js\` expressions allowed).
+-[]
++# The Fabric extension rows (source-host wiring) are pre-declared here:
++# the trio resolves from the source worktree's node_modules.
++- insert:
++    - id: cordis-fabric
++      name: 'cordis-fabric'
++    - id: cordis-fabric-dsh
++      name: 'cordis-fabric-dsh'
+ `
+ 
+ // The hoisted linker gives out-of-tree plugins a flat node_modules whose
+@@ -140,6 +146,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
  
  nodeLinker: hoisted
  autoInstallPeers: false
