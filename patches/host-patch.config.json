@@ -14,6 +14,7 @@
     ".agents"
   ],
   "revert": [
+    "apps/cli/tsconfig.json",
     "packages/bundle/web-app/cordis.patch.yml",
     "packages/bundle/web-app/package.json",
     "tsconfig.base.json",
@@ -50,6 +51,21 @@
       "file": "tsconfig.host.json",
       "old": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\"\n  ],",
       "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
+    },
+    {
+      "file": "pnpm-workspace.yaml",
+      "old": "# (git hooks) genuinely need theirs.\nallowBuilds:\n  esbuild: true",
+      "new": "# (git hooks) genuinely need theirs.\n# The Fabric trio resolves from git subdirectory specs and builds itself\n# through its prepare scripts; pnpm 11 allowBuilds only accepts exact\n# git+url#commit keys (the commit changes on every push), so the git\n# installs are allowed wholesale.\ndangerouslyAllowAllBuilds: true\n\nallowBuilds:\n  esbuild: true"
+    },
+    {
+      "file": "apps/cli/package.json",
+      "old": "    \"@deepseek-ai/dsh-compact-tool-result-prune\": \"workspace:^\",\n    \"@deepseek-ai/dsh-goal\": \"workspace:^\",",
+      "new": "    \"@deepseek-ai/dsh-compact-tool-result-prune\": \"workspace:^\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"@deepseek-ai/dsh-goal\": \"workspace:^\","
+    },
+    {
+      "file": "apps/cli/package.json",
+      "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
+      "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
     }
   ]
 }

@@ -67,10 +67,27 @@ dsh plugin --profile web add github:dsh-external/fabric
 
 仓库不带任何构建产物:三包的 `prepare` 脚本在 Git 安装时构建 `lib/`(pnpm 会安装该包的 devDependencies 并在消费者机器上运行 `prepare`)。安装跟随 `main`。
 
+Fabric 层要真正生效,宿主 launcher 必须在任何目标模块导入前调用三包的 bootstrap。官方 DSH master 目前没有这一步。两种宿主情形:
+
+**源码宿主(现在就能完整可用)** — deepseek-harness checkout + 宿主补丁(`patches/fabric-host-integration.patch`,见 `patches/README.md`)。补丁接好 launcher、browser build 接缝和 tool-cordis catalog;CLI 的三包依赖是 git spec,纯官方 checkout 在 `pnpm install` 时就能拉取并现造三包:
+
+```sh
+git clone <deepseek-harness> && cd deepseek-harness
+pnpm run patch:host -- .          # 在本 bundle 仓库里执行;或 git apply 补丁
+pnpm install --no-frozen-lockfile # 首次安装:lockfile 新增两个 git 依赖,
+                                  # 从 GitHub 拉三包,prepare 现造 lib
+pnpm run build
+pnpm dsh plugin --profile web add github:dsh-external/fabric
+# 在 profile 组合中启用 cordis-fabric / cordis-fabric-dsh 两行
+pnpm dsh --profile web
+```
+
+**npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `0e1065d4` 已包含)。
+
 两个前提:
 
 - pnpm 通过 SSH 解析 GitHub 依赖,安装机器需要对 `dsh-external/fabric` 有 GitHub SSH 访问权;
-- load-time 变换钩子必须在任何目标模块导入前由宿主 launcher 安装。官方 DSH master 尚未调用它们;在这类宿主上 bundle 能挂载但变换不生效。面向快照 `4ee4ae88` 源码宿主的接线以 `patches/fabric-host-integration.patch` 携带(见 `patches/README.md`);官方 DSH 合入接线后,bundle 无需任何宿主改动即可完全生效。
+- load-time 变换钩子必须在任何目标模块导入前由宿主 launcher 安装;见上面的宿主情形。
 
 ## 开发
 
@@ -92,4 +109,4 @@ pnpm run build
 
 - Node 加载期变换要求预编译 JavaScript;browser transform 会在应用 handler 前剥离 TypeScript。
 - 浏览器面分布在两个双面包中(`cordis-fabric/client` 提供 bridge 与 service,`cordis-fabric-dsh/client` 提供 Mod-facing facade);需要完整 SlotMap 类型的 consumer 应直接使用 DSH authoritative slot service。
-- 官方 DSH master(缺少 launcher bootstrap 调用)上,load-time 与 browser build 接缝不生效;面向快照 `4ee4ae88` 源码宿主的接线以 `patches/fabric-host-integration.patch` 携带,bundle 不能新增缺失的 loader 或 browser build 接缝。
+- npm 安装的官方 `dsh` 上,load-time 与 browser build 接缝不生效(CLI 预构建,打不了源码补丁);这类宿主要等官方合入接线。源码宿主用 `patches/fabric-host-integration.patch` 补齐接缝(见 `patches/README.md`)。

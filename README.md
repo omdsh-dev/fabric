@@ -67,10 +67,27 @@ Restart the web app afterwards. The profile rows are disabled opt-ins; enable `c
 
 The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`.
 
+For the Fabric layer to actually engage, the host launcher must call the trio's bootstrap before any target module import. Official DSH master does not do this yet. Two host situations:
+
+**Source host (fully usable now)** — a deepseek-harness checkout plus the host patch (`patches/fabric-host-integration.patch`, see `patches/README.md`). The patch wires the launcher, the browser build seam, and the tool-cordis catalog, and the CLI's trio dependencies are git specs, so a plain official checkout resolves and builds the trio on `pnpm install`:
+
+```sh
+git clone <deepseek-harness> && cd deepseek-harness
+pnpm run patch:host -- .          # from this bundle repo; or git apply the patch
+pnpm install --no-frozen-lockfile # first install: lockfile gains the two git deps,
+                                  # pulls the trio from GitHub, prepare builds it
+pnpm run build
+pnpm dsh plugin --profile web add github:dsh-external/fabric
+# enable the cordis-fabric / cordis-fabric-dsh rows in the profile composition
+pnpm dsh --profile web
+```
+
+**npm-installed official `dsh`** — cannot take the source patch (the CLI ships prebuilt); it works once the official repository merges the wiring (the fork at `0e1065d4` contains it).
+
 Two prerequisites:
 
 - pnpm resolves GitHub dependencies over SSH, so the installing machine needs GitHub SSH access for `dsh-external/fabric`.
-- The load-time transformation hooks must be installed by the host launcher before any target module import. Official DSH master does not call them yet; on such hosts the bundle mounts but transformations do not engage. The wiring for source hosts at snapshot `4ee4ae88` ships as `patches/fabric-host-integration.patch` (see `patches/README.md`); once official DSH includes the wiring, the bundle is fully functional with no host changes.
+- The load-time transformation hooks must be installed by the host launcher before any target module import; see the host situations above.
 
 ## Development
 
@@ -92,4 +109,4 @@ The low-level transformer contributes no model-visible content. The cooperative 
 
 - Node load-time transformation requires precompiled JavaScript; browser transforms strip TypeScript before applying handlers.
 - The browser faces are split across the two dual-face packages (`cordis-fabric/client` for the bridge and service, `cordis-fabric-dsh/client` for the Mod-facing facade); consumers that need the complete typed SlotMap should use the authoritative DSH slot service instead of widening the facade.
-- On official DSH master (which lacks the launcher bootstrap call), the load-time and browser build seams do not engage; the wiring for source hosts at snapshot `4ee4ae88` ships as `patches/fabric-host-integration.patch`, and a bundle cannot add missing loader or browser build seams.
+- On an npm-installed official `dsh`, the load-time and browser build seams do not engage (the CLI ships prebuilt and cannot take the source patch); those hosts work once the official repository merges the wiring. Source hosts use `patches/fabric-host-integration.patch` to add the seams (see `patches/README.md`).
