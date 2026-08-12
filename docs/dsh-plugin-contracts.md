@@ -1,16 +1,20 @@
-# Standalone Fabric Bundle Contracts
+# Standalone Fabric Workspace Contracts
 
 This reference is shipped with the repository so planning, implementation, testing, and distribution use only guidance stored below the repository root.
 
 ## Repository boundary
 
-All source, TypeScript configuration, test fixtures, skill instructions, and contributor guidance used by this repository live below the repository root. Describe repository files with project-root paths such as `docs/fabric.md`; parent-directory navigation is not valid documentation. Paths that leave the repository are not valid template inputs. Ordinary npm dependencies are allowed; a dependency is not a source or configuration file reference.
+All source, TypeScript configuration, test fixtures, skill instructions, and contributor guidance used by this repository live below the repository root. Describe repository files with project-root paths such as `docs/fabric.md`; parent-directory navigation is not valid documentation. Paths that leave the repository are not valid template inputs. Ordinary npm dependencies are allowed; a dependency is not a source or configuration file reference. Cross-package dependencies between the three workspace packages use the `workspace:^` protocol; every other dependency spec is registry-only.
 
-A DSH host is a runtime consumer of the finished package, not a development input. The host supplies the authoritative services the facades delegate to and applies the package's bundle patch when the package is installed into a profile.
+A DSH host is a runtime consumer of the finished packages, not a development input. The host supplies the authoritative services the facades delegate to and applies the bundle carrier's patch when the repository is installed into a profile.
+
+## Package boundary
+
+The workspace contains exactly three complete packages — `cordis-fabric` (pure transformation service), `cordis-fabric-api` (pure compat facade), and `cordis-fabric-dsh` (DSH-facing facades, invariant, profile bootstrap). No fourth package may be added. Any code outside these three — including the official `@deepseek-ai/dsh-tool-cordis` toolset — is applied as a pnpm dependency patch stored in `patches/` and declared in `pnpm-workspace.yaml` (see `patches/README.md`).
 
 ## Host contracts
 
-The `@deepseek-ai/dsh-*` host packages are private and not installable from the npm registry. `src/host-contracts.ts` is the package's only view of the host runtime: it declares the smallest structural surface the facades actually forward, plus the Cordis `Context` service and `Events` augmentations those facades rely on. Extend it only when a facade needs a new host surface, and keep the contracts narrow.
+The `@deepseek-ai/dsh-*` host packages are private and not installable from the npm registry. `packages/cordis-fabric-dsh/src/host-contracts.ts` is the workspace's only view of the host runtime: it declares the smallest structural surface the facades actually forward, plus the Cordis `Context` service and `Events` augmentations those facades rely on. Extend it only when a facade needs a new host surface, and keep the contracts narrow.
 
 ## Plugin forms
 
@@ -22,15 +26,15 @@ Every listener, registry entry, timer, watcher, child process, and callback regi
 
 ## Invariant companion
 
-Every package entry may expose `./invariant` as a separate function plugin. Its installer checks an authoritative event or data relationship owned by the package. An empty installer is valid only when the package owns no observable relationship; explain that reason in the source. The companion resolves the host `invariants` service through the narrow local contract in `src/host-contracts.ts`.
+`cordis-fabric-dsh` exposes `./invariant` as a separate function plugin. Its installer checks an authoritative event or data relationship owned by the package. An empty installer is valid only when the package owns no observable relationship; explain that reason in the source. The companion resolves the host `invariants` service through the narrow local contract in `packages/cordis-fabric-dsh/src/host-contracts.ts`.
 
 ## Bundle composition
 
-`package.json` declares the bundle patch with `dsh.bundle.patch`. `cordis.patch.yml` inserts or overrides plugin rows; it does not change source files, compiler settings, catalogs, or launcher code. An id-targeted override replaces the complete `config`, so retained fields must be restated. The package row name must resolve through the consuming DSH profile.
+The workspace root `package.json` declares the bundle patch with `dsh.bundle.patch`. `cordis.patch.yml` inserts or overrides plugin rows (`cordis-fabric`, `cordis-fabric-dsh`, both disabled by default); it does not change source files, compiler settings, catalogs, or launcher code. An id-targeted override replaces the complete `config`, so retained fields must be restated. The row names must resolve through the consuming DSH profile.
 
 ## Evidence
 
-The minimum package evidence includes a real Loader export-shape test, schema/default behavior, observable plugin behavior, and disposal. Host-facing facades additionally need real composition tests over the repository-local fakes in `tests/fakes.ts`, and serve primitives need real HTTP evidence through `tests/fakes.ts`. Typechecking, tests, and a development build are separate checks.
+The minimum package evidence includes a real Loader export-shape test, schema/default behavior, observable plugin behavior, and disposal. Host-facing facades additionally need real composition tests over the repository-local fakes in each package's `tests/fakes.ts`, and serve primitives need real HTTP evidence through the `cordis-fabric` test fakes. Typechecking, tests, and a development build are separate checks.
 
 ## Build and distribution
 
@@ -48,6 +52,6 @@ The self-contained prepare build is:
 pnpm run prepare
 ```
 
-It emits declarations and runtime JavaScript using only this repository's installed dependencies. `pnpm pack --dry-run --json` runs lifecycle scripts; inspect its final file list and restore a development build afterward when the pack lifecycle cleans or replaces generated files.
+It emits declarations and runtime JavaScript for all three packages using only this repository's installed dependencies. `pnpm pack --dry-run --json` runs lifecycle scripts; inspect its final file list and restore a development build afterward when the pack lifecycle cleans or replaces generated files.
 
 A package is ready for Git or npm only when every manifest-declared runtime and type entry exists after the relevant consumer lifecycle. Publishing, pushing, tagging, and registry operations remain separately authorized actions.

@@ -1,0 +1,83 @@
+{
+  "name": "cordis-fabric-dsh",
+  "description": "DSH integrations for the Cordis Fabric layer: DSH-facing facades, the package invariant, and the DSH profile bootstrap that composes the pure fabric hooks",
+  "version": "0.0.1-rc.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./agent": {
+      "types": "./lib/types/agent.d.ts",
+      "default": "./lib/agent.js"
+    },
+    "./tools": {
+      "types": "./lib/types/tools.d.ts",
+      "default": "./lib/tools.js"
+    },
+    "./prompt": {
+      "types": "./lib/types/prompt.d.ts",
+      "default": "./lib/prompt.js"
+    },
+    "./commands": {
+      "types": "./lib/types/commands.d.ts",
+      "default": "./lib/commands.js"
+    },
+    "./profile-bootstrap": {
+      "types": "./lib/types/profile-bootstrap.d.ts",
+      "default": "./lib/profile-bootstrap.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/agent.js",
+    "lib/tools.js",
+    "lib/prompt.js",
+    "lib/commands.js",
+    "lib/profile-bootstrap.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "src"
+  ],
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "build": "tsc -b && tsdown --config tsdown.config.ts",
+    "typecheck": "tsc --pretty false"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "peerDependencies": {
+    "cordis": "^4.0.0-rc.7",
+    "cordis-fabric": "workspace:^"
+  },
+  "devDependencies": {
+    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
+    "@types/node": "^22.20.0",
+    "cordis": "^4.0.0-rc.7",
+    "cordis-fabric": "workspace:^",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.23.11",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

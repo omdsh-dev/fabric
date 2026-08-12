@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-cordis-fabric`
+# `cordis-fabric`
 
 [English](fabric.md) | 中文
 
@@ -20,7 +20,7 @@
 ## 安装和 bootstrap
 
 ```ts
-import { bootstrapFabric, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import { bootstrapFabric, FabricService } from 'cordis-fabric'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -60,7 +60,7 @@ hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对�
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricCall, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import type { FabricCall, FabricService } from 'cordis-fabric'
 
 export const inject = ['fabric']
 
@@ -101,7 +101,7 @@ export function apply(ctx: Context & { fabric: FabricService }): void {
 宿主构建接缝（`clientBundle`）由 profile 选择的 DSH 版本提供；本包只提供 transform。宿主集成把 transform 接入自己的 bundle 步骤：
 
 ```ts ignore-check
-import { createWatchedBrowserTransform, repoSourceResolver } from '@deepseek-ai/dsh-cordis-fabric'
+import { createWatchedBrowserTransform, repoSourceResolver } from 'cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
@@ -119,7 +119,7 @@ resolver 把包自身的源码树映射到包身份；不使用上游 adapter，
 
 ### 测试 patches
 
-变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`@deepseek-ai/dsh-cordis-fabric/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
+变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`cordis-fabric/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
 
 ## Model Experience
 

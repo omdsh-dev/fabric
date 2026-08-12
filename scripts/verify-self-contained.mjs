@@ -76,21 +76,51 @@ for (const filePath of textFiles) {
   }
 }
 
-const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
-  for (const [name, spec] of Object.entries(packageJson[field] ?? {})) {
-    if (/^(?:file|link|portal|workspace|git\+|https?):/i.test(spec) || spec.startsWith('.') || isAbsolute(spec)) {
-      failures.push(`package.json: ${field}.${name} uses non-registry spec ${spec}`)
+const workspaceMembers = new Set(['cordis-fabric', 'cordis-fabric-api', 'cordis-fabric-dsh'])
+const manifestPaths = ['package.json', ...['cordis-fabric', 'cordis-fabric-api', 'cordis-fabric-dsh'].map(name => join('packages', name, 'package.json'))]
+for (const manifestPath of manifestPaths) {
+  const manifest = JSON.parse(readFileSync(join(root, manifestPath), 'utf8'))
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+    for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+      if (/^(?:file|link|portal|git\+|https?):/i.test(spec) || spec.startsWith('.') || isAbsolute(spec)) {
+        failures.push(`${manifestPath}: ${field}.${name} uses non-registry spec ${spec}`)
+      } else if (/^workspace:/i.test(spec) && !workspaceMembers.has(name)) {
+        failures.push(`${manifestPath}: ${field}.${name} uses workspace spec for a non-workspace member ${spec}`)
+      }
     }
   }
 }
 
 const lockfileSource = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
-const localLockSpec = lockfileSource.match(/(?:^|[\s'"])(?:file|link|portal|workspace):[^\s'",}\]]+/m)
-if (localLockSpec !== null) failures.push(`pnpm-lock.yaml: contains local dependency spec ${localLockSpec[0].trim()}`)
+// workspace: specs in the lockfile are inherently intra-repo (pnpm only
+// writes them for workspace members, which the manifest check above pins);
+// link:/file:/portal: entries are likewise pnpm's standard intra-workspace
+// record — allow them when their target stays inside the repository.
+for (const match of lockfileSource.matchAll(/(?:^|[\s'"])(file|link|portal):([^\s'",}\]]+)/g)) {
+  const target = match[2]
+  // pnpm records intra-workspace links relative to the dependent package
+  // directory, so accept targets that resolve inside the repository from
+  // the root or from any workspace member.
+  const bases = [root, ...[...workspaceMembers].map(name => join(root, 'packages', name))]
+  const inside = bases.some(base => isInsideRoot(resolve(base, target)))
+  if (!inside) failures.push(`pnpm-lock.yaml: contains local dependency spec ${match[1]}:${target} pointing outside the repository`)
+}
 
-for (const fileName of readdirSync(root).filter(name => /^tsconfig.*\.json$/.test(name))) {
-  const config = JSON.parse(readFileSync(join(root, fileName), 'utf8'))
+function collectTsconfigs(directory, matches) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!ignoredDirectories.has(entry.name)) collectTsconfigs(join(directory, entry.name), matches)
+    } else if (/^tsconfig.*\.json$/.test(entry.name)) {
+      matches.push(join(directory, entry.name))
+    }
+  }
+}
+
+const tsconfigs = []
+collectTsconfigs(root, tsconfigs)
+for (const configPath of tsconfigs) {
+  const label = relative(root, configPath)
+  const config = JSON.parse(readFileSync(configPath, 'utf8'))
   const candidates = []
   if (typeof config.extends === 'string' && config.extends.startsWith('.')) candidates.push(config.extends)
   for (const reference of config.references ?? []) {
@@ -100,21 +130,31 @@ for (const fileName of readdirSync(root).filter(name => /^tsconfig.*\.json$/.tes
     if (Array.isArray(values)) candidates.push(...values)
   }
   for (const candidate of candidates) {
-    const targetPath = resolve(root, candidate.replace(/\*$/, ''))
-    if (!isInsideRoot(targetPath)) failures.push(`${fileName}: compiler path leaves repository: ${candidate}`)
+    const targetPath = resolve(dirname(configPath), candidate.replace(/\*$/, ''))
+    if (!isInsideRoot(targetPath)) failures.push(`${label}: compiler path leaves repository: ${candidate}`)
   }
 }
 
 for (const requiredPath of [
   'AGENTS.md',
+  'README.md',
+  'cordis.patch.yml',
   'docs/dsh-plugin-contracts.md',
+  'packages/cordis-fabric/package.json',
+  'packages/cordis-fabric/src',
+  'packages/cordis-fabric/tests',
+  'packages/cordis-fabric-api/package.json',
+  'packages/cordis-fabric-api/src',
+  'packages/cordis-fabric-api/tests',
+  'packages/cordis-fabric-dsh/package.json',
+  'packages/cordis-fabric-dsh/src',
+  'packages/cordis-fabric-dsh/src/host-contracts.ts',
+  'packages/cordis-fabric-dsh/tests',
   'patches/README.md',
+  'patches/fabric-host-integration.patch',
+  'pnpm-workspace.yaml',
   'scripts/prepare.mjs',
-  'src/README.md',
-  'src/host-contracts.ts',
-  'tests/README.md',
-  'tests/fakes.ts',
-  'tests/snapshots/README.md',
+  'tsconfig.base.json',
 ]) {
   if (!existsSync(join(root, requiredPath))) failures.push(`missing repository-layout contract ${requiredPath}`)
 }

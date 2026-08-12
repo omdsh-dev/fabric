@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-cordis-fabric`
+# `cordis-fabric`
 
 English | [中文](fabric.zh.md)
 
@@ -20,7 +20,7 @@ The mechanism is load-time code transformation: the transform hooks rewrite the 
 ## Installation and bootstrap
 
 ```ts
-import { bootstrapFabric, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import { bootstrapFabric, FabricService } from 'cordis-fabric'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -60,7 +60,7 @@ The hooks must be installed before the target module's first evaluation; a patch
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricCall, FabricService } from '@deepseek-ai/dsh-cordis-fabric'
+import type { FabricCall, FabricService } from 'cordis-fabric'
 
 export const inject = ['fabric']
 
@@ -101,7 +101,7 @@ The registration is a fiber effect owned by the registering plugin: disposing th
 The host build seam (`clientBundle`) is owned by the DSH version selected by the profile; this package only provides the transform. A host integration wires the transform into its bundle step:
 
 ```ts ignore-check
-import { createWatchedBrowserTransform, repoSourceResolver } from '@deepseek-ai/dsh-cordis-fabric'
+import { createWatchedBrowserTransform, repoSourceResolver } from 'cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
@@ -119,7 +119,7 @@ When the target bundle cannot be transformed at build time (its build is owned b
 
 ### Testing patches
 
-The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `@deepseek-ai/dsh-cordis-fabric/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
+The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `cordis-fabric/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
 
 ## Model Experience
 

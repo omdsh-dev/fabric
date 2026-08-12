@@ -1,8 +1,15 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "lib/types"
-  },
-  "include": ["src"]
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/cordis-fabric"
+    },
+    {
+      "path": "./packages/cordis-fabric-api"
+    },
+    {
+      "path": "./packages/cordis-fabric-dsh"
+    }
+  ]
 }

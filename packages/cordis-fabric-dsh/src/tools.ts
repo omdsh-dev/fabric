@@ -1,0 +1,86 @@
+/**
+ * The Fabric Tool API module: a stable, Mod-facing surface for registering
+ * tools and pre/post execution listeners over the authoritative tool
+ * registry.
+ *
+ * The facade delegates every call to `ctx.tools` and `ctx.on()`: policy,
+ * approval, timeout, logging, cancellation, rendering, and the authoritative
+ * executor all stay in the owning service. A Fabric API tool has the same
+ * schema and result obligations as a native DSH tool, and a waterfall
+ * listener must call `next()` unless it intentionally vetoes — returning
+ * without delegation is the documented veto.
+ * @module cordis-fabric-dsh/tools
+ */
+
+import { Service } from 'cordis'
+import type { Context } from 'cordis'
+import type {
+  HostPostToolDecision,
+  HostPreToolDecision,
+  HostToolDefinition,
+  HostToolExecution,
+  HostToolExecutionResult,
+} from './host-contracts.ts'
+
+declare module 'cordis' {
+  interface Context {
+    /** The Fabric Tool API, provided by this package. */
+    fabricTools: FabricToolsService
+  }
+}
+
+/**
+ * Cooperative Mod-facing tool registry API.
+ *
+ * Every registration returns the exact disposer of the underlying registry
+ * or `ctx.on()` effect and keeps the authoritative owner's ordering,
+ * cancellation, and disposal semantics. The service never stores a parallel
+ * copy of tool state.
+ */
+export class FabricToolsService extends Service {
+  /** Service key under which this class registers on `ctx`. */
+  static provide = 'fabricTools'
+  /** The authoritative tool registry must be mounted. */
+  static inject = ['tools']
+
+  /**
+   * Create and install the Tool API.
+   * @param ctx - Cordis context that owns the service.
+   */
+  constructor(ctx: Context) {
+    super(ctx, 'fabricTools')
+  }
+
+  /**
+   * Register one tool through the authoritative registry.
+   * @param definition - tool schema, execution, and optional finalization/presentation callbacks.
+   * @returns the exact disposer that unregisters the tool.
+   */
+  register(definition: HostToolDefinition): () => void {
+    return this.ctx.tools.register(definition)
+  }
+
+  /**
+   * Observe or gate dispatch through `tools/pre-execute`.
+   * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.
+   * @returns the exact `ctx.on()` disposer removing this listener.
+   */
+  onPreExecute(listener: (exec: HostToolExecution, next: () => Promise<HostPreToolDecision>) => Promise<HostPreToolDecision>): () => boolean {
+    return this.ctx.on('tools/pre-execute', listener)
+  }
+
+  /**
+   * Observe or shape a normalized dispatch outcome through `tools/post-execute`.
+   * @param listener - the waterfall listener; call `next()` to accept the result unchanged.
+   * @returns the exact `ctx.on()` disposer removing this listener.
+   */
+  onPostExecute(
+    listener: (
+      exec: HostToolExecution,
+      result: Readonly<HostToolExecutionResult>,
+      next: () => Promise<HostPostToolDecision>,
+    ) => Promise<HostPostToolDecision>,
+  ): () => boolean {
+    return this.ctx.on('tools/post-execute', listener)
+  }
+}

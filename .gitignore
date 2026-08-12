@@ -5,7 +5,5 @@ coverage/
 *.tsbuildinfo
 
 # These directories are installed-package fixtures, not generated dependencies.
-!tests/api/fixtures/node_modules/
-!tests/api/fixtures/node_modules/**
-!tests/fabric/fixtures/node_modules/
-!tests/fabric/fixtures/node_modules/**
+!packages/*/tests/fixtures/node_modules/
+!packages/*/tests/fixtures/node_modules/**

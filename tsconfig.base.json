@@ -20,6 +20,11 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "cordis-fabric": ["./packages/cordis-fabric/src"],
+      "cordis-fabric-api": ["./packages/cordis-fabric-api/src"],
+      "cordis-fabric-dsh": ["./packages/cordis-fabric-dsh/src"]
+    }
   }
 }

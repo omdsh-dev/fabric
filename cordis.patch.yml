@@ -1,12 +1,17 @@
-# Fabric is explicit opt-in. The bundle mounts the host transformation service
-# and cooperative API; browser code is supplied by the package's dshClient face.
-# The launcher/bootstrap and browser build seams must come from the DSH version
-# selected by the profile.
+# The Fabric bundle is explicit opt-in. The bundle carrier mounts the pure
+# transformation service (`cordis-fabric`) and the DSH integration package
+# (`cordis-fabric-dsh`) as profile rows, both disabled by default; enabling
+# them opts a profile into the Fabric/Mixin extension layer. Browser code is
+# supplied by each package's own dshClient face. The pure `cordis-fabric-api`
+# package is peer-only: Mods mount its compat facade themselves.
+#
+# The launcher/bootstrap and browser build seams must come from the DSH
+# version selected by the profile.
 - insert:
     - id: cordis-fabric
-      name: '@deepseek-ai/dsh-cordis-fabric'
+      name: 'cordis-fabric'
       disabled: true
 
-    - id: cordis-fabric-api
-      name: '@deepseek-ai/dsh-cordis-fabric/api'
+    - id: cordis-fabric-dsh
+      name: 'cordis-fabric-dsh'
       disabled: true

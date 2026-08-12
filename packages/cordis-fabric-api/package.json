@@ -1,0 +1,46 @@
+{
+  "name": "cordis-fabric-api",
+  "description": "Cooperative Fabric API: the pure-Cordis compat facade over the cordis-fabric registry",
+  "version": "0.0.1-rc.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./compat": {
+      "types": "./lib/types/compat.d.ts",
+      "default": "./lib/compat.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/compat.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "src"
+  ],
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "build": "tsc -b && tsdown --config tsdown.config.ts",
+    "typecheck": "tsc --pretty false"
+  },
+  "peerDependencies": {
+    "cordis": "^4.0.0-rc.7",
+    "cordis-fabric": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "cordis": "^4.0.0-rc.7",
+    "cordis-fabric": "workspace:^",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.23.11",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
