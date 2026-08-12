@@ -80,6 +80,8 @@ pnpm run build
 pnpm dsh web            # web-app bundle 层已组合 fabric 两行
 ```
 
+或者一步完成(在本 bundle 仓库里执行):`pnpm run install:host -- <deepseek-harness-checkout>`(打补丁 + 安装 + 构建)。
+
 **npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `0e1065d4` 已包含)。
 
 两个前提:

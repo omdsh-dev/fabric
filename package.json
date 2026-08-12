@@ -15,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.vitest.json --pretty false",
     "verify:self-contained": "node scripts/verify-self-contained.mjs",
     "extract:patch": "node scripts/extract-patch.mjs",
-    "patch:host": "bash scripts/patch.sh"
+    "patch:host": "bash scripts/patch.sh",
+    "install:host": "bash scripts/install.sh"
   },
   "dsh": {
     "bundle": {
