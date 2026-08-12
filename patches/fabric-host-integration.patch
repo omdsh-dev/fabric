@@ -870,6 +870,124 @@ index 00000000..31d46229
 +- 更高优先级接管可能短暂留下两个挂载行，但 `onLost` 给在位者明确的自行 dispose 路径，而不是强制突然卸载。
 +- priority 是意图而非所有权保证；并列最高优先级仍按注册序决定，并记录告警。
 +- 窄 client 面增加一个方法与一个认领类型，认领表的生命周期限定在服务实例内。
+diff --git a/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.i18n.yaml b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.i18n.yaml
+new file mode 100644
+index 00000000..cc5b8044
+--- /dev/null
++++ b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.md
++2026-08-12-fabric-hmr-e2e-proof.md: 3a03226f4b9e23faa9f4e2cb291acd9d749d2aea
++2026-08-12-fabric-hmr-e2e-proof.zh.md: 5b7c49360767bf1427628f289f49da6e3a0073b7
+diff --git a/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.md b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.md
+new file mode 100644
+index 00000000..3a03226f
+--- /dev/null
++++ b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.md
+@@ -0,0 +1,67 @@
++# Agent Note: Fabric HMR end-to-end proof
++
++Status: implemented
++
++English | [中文](2026-08-12-fabric-hmr-e2e-proof.zh.md)
++
++## Problem
++
++Fabric's hot-reload behavior was only proven component-wise: the runtime
++transfers patch ownership across same-owner re-registrations, the load hooks
++re-transform already-evaluated modules, the browser transform rebuilds its
++matcher from a watched patches file, and the app-boot user-patch layer
++refreshes transactionally. Nothing chained those pieces through a real
++Loader tree, so the web bundle still disables the shared module-reload HMR
++row with `TODO: Re-enable shared HMR for Web after its reload lifecycle is
++tested` — there was no automated proof that an HMR refresh keeps a Fabric
++transformation live and correctly owned.
++
++## Decision
++
++`cordis-fabric` gains an end-to-end suite (`tests/hmr-e2e.spec.ts` +
++`tests/hmr-e2e-runner.mjs`) that boots a real Loader tree — vendored
++`cordis-plugin-loader`, `-include`, `-hmr`, `-timer` plus the Fabric service
++and transformation hooks — and drives both HMR surfaces a deployment can
++use, against the transformed target fixture:
++
++- **Config-only HMR (row lifecycle).** The HMR plugin's `registerConfig`
++  observes a user patch layer (`cordis.patch.json`), the same contract the
++  app's `watchUserPatches` uses. Editing the consumer row's `disabled` flag
++  must unmount the consumer plugin and release its Fabric patch (transformed
++  `add(2,3)` falls back to the original `5`), and re-enabling must remount
++  and re-register it (`23` again). Two full cycles prove the lifecycle is
++  repeatable without residue.
++- **Module-reload HMR (plugin regeneration).** The consumer plugin file
++  lives inside the HMR watch root; rewriting it triggers the HMR plugin's
++  partial reload, which re-imports the module and re-applies the row under
++  the same loader entry. `fiber.entry` survives, so the re-registration is a
++  same-owner take-over: the new generation's handler runs (`23` → `203`) and
++  the stale fiber's disposer does not unregister it (a second call stays
++  `203`).
++
++Each case runs in a fresh child process: the synchronous module hooks cannot
++be unregistered and the already-transformed module cache must not leak
++between cases. The runner resolves `cordis-fabric/src/*` through tsx, so the
++suite passes on a clean tree.
++
++## Alternatives considered
++
++- **Place the config-only case under `app-boot` and call
++  `watchUserPatches`.** Rejected: `cordis-fabric` is a pure Cordis package
++  and must not depend on a DSH package even in devDependencies.
++  `registerConfig` is the exact API `watchUserPatches` wraps, so the test
++  exercises the same contract without the DSH layer.
++- **A runnable demo command instead of tests.** Rejected: a demo is not
++  repeatable evidence and cannot enter CI; the spec's child runners double
++  as the demo (each prints `PASS`/`FAIL` lines with the observed values).
++
++## Consequences
++
++Both HMR surfaces now have automated end-to-end proof that a refresh keeps
++Fabric transformations live, correctly registered, and correctly released.
++The evidence unblocks the decision on re-enabling the web bundle's shared
++`hmr` row (the enablement itself stays a separate choice). Chokidar
++coalesces rapid writes to one file, so consecutive patch-file writes must
++wait out the atomic-write window (75 ms, matching the app-boot user-patch
++tests) or a refresh is silently dropped — the runner documents this
++directly at its `settleWatch` helper.
+diff --git a/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.zh.md b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.zh.md
+new file mode 100644
+index 00000000..5b7c4936
+--- /dev/null
++++ b/.agents/notes/implemented/testing/2026-08-12-fabric-hmr-e2e-proof.zh.md
+@@ -0,0 +1,27 @@
++# Agent Note: Fabric HMR 端到端证明
++
++Status: implemented
++
++[English](2026-08-12-fabric-hmr-e2e-proof.md) | 中文
++
++## Problem
++
++Fabric 的热重载行为此前只有组件级证明：runtime 在相同 owner 重新注册时转移 patch 所有权，load hooks 能重新变换已求值模块，浏览器变换会从被观察的 patches 文件重建 matcher，app-boot 的用户 patch 层以事务方式刷新。但没有一条链把上述环节串进真实的 Loader 树，因此 web bundle 仍以 `TODO: Re-enable shared HMR for Web after its reload lifecycle is tested` 禁用共享 module-reload HMR 行——缺少"一次 HMR 刷新后 Fabric 变换仍然存活且所有权正确"的自动化证明。
++
++## Decision
++
++`cordis-fabric` 新增端到端套件（`tests/hmr-e2e.spec.ts` + `tests/hmr-e2e-runner.mjs`）：启动一棵真实 Loader 树——vendored `cordis-plugin-loader`、`-include`、`-hmr`、`-timer`，外加 Fabric 服务与变换 hooks——对已变换的目标 fixture 驱动部署可用的两个 HMR 面：
++
++- **Config-only HMR（行生命周期）。** 用 HMR 插件的 `registerConfig` 观察用户 patch 层（`cordis.patch.json`），即应用侧 `watchUserPatches` 使用的同一契约。编辑消费行的 `disabled` 标志必须卸载消费插件并释放其 Fabric patch（变换后的 `add(2,3)` 回退到原始 `5`），重新启用必须重新挂载并重注册（回到 `23`）。两轮完整循环证明该生命周期可重复且无残留。
++- **Module-reload HMR（插件再生成）。** 消费插件文件位于 HMR watch root 内；重写它触发 HMR 插件的部分重载——重新 import 模块并在同一 loader entry 下重新应用该行。`fiber.entry` 保持不变，因此重注册是同 owner 接管：新一代 handler 生效（`23` → `203`），旧 fiber 的 disposer 不会注销它（再次调用仍为 `203`）。
++
++每个场景运行在独立子进程中：同步模块 hooks 无法卸载，已变换模块缓存也不得在场景间泄漏。runner 经 tsx 解析 `cordis-fabric/src/*`，因此套件在干净树上即可通过。
++
++## Alternatives considered
++
++- **把 config-only 场景放进 `app-boot` 并调用 `watchUserPatches`。** 否决：`cordis-fabric` 是纯 Cordis 包，即使 devDependencies 也不得依赖 DSH 包。`registerConfig` 正是 `watchUserPatches` 内部包装的 API，测试在不引入 DSH 层的情况下覆盖同一契约。
++- **用可运行 demo 命令代替测试。** 否决：demo 不是可重复的证据，也无法进入 CI；spec 的子进程 runner 本身兼作演示（逐行打印 `PASS`/`FAIL` 与实际值）。
++
++## Consequences
++
++两个 HMR 面现在都有自动化端到端证明：刷新后 Fabric 变换保持存活、注册正确、释放正确。该证据为"重新启用 web bundle 的共享 `hmr` 行"提供决策前提（启用本身仍是独立决定）。Chokidar 会合并对同一文件的快速连续写入，因此连续写 patch 文件必须等过原子写窗口（75 ms，与 app-boot user-patch 测试一致），否则一次 refresh 会被静默丢弃——runner 在 `settleWatch` 辅助函数处直接记录了这一点。
 diff --git a/.gitignore b/.gitignore
 index 3d0fd8e3..d1d14908 100644
 --- a/.gitignore
@@ -2456,7 +2574,7 @@ index ede4b112..4d006621 100644
          const doc = parseJsDoc(declaration.jsDoc ?? '').doc
          const source = pointer(declaration.location)
 diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
-index 18a0fcd5..97fb1280 100644
+index 18a0fcd5..12c15c11 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
 @@ -110,13 +110,16 @@ importers:
@@ -2575,7 +2693,7 @@ index 18a0fcd5..97fb1280 100644
    packages/sdk/client:
      devDependencies:
        '@deepseek-ai/cordis':
-@@ -5804,47 +5864,72 @@ importers:
+@@ -5804,47 +5864,84 @@ importers:
          specifier: workspace:^
          version: link:../../subagent/subagent
  
@@ -2598,7 +2716,18 @@ index 18a0fcd5..97fb1280 100644
        '@deepseek-ai/cordis':
          specifier: workspace:^
          version: link:../../../vendor/cordis
--      '@deepseek-ai/cordis-plugin-loader':
++      '@deepseek-ai/cordis-plugin-hmr':
++        specifier: workspace:^
++        version: link:../../../vendor/hmr
++      '@deepseek-ai/cordis-plugin-include':
++        specifier: workspace:^
++        version: link:../../../vendor/include
+       '@deepseek-ai/cordis-plugin-loader':
+         specifier: workspace:^
+         version: link:../../../vendor/loader
++      '@deepseek-ai/cordis-plugin-timer':
++        specifier: workspace:^
++        version: link:../../../vendor/timer
 +      '@types/estree':
 +        specifier: ^1.0.8
 +        version: 1.0.9
@@ -2606,8 +2735,7 @@ index 18a0fcd5..97fb1280 100644
 +  packages/self-modification/cordis-fabric-api:
 +    devDependencies:
 +      '@deepseek-ai/cordis':
-         specifier: workspace:^
--        version: link:../../../vendor/loader
++        specifier: workspace:^
 +        version: link:../../../vendor/cordis
 +      cordis-fabric:
 +        specifier: workspace:^
@@ -2666,7 +2794,7 @@ index 18a0fcd5..97fb1280 100644
  
    packages/self-modification/tool-cordis:
      dependencies:
-@@ -8518,6 +8603,10 @@ packages:
+@@ -8518,6 +8615,10 @@ packages:
        zod:
          optional: true
  
@@ -2677,7 +2805,7 @@ index 18a0fcd5..97fb1280 100644
    '@asamuzakjp/css-color@5.1.11':
      resolution: {integrity: sha512-KVw6qIiCTUQhByfTd78h2yD1/00waTmm9uy/R7Ck/ctUyAPj+AEDLkQIdJW0T8+qGgj3j5bpNKK7Q3G+LedJWg==}
      engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
-@@ -11228,6 +11317,10 @@ packages:
+@@ -11228,6 +11329,10 @@ packages:
    ast-v8-to-istanbul@1.0.4:
      resolution: {integrity: sha512-0bC0/4bTSrnwdhU3IsZDwEdojvuPrSg59OYZfKsLRtJZ0u8VBx9DebfqqG8bRdCC0I7vjgxmPi41P0lpkhJHtA==}
  
@@ -2688,7 +2816,7 @@ index 18a0fcd5..97fb1280 100644
    balanced-match@1.0.2:
      resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
  
-@@ -12533,14 +12626,18 @@ packages:
+@@ -12533,14 +12638,18 @@ packages:
    mdn-data@2.27.1:
      resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
  
@@ -2709,7 +2837,7 @@ index 18a0fcd5..97fb1280 100644
    mermaid@11.16.0:
      resolution: {integrity: sha512-Zvm3kbstgdpvIJPPItlL7fppIZ3kibvc1oZIGxdvk9t6UFz6flv+Jw7FtRGKwfcI8OckmH04LqG6LlS6X4B1pA==}
  
-@@ -12661,6 +12758,9 @@ packages:
+@@ -12661,6 +12770,9 @@ packages:
    mitt@3.0.1:
      resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
  
@@ -2719,7 +2847,7 @@ index 18a0fcd5..97fb1280 100644
    mri@1.2.0:
      resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
      engines: {node: '>=4'}
-@@ -13130,6 +13230,9 @@ packages:
+@@ -13130,6 +13242,9 @@ packages:
    search-insights@2.17.3:
      resolution: {integrity: sha512-RQPdCYTa8A68uM2jwxoY842xDhvx3E5LFL1LxvxCNMev4o5mLuokczhzjAgGwUZBAmOKZknArSxLKmXtIi2AxQ==}
  
@@ -2729,7 +2857,7 @@ index 18a0fcd5..97fb1280 100644
    semver@6.3.1:
      resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
      hasBin: true
-@@ -13217,6 +13320,10 @@ packages:
+@@ -13217,6 +13332,10 @@ packages:
      resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
      engines: {node: '>=0.10.0'}
  
@@ -2740,7 +2868,7 @@ index 18a0fcd5..97fb1280 100644
    space-separated-tokens@2.0.2:
      resolution: {integrity: sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q==}
  
-@@ -13479,6 +13586,16 @@ packages:
+@@ -13479,6 +13598,16 @@ packages:
      resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
      engines: {node: '>= 0.8'}
  
@@ -2757,7 +2885,7 @@ index 18a0fcd5..97fb1280 100644
    update-browserslist-db@1.2.3:
      resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
      hasBin: true
-@@ -14010,6 +14127,15 @@ snapshots:
+@@ -14010,6 +14139,15 @@ snapshots:
      optionalDependencies:
        zod: 4.4.3
  
@@ -2773,7 +2901,7 @@ index 18a0fcd5..97fb1280 100644
    '@asamuzakjp/css-color@5.1.11':
      dependencies:
        '@asamuzakjp/generational-cache': 1.0.1
-@@ -16370,6 +16496,8 @@ snapshots:
+@@ -16370,6 +16508,8 @@ snapshots:
        estree-walker: 3.0.3
        js-tokens: 10.0.0
  
@@ -2782,7 +2910,7 @@ index 18a0fcd5..97fb1280 100644
    balanced-match@1.0.2: {}
  
    balanced-match@4.0.4: {}
-@@ -17846,10 +17974,12 @@ snapshots:
+@@ -17846,10 +17986,12 @@ snapshots:
  
    mdn-data@2.27.1: {}
  
@@ -2796,7 +2924,7 @@ index 18a0fcd5..97fb1280 100644
    mermaid@11.16.0:
      dependencies:
        '@braintree/sanitize-url': 7.1.2
-@@ -18099,6 +18229,8 @@ snapshots:
+@@ -18099,6 +18241,8 @@ snapshots:
  
    mitt@3.0.1: {}
  
@@ -2805,7 +2933,7 @@ index 18a0fcd5..97fb1280 100644
    mri@1.2.0: {}
  
    ms@2.1.3: {}
-@@ -18648,6 +18780,8 @@ snapshots:
+@@ -18648,6 +18792,8 @@ snapshots:
  
    search-insights@2.17.3: {}
  
@@ -2814,7 +2942,7 @@ index 18a0fcd5..97fb1280 100644
    semver@6.3.1: {}
  
    semver@7.8.4: {}
-@@ -18782,6 +18916,8 @@ snapshots:
+@@ -18782,6 +18928,8 @@ snapshots:
  
    source-map-js@1.2.1: {}
  
@@ -2823,7 +2951,7 @@ index 18a0fcd5..97fb1280 100644
    space-separated-tokens@2.0.2: {}
  
    spdx-exceptions@2.5.0: {}
-@@ -18905,7 +19041,7 @@ snapshots:
+@@ -18905,7 +19053,7 @@ snapshots:
      optionalDependencies:
        typescript: 6.0.3
  
@@ -2832,7 +2960,7 @@ index 18a0fcd5..97fb1280 100644
      dependencies:
        ansis: 4.3.1
        cac: 7.0.0
-@@ -18926,6 +19062,7 @@ snapshots:
+@@ -18926,6 +19074,7 @@ snapshots:
        publint: 0.3.21
        tsx: 4.22.4
        typescript: 6.0.3
@@ -2840,7 +2968,7 @@ index 18a0fcd5..97fb1280 100644
      transitivePeerDependencies:
        - '@ts-macro/tsc'
        - '@typescript/native-preview'
-@@ -18951,7 +19088,7 @@ snapshots:
+@@ -18951,7 +19100,7 @@ snapshots:
    type-is@2.1.0:
      dependencies:
        content-type: 2.0.0
@@ -2849,7 +2977,7 @@ index 18a0fcd5..97fb1280 100644
        mime-types: 3.0.2
  
    typebox@1.1.38: {}
-@@ -19010,6 +19147,10 @@ snapshots:
+@@ -19010,6 +19159,10 @@ snapshots:
  
    unpipe@1.0.0: {}
  

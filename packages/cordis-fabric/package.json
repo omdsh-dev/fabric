@@ -57,6 +57,10 @@
     "typescript": "^6.0.3"
   },
   "devDependencies": {
+    "@cordisjs/plugin-hmr": "^1.0.15",
+    "@cordisjs/plugin-include": "^1.0.4",
+    "@cordisjs/plugin-loader": "^1.0.0-rc.5",
+    "@cordisjs/plugin-timer": "^1.1.2",
     "@types/estree": "^1.0.8",
     "@types/node": "^22.20.0",
     "cordis": "^4.0.0-rc.7",
