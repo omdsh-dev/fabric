@@ -29,7 +29,7 @@ The patch keeps only the seams the official plugin registration system cannot pr
 - `packages/boot/app-boot/src/profile.ts` — the pnpm settings template gains `blockExoticSubdeps: false` (pnpm 11 blocks git-resolved subdependencies by default, and the carrier's trio arrives through git specs). Applies to newly initialized profiles only — dsh never overwrites existing profile files.
 - `packages/bundle/web-app/cordis.patch.yml` — the bundle patch inserts the `cordis-fabric` / `cordis-fabric-dsh` rows. The bundle layer applies on every boot (including profiles initialized before the patch, whose files dsh never touches), and the trio resolves from the source worktree's `node_modules` through the CLI's git deps — no bundle registration or profile edit needed.
 
-Apply it from a deepseek-harness checkout that lacks the wiring (works on the pinned snapshot `4ee4ae88` and the current official main):
+Apply it from a deepseek-harness checkout that lacks the wiring (works on the pinned snapshot `7b9644f2` (0812) and the current official main):
 
 ```sh
 git apply patches/fabric-host-integration.patch
@@ -54,7 +54,7 @@ pnpm run build                    # build the CLI and client bundles
 pnpm dsh web            # the web-app bundle layer already composes the fabric rows
 ```
 
-A host that already contains the wiring (the fork at `0e1065d4` or later) needs nothing. An npm-installed official `dsh` cannot take the patch (its CLI ships prebuilt); those hosts work once the official repository merges the wiring.
+A host that already contains the wiring (the fork at `1de04707` or later) needs nothing. An npm-installed official `dsh` cannot take the patch (its CLI ships prebuilt); those hosts work once the official repository merges the wiring.
 
 Regenerate the patch with the extraction script instead of by hand — it reproduces the seam-only diff mechanically (worktree at the upstream commit, reverts the registry-handled files to the baseline, applies the seam edits, excludes trio and documentation, and verifies forward and reverse apply). The values live in `patches/host-patch.config.json`:
 

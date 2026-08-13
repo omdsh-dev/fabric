@@ -13,52 +13,44 @@ index 3d0fd8e3..c616bea5 100644
  *.tsbuildinfo
  pnpm-debug.log
 diff --git a/apps/cli/package.json b/apps/cli/package.json
-index 178f2690..97fce02c 100644
+index 277a6cfc..866ba4e1 100644
 --- a/apps/cli/package.json
 +++ b/apps/cli/package.json
-@@ -31,6 +31,7 @@
-     "@deepseek-ai/dsh-command-goal": "workspace:^",
-     "@deepseek-ai/dsh-compact-basic": "workspace:^",
-     "@deepseek-ai/dsh-compact-tool-result-prune": "workspace:^",
-+    "cordis-fabric": "github:dsh-external/fabric#main&path:/packages/cordis-fabric",
-     "@deepseek-ai/dsh-goal": "workspace:^",
-     "@deepseek-ai/dsh-goal-session": "workspace:^",
-     "@deepseek-ai/dsh-cmdline": "workspace:^",
-@@ -77,7 +78,8 @@
+@@ -77,7 +77,9 @@
      "commander": "^15.0.0",
      "@deepseek-ai/cordis": "workspace:^",
      "js-yaml": "^4.2.0",
 -    "node-addon-require-builtin": "^0.1.4"
 +    "node-addon-require-builtin": "^0.1.4",
++    "cordis-fabric": "github:dsh-external/fabric#main&path:/packages/cordis-fabric",
 +    "cordis-fabric-dsh": "github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh"
    },
    "devDependencies": {
      "@deepseek-ai/dsh-agent": "workspace:^",
 diff --git a/apps/cli/src/profile-boot.ts b/apps/cli/src/profile-boot.ts
-index dae6e992..b8e40e88 100644
+index 19c4abb2..720345ea 100644
 --- a/apps/cli/src/profile-boot.ts
 +++ b/apps/cli/src/profile-boot.ts
-@@ -40,6 +40,8 @@ import { DSH_ENVIRONMENT_KEY, type EnvironmentSnapshot } from '@deepseek-ai/dsh-
+@@ -37,6 +37,8 @@ const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', im
+ import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
  import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
  import { createProcessShutdown, type ProcessShutdown } from './process-shutdown.ts'
- import { resolveWindowsShellLayer } from './windows-shell.ts'
 +import { installFabricBootstrap, checkFabricRequiredPatches } from 'cordis-fabric-dsh'
 +import type { FabricProfileRows } from 'cordis-fabric-dsh'
  
  const NAME = 'dsh'
  
-@@ -105,6 +107,10 @@ export function prepareProfile(name: string, userLayer = true): Profile {
+@@ -102,6 +104,9 @@ export function prepareProfile(name: string, userLayer = true): Profile {
    return profile
  }
  
-+/** Read-only row index of a profile composition before launcher flag patches. */
 +/** Read-only row index of a profile composition before launcher flag patches. */
 +export type ProfileRows = FabricProfileRows
 +
  /** One profile's patch layers (application order) and the row index of its pre-flag composition. */
  interface ComposedProfile {
    profile: Profile
-@@ -253,7 +259,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
+@@ -245,7 +250,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
    ])
    // Cloned for the same insert-aliasing reason as composeLive: the boot
    // application must not mutate the objects later reloads recompose from.
@@ -67,7 +59,7 @@ index dae6e992..b8e40e88 100644
      app.current = hostCtx
      // Before any config-tree entry mounts, so plugins resolve all launch-time
      // environment values from the same immutable provenance snapshot.
-@@ -264,8 +270,17 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
+@@ -256,8 +261,17 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
        args: options.args,
        exit: code => void shutdown.shutdown(code),
      })
@@ -132,7 +124,7 @@ index 00000000..2adf26d5
 +if (!ok) process.exitCode = 1
 diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
 new file mode 100644
-index 00000000..95e17856
+index 00000000..9a21c7c1
 --- /dev/null
 +++ b/apps/cli/tests/fabric-bootstrap.spec.ts
 @@ -0,0 +1,46 @@
@@ -146,7 +138,7 @@ index 00000000..95e17856
 +const runner = fileURLToPath(new URL('./fabric-bootstrap-runner.mjs', import.meta.url))
 +// Vitest runs from the repository root; the bootstrap resolves the package
 +// root to its built lib half, so this suite requires `pnpm run build`.
-+const fabricLib = join(process.cwd(), 'packages/self-modification/cordis-fabric/lib/index.js')
++const fabricLib = join(process.cwd(), 'packages/extensions/cordis-fabric/lib/index.js')
 +describe.skipIf(!existsSync(fabricLib))('cordis-fabric host bootstrap', () => {
 +  it('installs transformation hooks from the composed cordis-fabric row', () => {
 +    const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner], {
@@ -209,10 +201,10 @@ index 00000000..2421fc05
 +  "main": "index.cjs"
 +}
 diff --git a/knip.json b/knip.json
-index 1f3dcefe..c6d9eca4 100644
+index e5201bc3..6d3cf559 100644
 --- a/knip.json
 +++ b/knip.json
-@@ -696,7 +696,8 @@
+@@ -724,7 +724,8 @@
          "tests/**/*.ts"
        ],
        "ignoreDependencies": [
@@ -223,7 +215,7 @@ index 1f3dcefe..c6d9eca4 100644
      },
      "packages/client/modules": {
 diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
-index 6eecfc1e..0219397a 100644
+index 59dac77d..2f923973 100644
 --- a/packages/boot/app-boot/src/profile.ts
 +++ b/packages/boot/app-boot/src/profile.ts
 @@ -140,6 +140,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
@@ -237,10 +229,10 @@ index 6eecfc1e..0219397a 100644
  
  /**
 diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
-index 53538657..e6467c8d 100644
+index 7e7b5f95..d9b5421a 100644
 --- a/packages/bundle/web-app/cordis.patch.yml
 +++ b/packages/bundle/web-app/cordis.patch.yml
-@@ -385,3 +385,12 @@
+@@ -412,3 +412,12 @@
        name: '@deepseek-ai/dsh-agent-presets'
        config:
          default: standard
@@ -305,11 +297,11 @@ index 13df9f3d..8acdc300 100644
      outputOptions: {
        entryFileNames: 'client.js',
        // The map is served from /plugins/<scoped-package>/client.js.map. The
-diff --git a/packages/self-modification/tool-cordis/src/api-catalog.ts b/packages/self-modification/tool-cordis/src/api-catalog.ts
-index ba5afe39..a7806863 100644
---- a/packages/self-modification/tool-cordis/src/api-catalog.ts
-+++ b/packages/self-modification/tool-cordis/src/api-catalog.ts
-@@ -396,6 +396,116 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+diff --git a/packages/extensions/tool-cordis/src/api-catalog.ts b/packages/extensions/tool-cordis/src/api-catalog.ts
+index fca96a19..750eab27 100644
+--- a/packages/extensions/tool-cordis/src/api-catalog.ts
++++ b/packages/extensions/tool-cordis/src/api-catalog.ts
+@@ -360,6 +360,116 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
        },
      ],
    },
@@ -426,7 +418,7 @@ index ba5afe39..a7806863 100644
    {
      key: 'fs',
      summary: 'Abstract filesystem provider.',
-@@ -2132,6 +2242,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2108,6 +2218,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'EpochHeader',
      declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
    },
@@ -481,7 +473,7 @@ index ba5afe39..a7806863 100644
    {
      name: 'FileDiff',
      declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-@@ -2476,10 +2634,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2496,10 +2654,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'OneShotSubagentDescriptorData',
      declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
    },
@@ -500,7 +492,7 @@ index ba5afe39..a7806863 100644
    {
      name: 'PreparedLlmCall',
      declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
-@@ -2504,6 +2670,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -2524,6 +2690,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'PresetTrust',
      declaration: 'export type PresetTrust = \'system\' | \'user\';',
    },
@@ -602,7 +594,7 @@ index 00000000..8a4f1c1e
 +})
 diff --git a/scripts/dev-web-fabric.spec.ts b/scripts/dev-web-fabric.spec.ts
 new file mode 100644
-index 00000000..ef9d9fae
+index 00000000..8a97ab07
 --- /dev/null
 +++ b/scripts/dev-web-fabric.spec.ts
 @@ -0,0 +1,81 @@
@@ -652,7 +644,7 @@ index 00000000..ef9d9fae
 +    const repoRoot = join(import.meta.dirname, '..')
 +    await writeFile(join(root, 'tsdown.config.ts'), `
 +import { clientBundle } from ${JSON.stringify(join(repoRoot, 'packages/client/tsdown.client.ts'))}
-+import { createWatchedBrowserTransform, repoSourceResolver } from ${JSON.stringify(join(repoRoot, 'packages/self-modification/cordis-fabric/src/browser-transform.ts'))}
++import { createWatchedBrowserTransform, repoSourceResolver } from ${JSON.stringify(join(repoRoot, 'packages/extensions/cordis-fabric/src/browser-transform.ts'))}
 +
 +const fabric = createWatchedBrowserTransform(
 +  ${JSON.stringify(patchesPath)},
@@ -688,25 +680,25 @@ index 00000000..ef9d9fae
 +  }
 +}, 30_000)
 diff --git a/tsconfig.client.json b/tsconfig.client.json
-index a054cb87..635d6f76 100644
+index e6eccd61..f5704824 100644
 --- a/tsconfig.client.json
 +++ b/tsconfig.client.json
 @@ -25,7 +25,8 @@
-     "packages/host/directory-picker-native/tests/**/*.tsx",
+     "packages/*/*/tests/**/*.client.ts",
      "packages/client/tsdown.client.ts",
      "scripts/client-bundle-css.spec.ts",
 -    "scripts/client-bundle-purity.spec.ts"
 +    "scripts/client-bundle-purity.spec.ts",
 +    "scripts/client-bundle-source-transform.spec.ts"
    ],
-   "references": [
-     // Shared leaf: web e2e boots the real host webserver (fixture + real-host
+   // A `*.host.spec.ts` covers the Host half of a split client package and
+   // belongs to the host aggregate, which excludes this program's `*.client.*`
 diff --git a/tsconfig.host.json b/tsconfig.host.json
-index 90a254f7..a336fa76 100644
+index bb66a58a..18ba0675 100644
 --- a/tsconfig.host.json
 +++ b/tsconfig.host.json
-@@ -93,7 +93,8 @@
-     "packages/host/directory-picker-native/**",
+@@ -103,7 +103,8 @@
+     "packages/client/tsdown.client.ts",
      "scripts/client-bundle-css.spec.ts",
      "packages/typert/generator/tests/fixtures/**",
 -    "scripts/client-bundle-purity.spec.ts"

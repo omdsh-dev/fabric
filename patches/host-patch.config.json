@@ -1,12 +1,12 @@
 {
   "name": "fabric-host-integration",
-  "baseline": "4ee4ae888fb8e5c2fb2f81ebd7064d02034e3792",
-  "upstream": "0e1065d4",
+  "baseline": "7b9644f2",
+  "upstream": "1de04707",
   "out": "patches/fabric-host-integration.patch",
   "exclude": [
-    "packages/self-modification/cordis-fabric",
-    "packages/self-modification/cordis-fabric-api",
-    "packages/self-modification/cordis-fabric-dsh",
+    "packages/extensions/cordis-fabric",
+    "packages/extensions/cordis-fabric-api",
+    "packages/extensions/cordis-fabric-dsh",
     "README.md",
     "README.zh.md",
     "README.i18n.yaml",
@@ -64,13 +64,8 @@
     },
     {
       "file": "apps/cli/package.json",
-      "old": "    \"@deepseek-ai/dsh-compact-tool-result-prune\": \"workspace:^\",\n    \"@deepseek-ai/dsh-goal\": \"workspace:^\",",
-      "new": "    \"@deepseek-ai/dsh-compact-tool-result-prune\": \"workspace:^\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"@deepseek-ai/dsh-goal\": \"workspace:^\","
-    },
-    {
-      "file": "apps/cli/package.json",
       "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
-      "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
+      "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
     },
     {
       "file": "packages/bundle/web-app/cordis.patch.yml",

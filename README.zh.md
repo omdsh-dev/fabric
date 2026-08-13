@@ -53,7 +53,7 @@ bundle 载体加入两个默认禁用的 profile 行:
 
 Patch handler 是通过 `ctx.fabric.register()` 注册的可信代码;YAML 或模型输入永远不会反序列化可执行 handler。服务支持 Node ESM/CommonJS 加载期变换、browser 构建期变换、优先级组合、HMR 安全销毁、静态目标校验、generator 委托和 watched browser transforms。
 
-新的 bundle 层只负责组合 package rows。三包要真正运行所需的 launcher/bootstrap 与 browser build 接缝是宿主侧代码,不属于三包,以 `patches/fabric-host-integration.patch` 携带(对快照 `4ee4ae88` 的 deepseek-harness checkout 执行 `git apply`;见 `patches/README.md`)。已到拆分提交的宿主无需任何补丁。
+新的 bundle 层只负责组合 package rows。三包要真正运行所需的 launcher/bootstrap 与 browser build 接缝是宿主侧代码,不属于三包,以 `patches/fabric-host-integration.patch` 携带(对快照 `7b9644f2`(0812)的 deepseek-harness checkout 执行 `git apply`;见 `patches/README.md`)。已到拆分提交的宿主无需任何补丁。
 
 ## 安装
 
@@ -82,7 +82,7 @@ pnpm dsh web            # web-app bundle 层已组合 fabric 两行
 
 或者一步完成(在本 bundle 仓库里执行):`pnpm run install:host -- <deepseek-harness-checkout>`(打补丁 + 安装 + 构建)。
 
-**npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `0e1065d4` 已包含)。
+**npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `1de04707` 已包含)。
 
 两个前提:
 

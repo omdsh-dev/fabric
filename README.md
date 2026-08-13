@@ -53,7 +53,7 @@ The bundle carrier adds both profile rows as disabled opt-ins:
 
 Fabric patch handlers are trusted code registered through `ctx.fabric.register()`. Patch descriptors are configuration metadata, but executable handlers are never deserialized from YAML or model input. The service supports Node ESM/CommonJS load-time transformation, browser build-time transformation, priority composition, HMR-safe disposal, static target validation, generator delegation, and watched browser transforms.
 
-The bundle patch only composes these package rows. The launcher/bootstrap and browser build seams the trio needs to RUN are host-side code outside the three packages and are carried as `patches/fabric-host-integration.patch` (apply it to a deepseek-harness checkout at snapshot `4ee4ae88`; see `patches/README.md`). A host already at the split commit needs nothing.
+The bundle patch only composes these package rows. The launcher/bootstrap and browser build seams the trio needs to RUN are host-side code outside the three packages and are carried as `patches/fabric-host-integration.patch` (apply it to a deepseek-harness checkout at snapshot `7b9644f2` (0812); see `patches/README.md`). A host already at the split commit needs nothing.
 
 ## Installation
 
@@ -82,7 +82,7 @@ pnpm dsh web            # the web-app bundle layer already composes the fabric r
 
 Or in one step from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout>` (apply patch, install, build).
 
-**npm-installed official `dsh`** — cannot take the source patch (the CLI ships prebuilt); it works once the official repository merges the wiring (the fork at `0e1065d4` contains it).
+**npm-installed official `dsh`** — cannot take the source patch (the CLI ships prebuilt); it works once the official repository merges the wiring (the fork at `1de04707` contains it).
 
 Two prerequisites:
 
