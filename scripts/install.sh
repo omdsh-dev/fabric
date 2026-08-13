@@ -39,13 +39,31 @@ if ! git -C "$HARNESS" rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
-# Recreate the fabric branch from the current HEAD: an existing branch is
-# deleted (with its commits) so the applied host patch always lands as one
-# fresh commit on a clean branch.
+# Rebuild baseline: the pinned snapshot branch. Do not resolve the default
+# branch via origin/HEAD — this checkout's origin/HEAD points at an old
+# snapshots/ branch, not at master.
+DEFAULT_BRANCH="master"
+if ! git -C "$HARNESS" rev-parse --verify --quiet "refs/heads/$DEFAULT_BRANCH" >/dev/null; then
+  DEFAULT_BRANCH="origin/$DEFAULT_BRANCH"
+fi
+if ! git -C "$HARNESS" rev-parse --verify --quiet "$DEFAULT_BRANCH" >/dev/null; then
+  echo "error: baseline branch '$DEFAULT_BRANCH' not found in $HARNESS" >&2
+  exit 1
+fi
+
+# Recreate the fabric branch from the baseline: discard uncommitted residue
+# (the previous run's package.json / pnpm-lock.yaml edits) so the branch
+# switch cannot fail, then delete the old branch and branch anew. Branching
+# from the old fabric tip would inherit its commits and make the host patch
+# look already-applied ("nothing to apply").
+if [ -n "$(git -C "$HARNESS" status --porcelain)" ]; then
+  echo "discarding uncommitted changes in $HARNESS"
+  git -C "$HARNESS" reset --hard HEAD
+  git -C "$HARNESS" clean -fd
+fi
+git -C "$HARNESS" checkout -f "$DEFAULT_BRANCH"
 if git -C "$HARNESS" rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
-  if [ "$(git -C "$HARNESS" branch --show-current)" = "$BRANCH" ]; then
-    git -C "$HARNESS" checkout --detach
-  fi
+  echo "deleting existing $BRANCH branch"
   git -C "$HARNESS" branch -D "$BRANCH"
 fi
 git -C "$HARNESS" checkout -b "$BRANCH"
