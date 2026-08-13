@@ -27,11 +27,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/client.js",
-    "lib/hook-entry.js",
-    "lib/testkit.js",
-    "lib/testkit-runner.js",
+    "lib/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
     "src"
