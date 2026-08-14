@@ -542,7 +542,7 @@ index 5a812806da..097b3170db 100644
      name: 'PresetTrust',
      declaration: 'export type PresetTrust = \'system\' | \'user\';',
 diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
-index e8d8ee5bec..4d054949a9 100644
+index e8d8ee5bec..21ae2d797e 100644
 --- a/pnpm-workspace.yaml
 +++ b/pnpm-workspace.yaml
 @@ -37,6 +37,12 @@ peerDependencyRules:
@@ -558,17 +558,6 @@ index e8d8ee5bec..4d054949a9 100644
  allowBuilds:
    esbuild: true
    lefthook: true
-@@ -67,6 +73,10 @@ minimumReleaseAgeExclude:
-   - node-addon-require-builtin-win32-ia32-msvc@0.1.4
-   - node-addon-require-builtin-win32-x64-msvc@0.1.4
-   - node-addon-require-builtin@0.1.4
-+  # The Fabric trio's cordis-fabric-dsh peer requires the freshly published
-+  # @deepseek-ai/dsh-agent 0.1.0-rc.6 (newer than the workspace's rc.5), and
-+  # pnpm's minimumReleaseAge policy would reject it for its first 24 hours.
-+  - '@deepseek-ai/dsh-agent@0.1.0-rc.6'
- 
- patchedDependencies:
-   node-pty@1.1.0: patches/node-pty@1.1.0.patch
 diff --git a/scripts/client-bundle-source-transform.spec.ts b/scripts/client-bundle-source-transform.spec.ts
 new file mode 100644
 index 0000000000..8a4f1c1e76

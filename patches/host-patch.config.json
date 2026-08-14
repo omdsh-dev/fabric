@@ -63,11 +63,6 @@
       "new": "# (git hooks) genuinely need theirs.\n# The Fabric trio resolves from git subdirectory specs and builds itself\n# through its prepare scripts; pnpm 11 allowBuilds only accepts exact\n# git+url#commit keys (the commit changes on every push), so the git\n# installs are allowed wholesale.\ndangerouslyAllowAllBuilds: true\n\nallowBuilds:\n  esbuild: true"
     },
     {
-      "file": "pnpm-workspace.yaml",
-      "old": "  - node-addon-require-builtin@0.1.4",
-      "new": "  - node-addon-require-builtin@0.1.4\n  # The Fabric trio's cordis-fabric-dsh peer requires the freshly published\n  # @deepseek-ai/dsh-agent 0.1.0-rc.6 (newer than the workspace's rc.5), and\n  # pnpm's minimumReleaseAge policy would reject it for its first 24 hours.\n  - '@deepseek-ai/dsh-agent@0.1.0-rc.6'"
-    },
-    {
       "file": "apps/cli/package.json",
       "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
       "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
