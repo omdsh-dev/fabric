@@ -70,7 +70,11 @@
     {
       "file": "package.json",
       "old": "    \"dsh\": \"node --import tsx/esm apps/cli/src/bin.ts\",",
-      "new": "    \"dsh\": \"TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx/esm apps/cli/src/bin.ts\","
+      "new": "    \"dsh\": \"node --import ./scripts/dsh-register.mjs apps/cli/src/bin.ts\","
+    },
+    {
+      "file": "scripts/dsh-register.mjs",
+      "add": "import { register } from 'tsx/esm/api'\n\n// The dsh source launch registers tsx with the base tsconfig explicitly:\n// tsx does not follow tsconfig `extends` when resolving `paths`, so without\n// this the @deepseek-ai/* aliases (vendor sources) never resolve. A shell\n// env prefix (TSX_TSCONFIG_PATH=...) would work but breaks on Windows.\nregister({ tsconfig: 'tsconfig.base.json' })\n"
     },
     {
       "file": "packages/bundle/web-app/cordis.patch.yml",

@@ -93,18 +93,31 @@ try {
   git(args.harness, ['worktree', 'add', '--detach', baselineTree, baseline])
 
   // Revert registry-handled files to the baseline, then re-apply seam lines.
+  // Seam entries carry either {old, new} (edit an existing file) or {add}
+  // (create a file that exists in neither baseline nor upstream).
   const revert = config.revert ?? []
   const seams = config.seams ?? []
-  if (revert.length > 0) {
-    git(args.harness, ['-C', trimmed, 'checkout', baseline, '--', ...revert, ...seams.map(s => s.file)])
+  const editedSeams = seams.filter(seam => 'old' in seam)
+  const addedSeams = seams.filter(seam => 'add' in seam)
+  if (revert.length > 0 || editedSeams.length > 0) {
+    git(args.harness, ['-C', trimmed, 'checkout', baseline, '--', ...revert, ...editedSeams.map(s => s.file)])
   }
-  for (const seam of seams) {
+  for (const seam of editedSeams) {
     const path = join(trimmed, seam.file)
     const content = await readFile(path, 'utf8')
     if (!content.includes(seam.old)) {
       throw new Error(`seam anchor not found in ${seam.file} — upstream layout drifted, update the config`)
     }
     await writeFile(path, content.replace(seam.old, seam.new))
+  }
+  for (const seam of addedSeams) {
+    const path = join(trimmed, seam.file)
+    await writeFile(path, seam.add)
+  }
+  if (addedSeams.length > 0) {
+    // git diff ignores untracked files; stage the added seams so they land
+    // in the patch as new-file entries.
+    git(args.harness, ['-C', trimmed, 'add', ...addedSeams.map(s => s.file)])
   }
 
   // baseline..trimmed minus the excluded paths.
