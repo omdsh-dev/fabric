@@ -11,8 +11,8 @@
  * @module cordis-fabric-dsh/prompt
  */
 
-import { Service } from 'cordis'
-import type { Context } from 'cordis'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type {
   HostAssembleContext,
   HostPromptContext,
@@ -20,7 +20,7 @@ import type {
   HostToolProviderResult,
 } from './host-contracts.ts'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric Prompt API, provided by this package. */
     fabricPrompt: FabricPromptService

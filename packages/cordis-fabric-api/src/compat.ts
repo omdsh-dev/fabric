@@ -14,8 +14,8 @@
  * @module cordis-fabric/api/compat
  */
 
-import { Service } from 'cordis'
-import type { Context, Fiber } from 'cordis'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import { getFabric, isFabricInstalled, patchInstrumentation, serveBrowserTransform } from 'cordis-fabric'
 import type { FabricService } from 'cordis-fabric'
 import type { FabricInstrumentationConfig } from 'cordis-fabric'
@@ -27,7 +27,7 @@ export type {
   FabricCall, FabricHandler, FabricInvoke, FabricOperation, FabricPatch, FabricTarget, PatchId, ServeBrowserTransformOptions,
 } from 'cordis-fabric'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric compat adapter, provided by this package. */
     fabricCompat: FabricCompatService

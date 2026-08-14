@@ -18,7 +18,7 @@
 import { installBridge } from '../bridge.ts'
 import { FabricService } from '../service.ts'
 import { runtime } from '../runtime.ts'
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { FabricPatch, FabricPatchInfo } from '../types.ts'
 
 export { FabricService, installBridge, runtime }

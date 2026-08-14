@@ -4,7 +4,7 @@
  */
 
 /* jscpd:ignore-start */
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { HostInvariantInstaller, HostInvariantRegistry } from './host-contracts.ts'
 
 const PACKAGE_NAME = 'cordis-fabric-dsh'

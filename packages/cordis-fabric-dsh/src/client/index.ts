@@ -12,11 +12,11 @@
  * @module cordis-fabric-dsh/client
  */
 
-import { Service } from 'cordis'
-import type { Context } from 'cordis'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { HostCommandContribution } from '../host-contracts.ts'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric Client API, provided by this package. */
     fabricClient: FabricClientService

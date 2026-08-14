@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import Loader from '@cordisjs/plugin-loader'
 import type { HostAgent } from '../src/host-contracts.ts'
 import { FakeCommandRegistryService, FakeSystemPromptService, FakeToolRegistryService } from './fakes.ts'

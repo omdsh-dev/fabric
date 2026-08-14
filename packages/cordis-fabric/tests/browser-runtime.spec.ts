@@ -1,4 +1,4 @@
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, beforeEach } from 'vitest'
 import { GLOBAL_BRIDGE_KEY } from '../src/bridge.ts'
 import { FabricService, apply, name, runtime } from '../src/client/index.ts'

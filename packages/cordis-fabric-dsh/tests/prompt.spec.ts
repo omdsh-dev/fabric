@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { FakeSystemPromptService } from './fakes.ts'
 import { FabricPromptService } from '../src/prompt.ts'
 

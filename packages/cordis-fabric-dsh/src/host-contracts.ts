@@ -13,7 +13,7 @@
  * @module cordis-fabric-dsh/host-contracts
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /** Status values the host agent service mirrors on `agent/status`. */
@@ -258,7 +258,7 @@ export interface HostInvariantRegistry {
   register(packageName: string, installer: HostInvariantInstaller): () => void
 }
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The authoritative tool registry the Fabric Tool API delegates to. */
     tools: HostToolRegistry

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { HostPreToolDecision } from '../src/host-contracts.ts'
 import { FakeSystemPromptService, FakeToolRegistryService } from './fakes.ts'
 import { FabricToolsService } from '../src/tools.ts'

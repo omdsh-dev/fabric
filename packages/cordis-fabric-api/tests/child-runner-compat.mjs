@@ -6,7 +6,7 @@
  * is part of what each case exercises.
  */
 
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { installFabricHooks, FabricService, getFabric } from '../../cordis-fabric/src/index.ts'
 import FabricCompatService, { buildCompatInstrumentations } from '../src/compat.ts'
 

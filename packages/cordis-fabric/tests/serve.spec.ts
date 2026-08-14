@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { FakeHttpServerService } from './fakes.ts'
 import { serveBrowserTransform, type ServeBrowserTransformOptions } from '../src/index.ts'
 

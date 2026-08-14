@@ -1,7 +1,7 @@
 import { runtime, validatePatchId, validatePatchStatic, FabricService, getFabric } from '../src/index.ts'
 import { publish, subscribeBridge } from '../src/bridge.ts'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 
 const baseInfo = (id: string, enabled = false) => ({
   id,

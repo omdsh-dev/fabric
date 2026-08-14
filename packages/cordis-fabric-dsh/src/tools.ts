@@ -12,8 +12,8 @@
  * @module cordis-fabric-dsh/tools
  */
 
-import { Service } from 'cordis'
-import type { Context } from 'cordis'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type {
   HostPostToolDecision,
   HostPreToolDecision,
@@ -22,7 +22,7 @@ import type {
   HostToolExecutionResult,
 } from './host-contracts.ts'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric Tool API, provided by this package. */
     fabricTools: FabricToolsService

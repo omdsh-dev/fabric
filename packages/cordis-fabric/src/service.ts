@@ -12,12 +12,12 @@
  * @module cordis-fabric/service
  */
 
-import { Service } from 'cordis'
-import type { Context } from 'cordis'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
 import type { FabricBinding, FabricPatch, FabricPatchInfo, FabricHandler, PatchId } from './types.ts'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric patch registry, provided by this package. */
     fabric: FabricService

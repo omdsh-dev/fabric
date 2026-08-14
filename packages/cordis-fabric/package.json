@@ -45,7 +45,7 @@
     }
   },
   "peerDependencies": {
-    "cordis": "^4.0.0-rc.7"
+    "@deepseek-ai/cordis": "^4.0.1-0"
   },
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.1",
@@ -60,10 +60,10 @@
     "@cordisjs/plugin-timer": "^1.1.2",
     "@types/estree": "^1.0.8",
     "@types/node": "^22.20.0",
-    "cordis": "^4.0.0-rc.7",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.11",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@deepseek-ai/cordis": "^4.0.1-0"
   }
 }

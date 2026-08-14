@@ -11,7 +11,7 @@
  * @module tests/fakes
  */
 
-import { Service, type Context } from 'cordis'
+import { Service, type Context } from '@deepseek-ai/cordis'
 import type {
   HostAgent,
   HostAssembleContext,

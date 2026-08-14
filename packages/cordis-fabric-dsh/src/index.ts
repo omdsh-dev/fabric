@@ -11,7 +11,7 @@
  * @module cordis-fabric-dsh
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { FabricAgentService } from './agent.ts'
 import { FabricToolsService } from './tools.ts'
 import { FabricPromptService } from './prompt.ts'

@@ -75,15 +75,15 @@ importers:
       '@cordisjs/plugin-timer':
         specifier: ^1.1.2
         version: 1.1.2(cordis@4.0.0-rc.7)
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1-0
+        version: 4.0.1-rc.4
       '@types/estree':
         specifier: ^1.0.8
         version: 1.0.9
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
-      cordis:
-        specifier: ^4.0.0-rc.7
-        version: 4.0.0-rc.7(@cordisjs/plugin-include@1.0.4)(@cordisjs/plugin-loader@1.0.0-rc.5)
       tsdown:
         specifier: ^0.22.2
         version: 0.22.14(tsx@4.23.11)(typescript@6.0.3)(unrun@0.3.1)
@@ -96,12 +96,12 @@ importers:
 
   packages/cordis-fabric-api:
     devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1-0
+        version: 4.0.1-rc.4
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
-      cordis:
-        specifier: ^4.0.0-rc.7
-        version: 4.0.0-rc.7(@cordisjs/plugin-include@1.0.4)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cordis-fabric:
         specifier: workspace:*
         version: link:../cordis-fabric
@@ -123,12 +123,12 @@ importers:
       '@cordisjs/plugin-loader':
         specifier: ^1.0.0-rc.5
         version: 1.0.0-rc.5(cordis@4.0.0-rc.7)(node-addon-require-builtin@0.1.4)
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.1-0
+        version: 4.0.1-rc.4
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
-      cordis:
-        specifier: ^4.0.0-rc.7
-        version: 4.0.0-rc.7(@cordisjs/plugin-include@1.0.4)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cordis-fabric:
         specifier: workspace:*
         version: link:../cordis-fabric
@@ -184,6 +184,21 @@ packages:
     resolution: {integrity: sha512-5z5C3Eewt8JzK9XGy5JgIoYFRqXPWZnT7hHFfuJMQNzSom6iEVeLXpYiMvqVqGfJicHA7IroaOjcLRf99sidrQ==}
     peerDependencies:
       cordis: ^4.0.0-rc.5
+
+  '@deepseek-ai/cordis@4.0.1-rc.4':
+    resolution: {integrity: sha512-EaKPj5M79GCqYwazS7wnLfAzXPiCQRKvgj67+FZjzR0CQiYQO/WOUaWxwVETlzrgvq3nOsLwHIIMtzqQeLOzcA==}
+    hasBin: true
+    peerDependencies:
+      '@deepseek-ai/cordis-plugin-include': ^1.0.6-rc.4
+      '@deepseek-ai/cordis-plugin-loader': ^1.0.2-rc.4
+    peerDependenciesMeta:
+      '@deepseek-ai/cordis-plugin-include':
+        optional: true
+      '@deepseek-ai/cordis-plugin-loader':
+        optional: true
+
+  '@deepseek-ai/cosmokit@1.8.2-rc.4':
+    resolution: {integrity: sha512-5m8WiQziJd3HKkf61zSryHyGoIqthtwKsvf3rx3fx8prjw3Ez/iIUnjktCzO2P5ghZrLwGOelQ4AeDtNHG3wLg==}
 
   '@esbuild/aix-ppc64@0.28.1':
     resolution: {integrity: sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ==}
@@ -1218,6 +1233,13 @@ snapshots:
     dependencies:
       cordis: 4.0.0-rc.7(@cordisjs/plugin-include@1.0.4)(@cordisjs/plugin-loader@1.0.0-rc.5)
       cosmokit: 1.8.1
+
+  '@deepseek-ai/cordis@4.0.1-rc.4':
+    dependencies:
+      '@deepseek-ai/cosmokit': 1.8.2-rc.4
+      '@standard-schema/spec': 1.1.0
+
+  '@deepseek-ai/cosmokit@1.8.2-rc.4': {}
 
   '@esbuild/aix-ppc64@0.28.1':
     optional: true

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { HostAgent, HostAgentStatus, HostUserMessage } from '../src/host-contracts.ts'
 import { FabricAgentService } from '../src/agent.ts'
 
