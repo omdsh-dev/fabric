@@ -229,22 +229,25 @@ index 59dac77d..2f923973 100644
  
  /**
 diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
-index 7e7b5f95..d9b5421a 100644
+index 7e7b5f95..9a439713 100644
 --- a/packages/bundle/web-app/cordis.patch.yml
 +++ b/packages/bundle/web-app/cordis.patch.yml
-@@ -412,3 +412,12 @@
+@@ -412,3 +412,15 @@
        name: '@deepseek-ai/dsh-agent-presets'
        config:
          default: standard
 +
-+# The Fabric extension rows: the trio resolves from the source worktree's
-+# node_modules, so every profile booting this bundle gets them without a
-+# profile-layer edit.
++# The Fabric extension rows are explicit opt-in (disabled by default): the
++# pure `cordis-fabric` package is a library with no plugin `apply`, so an
++# enabled row fails every boot. The launcher bootstrap reads the rows from
++# the composed profile; a profile opts in by enabling them.
 +- insert:
 +    - id: cordis-fabric
 +      name: 'cordis-fabric'
++      disabled: true
 +    - id: cordis-fabric-dsh
 +      name: 'cordis-fabric-dsh'
++      disabled: true
 diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
 index 13df9f3d..8acdc300 100644
 --- a/packages/client/tsdown.client.ts

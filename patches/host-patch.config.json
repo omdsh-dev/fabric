@@ -70,7 +70,7 @@
     {
       "file": "packages/bundle/web-app/cordis.patch.yml",
       "old": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n",
-      "new": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n\n# The Fabric extension rows: the trio resolves from the source worktree's\n# node_modules, so every profile booting this bundle gets them without a\n# profile-layer edit.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n"
+      "new": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n\n# The Fabric extension rows are explicit opt-in (disabled by default): the\n# pure `cordis-fabric` package is a library with no plugin `apply`, so an\n# enabled row fails every boot. The launcher bootstrap reads the rows from\n# the composed profile; a profile opts in by enabling them.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n      disabled: true\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n      disabled: true\n"
     }
   ]
 }
