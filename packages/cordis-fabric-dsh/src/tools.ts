@@ -15,12 +15,12 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  HostPostToolDecision,
-  HostPreToolDecision,
-  HostToolDefinition,
-  HostToolExecution,
-  HostToolExecutionResult,
-} from './host-contracts.ts'
+  PostToolDecision,
+  PreToolDecision,
+  ToolDefinition,
+  ToolExecution,
+  ToolExecutionResult,
+} from '@deepseek-ai/dsh-tools'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -56,7 +56,7 @@ export class FabricToolsService extends Service {
    * @param definition - tool schema, execution, and optional finalization/presentation callbacks.
    * @returns the exact disposer that unregisters the tool.
    */
-  register(definition: HostToolDefinition): () => void {
+  register(definition: ToolDefinition): () => void {
     return this.ctx.tools.register(definition)
   }
 
@@ -65,8 +65,8 @@ export class FabricToolsService extends Service {
    * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
-  onPreExecute(listener: (exec: HostToolExecution, next: () => Promise<HostPreToolDecision>) => Promise<HostPreToolDecision>): () => boolean {
-    return this.ctx.on('tools/pre-execute' as never, listener as never)
+  onPreExecute(listener: (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>): () => boolean {
+    return this.ctx.on('tools/pre-execute', listener)
   }
 
   /**
@@ -76,11 +76,11 @@ export class FabricToolsService extends Service {
    */
   onPostExecute(
     listener: (
-      exec: HostToolExecution,
-      result: Readonly<HostToolExecutionResult>,
-      next: () => Promise<HostPostToolDecision>,
-    ) => Promise<HostPostToolDecision>,
+      exec: ToolExecution,
+      result: Readonly<ToolExecutionResult>,
+      next: () => Promise<PostToolDecision>,
+    ) => Promise<PostToolDecision>,
   ): () => boolean {
-    return this.ctx.on('tools/post-execute' as never, listener as never)
+    return this.ctx.on('tools/post-execute', listener)
   }
 }

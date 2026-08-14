@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { FakeSystemPromptService } from './fakes.ts'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { FabricPromptService } from '../src/prompt.ts'
 
 async function setup() {
   const ctx = new Context()
-  await ctx.plugin(FakeSystemPromptService)
+  await ctx.plugin(SystemPrompt)
   await ctx.plugin(FabricPromptService)
   return ctx
 }

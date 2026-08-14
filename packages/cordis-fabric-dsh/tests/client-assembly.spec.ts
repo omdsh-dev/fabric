@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import type { HostCommandContribution } from '../src/host-contracts.ts'
-import { FakeClientCommandRegistryService, FakeSlotRegistryService } from './fakes.ts'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import { CommandUiRuntime } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
 import { apply, FabricClientService } from '../src/client/index.ts'
 
 /**
@@ -14,18 +15,19 @@ import { apply, FabricClientService } from '../src/client/index.ts'
  */
 async function assemble() {
   const ctx = new Context()
-  ctx.provide('slash', {
-    registerSource(_source: unknown) { return () => {} },
+  ctx.provide('inputTriggers', {
+    registerSource() { return () => {} },
   })
   ctx.provide('sessions', {
     scope: () => undefined,
     scopeOf: () => undefined,
   })
-  ctx.provide('connection', {
-    api: { commands: { list: () => Promise.resolve({ result: { ok: true, value: { commands: [] } } }) } },
-  })
-  await ctx.plugin(FakeSlotRegistryService)
-  await ctx.plugin(FakeClientCommandRegistryService)
+  const commandsRemote = { list: () => Promise.resolve([]) }
+  // CommandUiRuntime injects `remote` for the forwarded directory invalidation.
+  ctx.provide('remote', { commands: commandsRemote, $on: () => () => {} })
+  ctx.provide('remote.commands', commandsRemote)
+  await ctx.plugin(SlotRegistry).await()
+  await ctx.plugin(CommandUiRuntime).await()
   await apply(ctx)
   // Observe the slot registry notifications from the Mod's registration.
   const changed: string[] = []
@@ -38,7 +40,7 @@ async function assemble() {
   return { ctx, id, changed, listen }
 }
 
-const sameCommand = (): HostCommandContribution => ({
+const sameCommand = (): CommandContribution => ({
   name: 'modclientcmd',
   description: 'fixture client command',
   available: () => true,

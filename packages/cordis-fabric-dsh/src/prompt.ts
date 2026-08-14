@@ -14,11 +14,11 @@
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  HostAssembleContext,
-  HostPromptContext,
-  HostPromptSection,
-  HostToolProviderResult,
-} from './host-contracts.ts'
+  AssembleContext,
+  PromptContext,
+  PromptSection,
+  ToolProviderResult,
+} from '@deepseek-ai/dsh-system-prompt'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -54,7 +54,7 @@ export class FabricPromptService extends Service {
    * @param section - the section to register.
    * @returns the exact effect disposer that unregisters it.
    */
-  section(section: HostPromptSection): () => void {
+  section(section: PromptSection): () => void {
     return this.ctx.systemPrompt.section(section)
   }
 
@@ -63,7 +63,7 @@ export class FabricPromptService extends Service {
    * @param context - the context contribution to register.
    * @returns the exact effect disposer that unregisters it.
    */
-  context(context: HostPromptContext): () => void {
+  context(context: PromptContext): () => void {
     return this.ctx.systemPrompt.context(context)
   }
 
@@ -72,7 +72,7 @@ export class FabricPromptService extends Service {
    * @param provider - evaluated for each assembly with its context.
    * @returns the exact effect disposer that unregisters it.
    */
-  tools(provider: (context: HostAssembleContext) => HostToolProviderResult): () => void {
+  tools(provider: (context: AssembleContext) => ToolProviderResult): () => void {
     return this.ctx.systemPrompt.tools(provider)
   }
 
@@ -82,7 +82,7 @@ export class FabricPromptService extends Service {
    * @param provider - evaluated for each assembly; returning `undefined` makes a referencing section fail.
    * @returns the exact effect disposer that unregisters it.
    */
-  variable(name: string, provider: (context: HostAssembleContext) => string | undefined): () => void {
+  variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void {
     return this.ctx.systemPrompt.variable(name, provider)
   }
 }

@@ -1,24 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { HostCommandContribution } from '../src/host-contracts.ts'
-import { FakeClientCommandRegistryService } from './fakes.ts'
+import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
+import { CommandUiRuntime } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { FabricClientService, apply, name, type FabricSlotOptions } from '../src/client/index.ts'
 
-/** Real CommandService over fake slash/sessions/connection faces, plus a fake slots registry. */
+/** Real CommandUiRuntime over fake inputTriggers/sessions/remote faces, plus a fake slots registry. */
 async function bench() {
   const ctx = new Context()
   const slots = new Map<string, { options: FabricSlotOptions; component: unknown; dispose: () => void }>()
   const registrations: Array<{ options: FabricSlotOptions; component: unknown; disposed: boolean }> = []
-  ctx.provide('slash', {
-    registerSource(_source: unknown) { return () => {} },
+  const sources = new Map<string, InputTriggerSource>()
+  ctx.provide('inputTriggers', {
+    registerSource(source: InputTriggerSource) {
+      sources.set(`${source.trigger} ${source.name}`, source)
+      return () => { sources.delete(`${source.trigger} ${source.name}`) }
+    },
   })
   ctx.provide('sessions', {
     scope: () => undefined,
     scopeOf: () => undefined,
   })
-  ctx.provide('connection', {
-    api: { commands: { list: () => Promise.resolve({ result: { ok: true, value: { commands: [] } } }) } },
-  })
+  const commandsRemote = { list: () => Promise.resolve([]) }
+  // CommandUiRuntime injects `remote` for the forwarded directory invalidation.
+  ctx.provide('remote', { commands: commandsRemote, $on: () => () => {} })
+  ctx.provide('remote.commands', commandsRemote)
   ctx.provide('slots', {
     register(options: FabricSlotOptions, component: unknown) {
       const record = { options, component, disposed: false }
@@ -31,12 +37,12 @@ async function bench() {
       return () => { record.disposed = true; slots.delete(options.name) }
     },
   })
-  await ctx.plugin(FakeClientCommandRegistryService)
+  await ctx.plugin(CommandUiRuntime).await()
   await apply(ctx)
   return { ctx, slots, registrations }
 }
 
-const commandContribution = (name: string): HostCommandContribution => ({
+const commandContribution = (name: string): CommandContribution => ({
   name,
   description: 'fixture command',
   available: () => true,
@@ -85,20 +91,21 @@ describe('cordis-fabric-dsh browser entry', () => {
 
   it('removes a command when its contributing fiber disposes (HMR safety)', async () => {
     const ctx = new Context()
-    ctx.provide('slash', {
-      registerSource(_source: unknown) { return () => {} },
+    ctx.provide('inputTriggers', {
+      registerSource() { return () => {} },
     })
     ctx.provide('sessions', {
       scope: () => undefined,
       scopeOf: () => undefined,
     })
-    ctx.provide('connection', {
-      api: { commands: { list: () => Promise.resolve({ result: { ok: true, value: { commands: [] } } }) } },
-    })
+    const commandsRemote = { list: () => Promise.resolve([]) }
+    // CommandUiRuntime injects `remote` for the forwarded directory invalidation.
+    ctx.provide('remote', { commands: commandsRemote, $on: () => () => {} })
+    ctx.provide('remote.commands', commandsRemote)
     ctx.provide('slots', {
       register() { return () => {} },
     })
-    await ctx.plugin(FakeClientCommandRegistryService)
+    await ctx.plugin(CommandUiRuntime).await()
     await apply(ctx)
     const mod = await ctx.plugin({
       name: 'mod-client',

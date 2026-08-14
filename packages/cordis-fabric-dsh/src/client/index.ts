@@ -2,7 +2,7 @@
  * The Fabric Client API module: a stable, Mod-facing surface for client
  * commands and named UI slots over the browser command and slot services.
  *
- * The facade delegates to `@deepseek-ai/dsh-client-ui-command` (`ctx.command`)
+ * The facade delegates to `@deepseek-ai/dsh-client-ui-commands` (`ctx.commandUi`)
  * and `@deepseek-ai/dsh-client-ui-slots` (`ctx.slots`). It exposes no raw DOM
  * access, transport internals, or Host capabilities: render contributions
  * stay pure over their declared inputs, and Host/Web communication uses the
@@ -14,7 +14,8 @@
 
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
-import type { HostCommandContribution } from '../host-contracts.ts'
+import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { SlotEntryDef, SlotLabel, SlotSpec, StoreDecl } from '@deepseek-ai/dsh-client-ui-slots'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -37,9 +38,9 @@ export interface FabricSlotOptions {
   /** The declared slot name to contribute to. */
   readonly name: string
   /** Child-slot declaration table: keys are the declared (and claimed) holes. */
-  readonly children?: Record<string, unknown>
+  readonly children?: Record<string, SlotSpec<SlotEntryDef>>
   /** Optional store seat whose handle joins the composed props. */
-  readonly store?: unknown
+  readonly store?: StoreDecl
   /** Optional business-face factory; parameters derive from the declaration. */
   /* oxlint-disable-next-line typescript/no-explicit-any --
    * narrow-contract position only; the authoritative typing lives in the
@@ -52,7 +53,7 @@ export interface FabricSlotOptions {
   /** List-kind ordering. */
   readonly order?: number
   /** List-kind label. */
-  readonly label?: unknown
+  readonly label?: SlotLabel
   /** Chain-kind routing priority. */
   readonly priority?: number
 }
@@ -119,7 +120,7 @@ export class FabricClientService extends Service {
   /** Service key under which this class registers on `ctx`. */
   static provide = 'fabricClient'
   /** The browser command and slot services must be mounted. */
-  static inject = ['command', 'slots']
+  static inject = ['commandUi', 'slots']
 
   /** Per (slot name, key) arbitration table: owner first, claimants in registration order. */
   private readonly keyed = new Map<string, KeyedClaim[]>()
@@ -137,8 +138,8 @@ export class FabricClientService extends Service {
    * @param contribution - slash-menu entry whose behavior lives entirely on the client.
    * @returns the exact effect disposer that unregisters it.
    */
-  registerCommand(contribution: HostCommandContribution): () => void {
-    return this.ctx.command.register(contribution)
+  registerCommand(contribution: CommandContribution): () => void {
+    return this.ctx.commandUi.register(contribution)
   }
 
   /**
