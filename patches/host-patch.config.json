@@ -1,7 +1,7 @@
 {
   "name": "fabric-host-integration",
-  "baseline": "7b9644f2",
-  "upstream": "1de04707",
+  "baseline": "9f9e2782a4",
+  "upstream": "65bcaf9902",
   "out": "patches/fabric-host-integration.patch",
   "exclude": [
     "packages/extensions/cordis-fabric",
@@ -66,6 +66,11 @@
       "file": "apps/cli/package.json",
       "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
       "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
+    },
+    {
+      "file": "package.json",
+      "old": "    \"dsh\": \"node --import tsx/esm apps/cli/src/bin.ts\",",
+      "new": "    \"dsh\": \"TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx/esm apps/cli/src/bin.ts\","
     },
     {
       "file": "packages/bundle/web-app/cordis.patch.yml",

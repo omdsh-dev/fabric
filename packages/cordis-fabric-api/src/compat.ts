@@ -11,7 +11,7 @@
  * Target version drift leaves the adapter unavailable rather than pretending
  * compatibility: the installed instrumentation simply never matches, and the
  * service's diagnostics surface the declared target.
- * @module cordis-fabric/api/compat
+ * @module cordis-fabric-api/compat
  */
 
 import { Service } from '@deepseek-ai/cordis'

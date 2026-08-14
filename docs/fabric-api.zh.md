@@ -24,7 +24,7 @@ Mod 仍然是普通 Cordis 插件,只声明它所消费的 Fabric 模块 service
 |---|---|---|---|
 | `.` / `./compat` | `ctx.fabricCompat` | Host | 低层 `cordis-fabric` patch(缺口 adapter) |
 
-`cordis-fabric-dsh` 承载所有 DSH 耦合面(facade 通过 `packages/cordis-fabric-dsh/src/host-contracts.ts` 中的窄契约转发给宿主):
+`cordis-fabric-dsh` 承载所有 DSH 耦合面(facade 通过真实 `@deepseek-ai/dsh-*` 类型转发给宿主,声明为 peer 依赖):
 
 | Entry | Service | 平台 | 委托给 |
 |---|---|---|---|

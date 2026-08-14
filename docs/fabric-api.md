@@ -24,7 +24,7 @@ A Mod remains an ordinary Cordis plugin that declares injection of only the Fabr
 |---|---|---|---|
 | `.` / `./compat` | `ctx.fabricCompat` | Host | low-level `cordis-fabric` patches (gap adapter) |
 
-`cordis-fabric-dsh` carries everything DSH-coupled (its facades forward to the host through the narrow contracts in `packages/cordis-fabric-dsh/src/host-contracts.ts`):
+`cordis-fabric-dsh` carries everything DSH-coupled (its facades forward to the host through the real `@deepseek-ai/dsh-*` types, declared as peer dependencies):
 
 | Entry | Service | Platform | Delegates to |
 |---|---|---|---|

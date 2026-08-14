@@ -14,7 +14,7 @@ The workspace contains exactly three complete packages — `cordis-fabric` (pure
 
 ## Host contracts
 
-The `@deepseek-ai/dsh-*` host packages are private and not installable from the npm registry. `packages/cordis-fabric-dsh/src/host-contracts.ts` is the workspace's only view of the host runtime: it declares the smallest structural surface the facades actually forward, plus the Cordis `Context` service and `Events` augmentations those facades rely on. Extend it only when a facade needs a new host surface, and keep the contracts narrow.
+The `@deepseek-ai/dsh-*` host packages are installable from the npm registry. The facades in `packages/cordis-fabric-dsh/src` import their real types directly (declared as peer + dev dependencies), mirroring the upstream fabric split: `Agent` from `@deepseek-ai/dsh-agent`, `ToolDefinition`/`ToolExecution` from `@deepseek-ai/dsh-tools`, `PromptSection`/`PromptContext`/`AssembleContext` from `@deepseek-ai/dsh-system-prompt`, `CommandDefinition`/`CommandDescriptor` from `@deepseek-ai/dsh-commands`. Extend the imports only when a facade needs a new host surface, and keep them narrow.
 
 ## Plugin forms
 
@@ -26,7 +26,7 @@ Every listener, registry entry, timer, watcher, child process, and callback regi
 
 ## Invariant companion
 
-`cordis-fabric-dsh` exposes `./invariant` as a separate function plugin. Its installer checks an authoritative event or data relationship owned by the package. An empty installer is valid only when the package owns no observable relationship; explain that reason in the source. The companion resolves the host `invariants` service through the narrow local contract in `packages/cordis-fabric-dsh/src/host-contracts.ts`.
+`cordis-fabric-dsh` exposes `./invariant` as a separate function plugin. Its installer checks an authoritative event or data relationship owned by the package. An empty installer is valid only when the package owns no observable relationship; explain that reason in the source. The companion resolves the host `invariants` service through the real `@deepseek-ai/dsh-invariants` types (peer dependency).
 
 ## Bundle composition
 

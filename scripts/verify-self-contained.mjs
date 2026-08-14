@@ -160,7 +160,6 @@ for (const requiredPath of [
   'packages/cordis-fabric-api/tests',
   'packages/cordis-fabric-dsh/package.json',
   'packages/cordis-fabric-dsh/src',
-  'packages/cordis-fabric-dsh/src/host-contracts.ts',
   'packages/cordis-fabric-dsh/tests',
   'patches/README.md',
   'patches/fabric-host-integration.patch',

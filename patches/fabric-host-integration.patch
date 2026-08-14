@@ -1,5 +1,5 @@
 diff --git a/.gitignore b/.gitignore
-index 3d0fd8e3..c616bea5 100644
+index 3d0fd8e322..c616bea5c0 100644
 --- a/.gitignore
 +++ b/.gitignore
 @@ -1,6 +1,9 @@
@@ -13,10 +13,10 @@ index 3d0fd8e3..c616bea5 100644
  *.tsbuildinfo
  pnpm-debug.log
 diff --git a/apps/cli/package.json b/apps/cli/package.json
-index 277a6cfc..866ba4e1 100644
+index fdd4740b3c..038079bd65 100644
 --- a/apps/cli/package.json
 +++ b/apps/cli/package.json
-@@ -77,7 +77,9 @@
+@@ -80,7 +80,9 @@
      "commander": "^15.0.0",
      "@deepseek-ai/cordis": "workspace:^",
      "js-yaml": "^4.2.0",
@@ -28,7 +28,7 @@ index 277a6cfc..866ba4e1 100644
    "devDependencies": {
      "@deepseek-ai/dsh-agent": "workspace:^",
 diff --git a/apps/cli/src/profile-boot.ts b/apps/cli/src/profile-boot.ts
-index 19c4abb2..720345ea 100644
+index 19c4abb245..720345ea6e 100644
 --- a/apps/cli/src/profile-boot.ts
 +++ b/apps/cli/src/profile-boot.ts
 @@ -37,6 +37,8 @@ const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', im
@@ -79,7 +79,7 @@ index 19c4abb2..720345ea 100644
    // presence and fiber state own liveness; the initial check skips a tree
 diff --git a/apps/cli/tests/fabric-bootstrap-runner.mjs b/apps/cli/tests/fabric-bootstrap-runner.mjs
 new file mode 100644
-index 00000000..2adf26d5
+index 0000000000..2adf26d596
 --- /dev/null
 +++ b/apps/cli/tests/fabric-bootstrap-runner.mjs
 @@ -0,0 +1,39 @@
@@ -124,7 +124,7 @@ index 00000000..2adf26d5
 +if (!ok) process.exitCode = 1
 diff --git a/apps/cli/tests/fabric-bootstrap.spec.ts b/apps/cli/tests/fabric-bootstrap.spec.ts
 new file mode 100644
-index 00000000..9a21c7c1
+index 0000000000..9a21c7c1d8
 --- /dev/null
 +++ b/apps/cli/tests/fabric-bootstrap.spec.ts
 @@ -0,0 +1,46 @@
@@ -176,7 +176,7 @@ index 00000000..9a21c7c1
 +})
 diff --git a/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs
 new file mode 100644
-index 00000000..03b96927
+index 0000000000..03b9692747
 --- /dev/null
 +++ b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs
 @@ -0,0 +1,7 @@
@@ -189,7 +189,7 @@ index 00000000..03b96927
 +}
 diff --git a/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json
 new file mode 100644
-index 00000000..2421fc05
+index 0000000000..2421fc0512
 --- /dev/null
 +++ b/apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json
 @@ -0,0 +1,7 @@
@@ -201,10 +201,10 @@ index 00000000..2421fc05
 +  "main": "index.cjs"
 +}
 diff --git a/knip.json b/knip.json
-index e5201bc3..6d3cf559 100644
+index 3017292382..aafac74448 100644
 --- a/knip.json
 +++ b/knip.json
-@@ -724,7 +724,8 @@
+@@ -737,7 +737,8 @@
          "tests/**/*.ts"
        ],
        "ignoreDependencies": [
@@ -214,8 +214,21 @@ index e5201bc3..6d3cf559 100644
        ]
      },
      "packages/client/modules": {
+diff --git a/package.json b/package.json
+index 81cedbbb42..3e10dbf5ca 100644
+--- a/package.json
++++ b/package.json
+@@ -133,7 +133,7 @@
+     "release:pack": "tsx scripts/release/pack.ts",
+     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
+     "release:publish": "tsx scripts/release/publish.ts",
+-    "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
++    "dsh": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx/esm apps/cli/src/bin.ts",
+     "demo:code-mode": "node scripts/demo-code-mode.mjs",
+     "demo:cordis": "node scripts/demo-cordis.mjs",
+     "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
 diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
-index 59dac77d..2f923973 100644
+index 8f982bed80..1b2072613f 100644
 --- a/packages/boot/app-boot/src/profile.ts
 +++ b/packages/boot/app-boot/src/profile.ts
 @@ -140,6 +140,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
@@ -229,10 +242,10 @@ index 59dac77d..2f923973 100644
  
  /**
 diff --git a/packages/bundle/web-app/cordis.patch.yml b/packages/bundle/web-app/cordis.patch.yml
-index 7e7b5f95..9a439713 100644
+index b06e63b54f..67c4b89d62 100644
 --- a/packages/bundle/web-app/cordis.patch.yml
 +++ b/packages/bundle/web-app/cordis.patch.yml
-@@ -412,3 +412,15 @@
+@@ -422,3 +422,15 @@
        name: '@deepseek-ai/dsh-agent-presets'
        config:
          default: standard
@@ -249,7 +262,7 @@ index 7e7b5f95..9a439713 100644
 +      name: 'cordis-fabric-dsh'
 +      disabled: true
 diff --git a/packages/client/tsdown.client.ts b/packages/client/tsdown.client.ts
-index 13df9f3d..8acdc300 100644
+index 13df9f3da0..8acdc30049 100644
 --- a/packages/client/tsdown.client.ts
 +++ b/packages/client/tsdown.client.ts
 @@ -100,7 +100,7 @@ export function clientBundle(
@@ -301,127 +314,157 @@ index 13df9f3d..8acdc300 100644
        entryFileNames: 'client.js',
        // The map is served from /plugins/<scoped-package>/client.js.map. The
 diff --git a/packages/extensions/tool-cordis/src/api-catalog.ts b/packages/extensions/tool-cordis/src/api-catalog.ts
-index fca96a19..750eab27 100644
+index 5a812806da..097b3170db 100644
 --- a/packages/extensions/tool-cordis/src/api-catalog.ts
 +++ b/packages/extensions/tool-cordis/src/api-catalog.ts
-@@ -360,6 +360,116 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+@@ -562,6 +562,146 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
        },
      ],
    },
 +  {
 +    key: 'fabric',
 +    summary: 'The Fabric registry service.',
++    description: 'The Fabric registry service. Trusted patches register handlers against target module functions at load time; transformed code publishes to a shared bridge the registry dispatches, and disposal restores the original bodies.',
 +    methods: [
 +      {
 +        signature: 'register(patch: FabricPatch): PatchId',
-+        jsDoc: '/**\n * Register a patch and enable its handler for the current fiber.\n *\n * Every registration is an effect on the calling fiber: disposing the\n * fiber disables and removes the patch, so transformed code falls back to\n * the original body. The disposer only removes the entry while this fiber\n * still owns it — a same-owner re-registration (an HMR generation taking\n * its plugin\'s patch back) transfers fiber ownership, so the previous\n * generation\'s cleanup becomes a no-op instead of unregistering the newer\n * registration. Registering an id already owned by a different plugin\n * fails loud: a patch id is exclusive to one owner.\n * @param patch - validated patch descriptor.\n * @returns the registered patch id.\n * @throws when the id is already registered by a different plugin owner.\n */',
++        description: 'Register a patch and enable its handler for the current fiber. The registration is an effect: disposing the fiber disables and removes the patch, so transformed code falls back to the original body. The effect attaches on the first registration of an id only; a later re-registration from another fiber updates metadata and handler without changing disposal ownership.',
++        parameters: [{ name: 'patch', description: 'validated patch descriptor.' }],
++        returns: 'the registered patch id.',
 +      },
 +      {
 +        signature: 'list(): FabricPatchInfo[]',
-+        jsDoc: '/**\n * Ordered diagnostic snapshot of all registered patches.\n * @returns the patch infos sorted by priority then id.\n */',
++        description: 'Ordered diagnostic snapshot of all registered patches.',
++        parameters: [],
++        returns: 'the patch infos sorted by priority then id.',
 +      },
 +      {
 +        signature: 'disable(id: string): void',
-+        jsDoc: '/**\n * Disable a patch\'s handler; transformed code delegates to the original\n * body until the patch is enabled again.\n * @param id - the patch id.\n */',
++        description: 'Disable a patch\'s handler; transformed code delegates to the original body until the patch is enabled again.',
++        parameters: [{ name: 'id', description: 'the patch id.' }],
 +      },
 +      {
 +        signature: 'enable(id: string, handler: FabricHandler): void',
-+        jsDoc: '/**\n * Enable a previously disabled patch with a fresh handler binding.\n * @param id - the patch id.\n * @param handler - the trusted runtime handler.\n */',
-+      },
-+      {
-+        signature: 'remove(id: string): void',
-+        jsDoc: '/**\n * Remove a patch entirely; transformed code delegates to the original body\n * until the patch is registered again. The registering fiber\'s effect\n * still owns the entry, so a removal here cannot be undone by a later\n * fiber disposal (the disposer no-ops once the entry is gone).\n * @param id - the patch id.\n */',
-+      },
-+      {
-+        signature: 'owns(id: string, fiber: unknown): boolean',
-+        jsDoc: '/**\n * Whether the entry for a patch id is still owned by the given fiber —\n * the ownership check a cooperative disposer (e.g. the compat facade\'s\n * observer) runs before disabling, so a stale generation\'s cleanup cannot\n * disable a newer generation\'s registration that took the entry over.\n * @param id - the patch id.\n * @param fiber - the fiber token the registration was made on.\n * @returns true while the entry exists and is owned by that fiber.\n */',
++        description: 'Enable a previously disabled patch with a fresh handler binding.',
++        parameters: [{ name: 'id', description: 'the patch id.' }, { name: 'handler', description: 'the trusted runtime handler.' }],
 +      },
 +      {
 +        signature: 'bindings(id?: PatchId): readonly FabricBinding[]',
-+        jsDoc: '/**\n * Snapshot of load-time bindings: the files the transformation hooks\n * actually rewrote for one patch — the ground truth the `required` check\n * and this package\'s diagnostics are built on.\n * @param id - the patch id; when omitted, every recorded binding across\n * patches, flattened in patch-id order.\n * @returns the recorded binding records.\n */',
++        description: 'Snapshot of load-time bindings: the files the transformation hooks actually rewrote for one patch — the ground truth the `required` check and this package\'s diagnostics are built on.',
++        parameters: [{ name: 'id', description: 'the patch id; when omitted, every recorded binding across patches, flattened in patch-id order.' }],
++        returns: 'the recorded binding records.',
 +      },
 +    ],
 +  },
 +  {
 +    key: 'fabricAgent',
 +    summary: 'Cooperative Mod-facing Agent lifecycle API.',
++    description: 'Cooperative Mod-facing Agent lifecycle API. Listeners observe creation, disposal, and status transitions over the authoritative agent events; logged context injection goes through the Agent\'s own durable injection path.',
 +    methods: [
 +      {
 +        signature: 'onCreated(listener: (agent: Agent) => void): () => boolean',
-+        jsDoc: '/**\n * Observe a live agent being created.\n * @param listener - called with the created agent.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++        description: 'Observe a live agent being created.',
++        parameters: [{ name: 'listener', description: 'called with the created agent.' }],
++        returns: 'the exact `ctx.on()` disposer removing this listener.',
 +      },
 +      {
 +        signature: 'onDisposed(listener: (agent: Agent) => void): () => boolean',
-+        jsDoc: '/**\n * Observe a live agent being disposed.\n * @param listener - called with the disposed agent.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++        description: 'Observe a live agent being disposed.',
++        parameters: [{ name: 'listener', description: 'called with the disposed agent.' }],
++        returns: 'the exact `ctx.on()` disposer removing this listener.',
 +      },
 +      {
 +        signature: 'onStatus(listener: (agent: Agent, status: AgentStatus) => void): () => boolean',
-+        jsDoc: '/**\n * Observe an agent\'s idle/running status transitions.\n * @param listener - called with the agent and its new status.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++        description: 'Observe an agent\'s idle/running status transitions.',
++        parameters: [{ name: 'listener', description: 'called with the agent and its new status.' }],
++        returns: 'the exact `ctx.on()` disposer removing this listener.',
 +      },
 +      {
 +        signature: 'inject(agent: Agent, message: UserMessage): void',
-+        jsDoc: '/**\n * Inject a logged, model-visible user message into one agent\'s context.\n *\n * The message goes through `agent.inject()`, the Agent\'s own durable\n * injection path: anything this API contributes to a model request is\n * reconstructable from the session log. No provider request is assembled\n * here.\n * @param agent - the live agent to inject into.\n * @param message - the sourced user message to append.\n */',
++        description: 'Inject a logged, model-visible user message into one agent\'s context. The message goes through `agent.inject()`, the Agent\'s own durable injection path: anything this API contributes to a model request is reconstructable from the session log. No provider request is assembled here.',
++        parameters: [{ name: 'agent', description: 'the live agent to inject into.' }, { name: 'message', description: 'the sourced user message to append.' }],
 +      },
 +    ],
 +  },
 +  {
 +    key: 'fabricCommands',
 +    summary: 'Cooperative Mod-facing command registry API.',
++    description: 'Cooperative Mod-facing command registry API. Human command registration and effective descriptor listing over the authoritative command registry.',
 +    methods: [
 +      {
 +        signature: 'register(definition: CommandDefinition): () => void',
-+        jsDoc: '/**\n * Register one human command through the authoritative registry.\n * @param definition - discovery metadata and direct UI handler.\n * @returns the exact effect disposer that unregisters this definition.\n */',
++        description: 'Register one human command through the authoritative registry.',
++        parameters: [{ name: 'definition', description: 'discovery metadata and direct UI handler.' }],
++        returns: 'the exact effect disposer that unregisters this definition.',
 +      },
 +      {
 +        signature: 'list(agent: Agent): readonly CommandDescriptor[]',
-+        jsDoc: '/**\n * List the effective immutable command descriptors for one agent.\n * @param agent - exact receiving agent and scoped-layer key.\n * @returns name-sorted descriptors after scoped shadowing.\n */',
++        description: 'List the effective immutable command descriptors for one agent.',
++        parameters: [{ name: 'agent', description: 'exact receiving agent and scoped-layer key.' }],
++        returns: 'name-sorted descriptors after scoped shadowing.',
 +      },
 +    ],
 +  },
 +  {
 +    key: 'fabricPrompt',
 +    summary: 'Cooperative Mod-facing system-prompt registry API.',
++    description: 'Cooperative Mod-facing system-prompt registry API. Ordered system sections, cache-safe context contributions, tool-schema providers, and prompt variables over the authoritative prompt registry.',
 +    methods: [
 +      {
 +        signature: 'section(section: PromptSection): () => void',
-+        jsDoc: '/**\n * Register an ordered system section.\n * @param section - the section to register.\n * @returns the exact effect disposer that unregisters it.\n */',
++        description: 'Register an ordered system section.',
++        parameters: [{ name: 'section', description: 'the section to register.' }],
++        returns: 'the exact effect disposer that unregisters it.',
 +      },
 +      {
 +        signature: 'context(context: PromptContext): () => void',
-+        jsDoc: '/**\n * Register an ordered, cache-safe dynamic context contribution.\n * @param context - the context contribution to register.\n * @returns the exact effect disposer that unregisters it.\n */',
++        description: 'Register an ordered, cache-safe dynamic context contribution.',
++        parameters: [{ name: 'context', description: 'the context contribution to register.' }],
++        returns: 'the exact effect disposer that unregisters it.',
 +      },
 +      {
 +        signature: 'tools(provider: (context: AssembleContext) => ToolProviderResult): () => void',
-+        jsDoc: '/**\n * Register a tool-schema provider.\n * @param provider - evaluated for each assembly with its context.\n * @returns the exact effect disposer that unregisters it.\n */',
++        description: 'Register a tool-schema provider.',
++        parameters: [{ name: 'provider', description: 'evaluated for each assembly with its context.' }],
++        returns: 'the exact effect disposer that unregisters it.',
 +      },
 +      {
 +        signature: 'variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void',
-+        jsDoc: '/**\n * Register a prompt variable.\n * @param name - the `[a-z][a-z0-9_]*` reference name.\n * @param provider - evaluated for each assembly; returning `undefined` makes a referencing section fail.\n * @returns the exact effect disposer that unregisters it.\n */',
++        description: 'Register a prompt variable.',
++        parameters: [{ name: 'name', description: 'the `[a-z][a-z0-9_]*` reference name.' }, { name: 'provider', description: 'evaluated for each assembly; returning `undefined` makes a referencing section fail.' }],
++        returns: 'the exact effect disposer that unregisters it.',
 +      },
 +    ],
 +  },
 +  {
 +    key: 'fabricTools',
 +    summary: 'Cooperative Mod-facing tool registry API.',
++    description: 'Cooperative Mod-facing tool registry API. Tool registration and pre/post-execute waterfall listeners over the authoritative tool registry.',
 +    methods: [
 +      {
 +        signature: 'register(definition: ToolDefinition): () => void',
-+        jsDoc: '/**\n * Register one tool through the authoritative registry.\n * @param definition - tool schema, execution, and optional finalization/presentation callbacks.\n * @returns the exact disposer that unregisters the tool.\n */',
++        description: 'Register one tool through the authoritative registry.',
++        parameters: [{ name: 'definition', description: 'tool schema, execution, and optional finalization/presentation callbacks.' }],
++        returns: 'the exact disposer that unregisters the tool.',
 +      },
 +      {
 +        signature: 'onPreExecute(listener: (exec: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>): () => boolean',
-+        jsDoc: '/**\n * Observe or gate dispatch through `tools/pre-execute`.\n * @param listener - the waterfall listener; call `next()` to delegate, return without it to veto.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++        description: 'Observe or gate dispatch through `tools/pre-execute`.',
++        parameters: [{ name: 'listener', description: 'the waterfall listener; call `next()` to delegate, return without it to veto.' }],
++        returns: 'the exact `ctx.on()` disposer removing this listener.',
 +      },
 +      {
 +        signature: 'onPostExecute( listener: ( exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>, ) => Promise<PostToolDecision>, ): () => boolean',
-+        jsDoc: '/**\n * Observe or shape a normalized dispatch outcome through `tools/post-execute`.\n * @param listener - the waterfall listener; call `next()` to accept the result unchanged.\n * @returns the exact `ctx.on()` disposer removing this listener.\n */',
++        description: 'Observe or shape a normalized dispatch outcome through `tools/post-execute`.',
++        parameters: [{ name: 'listener', description: 'the waterfall listener; call `next()` to accept the result unchanged.' }],
++        returns: 'the exact `ctx.on()` disposer removing this listener.',
 +      },
 +    ],
 +  },
    {
      key: 'fs',
      summary: 'Abstract filesystem provider.',
-@@ -2108,6 +2218,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -3029,6 +3169,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'EpochHeader',
      declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
    },
@@ -476,7 +519,7 @@ index fca96a19..750eab27 100644
    {
      name: 'FileDiff',
      declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
-@@ -2496,10 +2654,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+@@ -3473,6 +3661,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
      name: 'OneShotSubagentDescriptorData',
      declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
    },
@@ -487,27 +530,19 @@ index fca96a19..750eab27 100644
    {
      name: 'PermissionSelect',
      declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
-   },
-+  {
-+    name: 'PostToolDecision',
-+    declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
-+  },
-   {
-     name: 'PreparedLlmCall',
-     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
-@@ -2524,6 +2690,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
-     name: 'PresetTrust',
-     declaration: 'export type PresetTrust = \'system\' | \'user\';',
+@@ -3501,6 +3693,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'PresetSpec',
+     declaration: 'export interface PresetSpec {\n    sandbox: SandboxMode;\n    approval: ApprovalPolicy;\n    name?: string;\n    description?: string;\n}',
    },
 +  {
 +    name: 'PreToolDecision',
 +    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
 +  },
    {
-     name: 'ProjectionChangeListener',
-     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
+     name: 'PresetTrust',
+     declaration: 'export type PresetTrust = \'system\' | \'user\';',
 diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
-index e8d8ee5b..21ae2d79 100644
+index e8d8ee5bec..21ae2d797e 100644
 --- a/pnpm-workspace.yaml
 +++ b/pnpm-workspace.yaml
 @@ -37,6 +37,12 @@ peerDependencyRules:
@@ -525,7 +560,7 @@ index e8d8ee5b..21ae2d79 100644
    lefthook: true
 diff --git a/scripts/client-bundle-source-transform.spec.ts b/scripts/client-bundle-source-transform.spec.ts
 new file mode 100644
-index 00000000..8a4f1c1e
+index 0000000000..8a4f1c1e76
 --- /dev/null
 +++ b/scripts/client-bundle-source-transform.spec.ts
 @@ -0,0 +1,66 @@
@@ -597,7 +632,7 @@ index 00000000..8a4f1c1e
 +})
 diff --git a/scripts/dev-web-fabric.spec.ts b/scripts/dev-web-fabric.spec.ts
 new file mode 100644
-index 00000000..8a97ab07
+index 0000000000..8a97ab0712
 --- /dev/null
 +++ b/scripts/dev-web-fabric.spec.ts
 @@ -0,0 +1,81 @@
@@ -683,11 +718,11 @@ index 00000000..8a97ab07
 +  }
 +}, 30_000)
 diff --git a/tsconfig.client.json b/tsconfig.client.json
-index e6eccd61..f5704824 100644
+index e599f76f1b..d61dd4ab6d 100644
 --- a/tsconfig.client.json
 +++ b/tsconfig.client.json
-@@ -25,7 +25,8 @@
-     "packages/*/*/tests/**/*.client.ts",
+@@ -27,7 +27,8 @@
+     "packages/extensions/ui-cordis/src/css-modules.d.ts",
      "packages/client/tsdown.client.ts",
      "scripts/client-bundle-css.spec.ts",
 -    "scripts/client-bundle-purity.spec.ts"
@@ -697,10 +732,10 @@ index e6eccd61..f5704824 100644
    // A `*.host.spec.ts` covers the Host half of a split client package and
    // belongs to the host aggregate, which excludes this program's `*.client.*`
 diff --git a/tsconfig.host.json b/tsconfig.host.json
-index bb66a58a..18ba0675 100644
+index 459036247a..7913303c9c 100644
 --- a/tsconfig.host.json
 +++ b/tsconfig.host.json
-@@ -103,7 +103,8 @@
+@@ -104,7 +104,8 @@
      "packages/client/tsdown.client.ts",
      "scripts/client-bundle-css.spec.ts",
      "packages/typert/generator/tests/fixtures/**",

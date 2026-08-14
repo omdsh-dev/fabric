@@ -33,7 +33,7 @@ lib/                      # 构建产物(已忽略;每个包在安装时自行 p
 
 ## 仓库边界
 
-本仓库完全自包含:所有源码、编译器配置、测试夹具、贡献说明和构建辅助都位于仓库根目录内,所有开发输入都从本仓库自身的 manifest 和 lockfile 解析。DSH 宿主包(`@deepseek-ai/dsh-agent`、`@deepseek-ai/dsh-invariants` 以及 facade 委托的其他 `@deepseek-ai/dsh-*` 服务)是私有包,无法从 npm registry 安装;`packages/cordis-fabric-dsh/src/host-contracts.ts` 声明了 facade 所需的最窄结构契约,运行时由组合后的 DSH profile 提供真实服务。
+本仓库完全自包含:所有源码、编译器配置、测试夹具、贡献说明和构建辅助都位于仓库根目录内,所有开发输入都从本仓库自身的 manifest 和 lockfile 解析。DSH 宿主包(`@deepseek-ai/dsh-agent`、`@deepseek-ai/dsh-invariants` 以及 facade 委托的其他 `@deepseek-ai/dsh-*` 服务)可从 npm registry 安装;facade 直接导入它们的真实类型(声明为 peer + dev 依赖),运行时由组合后的 DSH profile 提供真实服务。
 
 运行 `pnpm run verify:self-contained` 强制执行该边界:它拒绝本地路径依赖规格、离开仓库的编译器或代码路径、外部或损坏的 Markdown 链接、绝对工作站路径,以及任何仓库布局契约文件的缺失。
 
@@ -53,7 +53,7 @@ bundle 载体加入两个默认禁用的 profile 行:
 
 Patch handler 是通过 `ctx.fabric.register()` 注册的可信代码;YAML 或模型输入永远不会反序列化可执行 handler。服务支持 Node ESM/CommonJS 加载期变换、browser 构建期变换、优先级组合、HMR 安全销毁、静态目标校验、generator 委托和 watched browser transforms。
 
-新的 bundle 层只负责组合 package rows。三包要真正运行所需的 launcher/bootstrap 与 browser build 接缝是宿主侧代码,不属于三包,以 `patches/fabric-host-integration.patch` 携带(对快照 `7b9644f2`(0812)的 deepseek-harness checkout 执行 `git apply`;见 `patches/README.md`)。已到拆分提交的宿主无需任何补丁。
+新的 bundle 层只负责组合 package rows。三包要真正运行所需的 launcher/bootstrap 与 browser build 接缝是宿主侧代码,不属于三包,以 `patches/fabric-host-integration.patch` 携带(对快照 `9f9e2782a4`(0813)的 deepseek-harness checkout 执行 `git apply`;见 `patches/README.md`)。已到拆分提交的宿主无需任何补丁。
 
 ## 安装
 
@@ -82,7 +82,7 @@ pnpm dsh web            # web-app bundle 层已组合 fabric 两行
 
 或者一步完成(在本 bundle 仓库里执行):`pnpm run install:host -- <deepseek-harness-checkout>`(打补丁 + 安装 + 构建)。
 
-**npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `1de04707` 已包含)。
+**npm 安装的官方 `dsh`** — 无法打源码补丁(CLI 是预构建产物);等官方仓库合入接线后即可(拆分提交 `65bcaf9902` 已包含)。
 
 两个前提:
 

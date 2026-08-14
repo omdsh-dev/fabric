@@ -77,16 +77,16 @@ function isPatchArray(value: FabricPatchStub | readonly FabricPatchStub[]): valu
  * @param ctx - the Host context providing the webserver and composition base URL.
  * @param options - route, patch(es), and degradation policy.
  * @returns a disposer removing the route.
- * @throws when the context has no `httpServer` service or composition base URL,
+ * @throws when the context has no `webServer` service or composition base URL,
  * the target package cannot resolve, a descriptor is malformed, or the patches
  * do not all target the same bundle file.
  */
 export function serveBrowserTransform(ctx: Context, options: ServeBrowserTransformOptions): () => void {
-  const httpServer = ctx.get('httpServer') as
+  const httpServer = ctx.get('webServer') as
     | { register(route: { kind: 'exact'; path: string; handler: (req: IncomingMessage, res: ServerResponse) => void }): () => void }
     | undefined
   if (httpServer === undefined) {
-    throw new Error('fabric: serveBrowserTransform requires the httpServer service on the context')
+    throw new Error('fabric: serveBrowserTransform requires the webServer service on the context')
   }
   const fallback = options.fallback ?? 'error'
   const patches = isPatchArray(options.patch) ? [...options.patch] : [options.patch]
