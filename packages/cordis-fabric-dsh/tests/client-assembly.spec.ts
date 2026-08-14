@@ -1,10 +1,68 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { CommandUiRuntime } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
 import { apply, FabricClientService } from '../src/client/index.ts'
+
+// The real browser slot service declares the slots/changed event; the
+// registry package carrying it (dsh-client-runtime) is not installable, so
+// the fake declares the same event bridge (mirrors the upstream runtime).
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'slots/changed'(key: string): void
+  }
+}
+
+/** Fake authoritative browser command service (provides `commandUi`): a Service
+ * so cordis binds `this.ctx` to the caller's fiber and its effects ride that
+ * fiber. The real CommandUiRuntime lives in @deepseek-ai/dsh-client-ui-commands,
+ * whose dependency tree is not installable from the registry. */
+class FakeCommandUiRuntime extends Service {
+  private readonly commands = new Map<string, CommandContribution>()
+
+  /** Create and install the fake browser command service. */
+  constructor(ctx: Context) {
+    super(ctx, 'commandUi')
+  }
+
+  register(contribution: CommandContribution): () => void {
+    if (this.commands.has(contribution.name)) {
+      throw new Error(`client-command: contribution "${contribution.name}" is already registered`)
+    }
+    this.ctx.effect(() => {
+      this.commands.set(contribution.name, contribution)
+      return () => { this.commands.delete(contribution.name) }
+    }, `fake-commandUi.register(${contribution.name})`)
+    return () => { this.commands.delete(contribution.name) }
+  }
+}
+
+/**
+ * Fake authoritative slot registry (provides `slots`): single-hole names
+ * with a duplicate-name failure and `slots/changed` notifications. The real
+ * browser slot service lives in @deepseek-ai/dsh-client-runtime, whose
+ * dependency tree is not installable from the registry.
+ */
+class FakeSlotRegistry extends Service {
+  private readonly slots = new Map<string, unknown>()
+
+  /** Create and install the fake slot registry. */
+  constructor(ctx: Context) {
+    super(ctx, 'slots')
+  }
+
+  register(options: { name: string }, component: unknown): () => void {
+    if (this.slots.has(options.name)) {
+      throw new Error(`slot registry: single-hole slot "${options.name}" is already registered`)
+    }
+    this.ctx.effect(() => {
+      this.slots.set(options.name, component)
+      this.ctx.emit('slots/changed', options.name)
+      return () => { this.slots.delete(options.name) }
+    }, `fake-slots.register(${options.name})`)
+    return () => { this.slots.delete(options.name) }
+  }
+}
 
 /**
  * Browser assembly: the real browser command and slot services (the
@@ -26,8 +84,8 @@ async function assemble() {
   // CommandUiRuntime injects `remote` for the forwarded directory invalidation.
   ctx.provide('remote', { commands: commandsRemote, $on: () => () => {} })
   ctx.provide('remote.commands', commandsRemote)
-  await ctx.plugin(SlotRegistry).await()
-  await ctx.plugin(CommandUiRuntime).await()
+  await ctx.plugin(FakeSlotRegistry).await()
+  await ctx.plugin(FakeCommandUiRuntime).await()
   await apply(ctx)
   // Observe the slot registry notifications from the Mod's registration.
   const changed: string[] = []

@@ -1,7 +1,7 @@
 {
   "name": "cordis-fabric-api",
   "description": "Cooperative Fabric API: the pure-Cordis compat facade over the cordis-fabric registry",
-  "version": "0.0.1-rc.1",
+  "version": "0.0.1-rc.2",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
@@ -32,7 +32,7 @@
     "prepare": "tsc -b && tsdown --config tsdown.config.ts"
   },
   "peerDependencies": {
-    "cordis-fabric": "^0.0.1-rc.1",
+    "cordis-fabric": "^0.0.1-rc.2",
     "@deepseek-ai/cordis": "^4.0.1-0"
   },
   "devDependencies": {

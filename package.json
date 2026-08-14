@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "cordis": "^4.0.0-rc.7",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.11",
     "typescript": "^6.0.3",

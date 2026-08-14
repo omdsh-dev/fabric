@@ -10,8 +10,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { FakeHttpServerService } from './fakes.ts'
-import { serveBrowserTransform, type ServeBrowserTransformOptions } from '../src/index.ts'
+import HttpServerService from '@deepseek-ai/dsh-host-webserver'
+import { serveBrowserTransform, type ServeBrowserTransformOptions } from 'cordis-fabric'
 
 const contexts: Context[] = []
 const worlds: string[] = []
@@ -21,9 +21,9 @@ async function boot(options: ServeBrowserTransformOptions, baseUrl = import.meta
   const ctx = new Context()
   ctx.baseUrl = baseUrl
   contexts.push(ctx)
-  await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
+  await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
   serveBrowserTransform(ctx, options)
-  return { ctx, port: ctx.httpServer.port }
+  return { ctx, port: ctx.webServer.port }
 }
 
 afterEach(async () => {
@@ -78,7 +78,7 @@ describe('serveBrowserTransform', () => {
   it('requires the composition base URL at registration', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
     expect(() => { serveBrowserTransform(ctx, { route: ROUTE, patch: neutralizer }) })
       .toThrow(/requires ctx\.baseUrl/)
   })
@@ -144,7 +144,7 @@ describe('serveBrowserTransform', () => {
   it('the exact route outranks a later prefix route on the same path space', async () => {
     const { ctx, port } = await boot({ route: ROUTE, patch: neutralizer })
     // A prefix route registered AFTER the exact one (the module host's shape).
-    ctx.httpServer.register({ kind: 'prefix', path: '/plugins', handler: async (_req, res) => {
+    ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' })
       res.end('prefix-owner')
     } })
@@ -219,7 +219,7 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
     expect(() => {
       serveBrowserTransform(ctx, {
         route: ROUTE,
@@ -232,13 +232,13 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(FakeHttpServerService, { host: '127.0.0.1', port: 0 })
+    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
     // The route owner lives on its own plugin fiber, so disposing it removes
     // the route while the webserver keeps serving.
     const routeFiber = await ctx.plugin((c) => {
       serveBrowserTransform(c, { route: ROUTE, patch: neutralizer })
     })
-    const port = ctx.httpServer.port
+    const port = ctx.webServer.port
     expect((await fetch(`http://127.0.0.1:${port}${ROUTE}`)).status).toBe(200)
     await routeFiber.dispose()
     expect((await fetch(`http://127.0.0.1:${port}${ROUTE}`)).status).toBe(404)

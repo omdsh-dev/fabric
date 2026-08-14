@@ -21,3 +21,8 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/cordis-plugin-timer@1.1.3'
   - '@deepseek-ai/cosmokit@1.8.2'
   - '@deepseek-ai/schemastery@3.18.1'
+  # The dsh-* host packages iterate fast (rc trains); the trio's peers and
+  # devDeps track the upstream 0813 series, and the newest rc is routinely
+  # published within the minimumReleaseAge window. Name-only entries exempt
+  # every version of the matching packages.
+  - '@deepseek-ai/dsh-*'
