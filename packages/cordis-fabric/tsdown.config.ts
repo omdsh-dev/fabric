@@ -27,11 +27,25 @@ export default [
       client: 'lib/types/client/index.js',
     },
     outDir: 'lib',
-    format: ['esm'],
+    // Browser half ships in the dsh closure-factory artifact: the web shell
+    // loads /plugins/<id>/client.js as a classic script and resolves value
+    // imports through the loader module table (require), so the bundle
+    // registers window.__ModuleLoader__.load({id, factory}) and keeps
+    // @deepseek-ai/cordis external (a platform seed entry).
+    format: 'cjs',
     platform: 'browser',
     target: 'es2022',
     fixedExtension: false,
     dts: false,
     clean: false,
+    sourcemap: true,
+    external: ['@deepseek-ai/cordis'],
+    noExternal: true,
+    outputOptions: {
+      entryFileNames: 'client.js',
+      banner: 'window.__ModuleLoader__.load({ id: "cordis-fabric", factory: (require) => {',
+      footer: 'return module.exports; } });',
+      intro: 'var module = { exports: {} }; var exports = module.exports;',
+    },
   }),
 ]
