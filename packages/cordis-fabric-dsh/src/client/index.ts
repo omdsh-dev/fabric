@@ -21,13 +21,6 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The Fabric Client API, provided by this package. */
     fabricClient: FabricClientService
-    /** The browser slot service; host-provided at runtime. Upstream declares
-     * it as `SlotRegistry` in @deepseek-ai/dsh-client-runtime, whose
-     * dependency tree is not installable from the registry; this facade
-     * only ever calls the narrow registration face below. */
-    slots: {
-      register(options: FabricSlotOptions, component: unknown): () => void
-    }
   }
 }
 
