@@ -55,7 +55,7 @@
     {
       "file": "packages/boot/app-boot/src/profile.ts",
       "old": "nodeLinker: hoisted\nautoInstallPeers: false\n`",
-      "new": "nodeLinker: hoisted\nautoInstallPeers: false\n# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):\n# the Fabric trio arrives through git specs, so the profile allows them.\nblockExoticSubdeps: false\n`"
+      "new": "nodeLinker: hoisted\nautoInstallPeers: false\n# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):\n# the Fabric trio arrives through git specs, so the profile allows them.\nblockExoticSubdeps: false\n# Git-hosted plugins (the trio, ex-setting) build themselves on install via\n# their prepare script; pnpm 11 allowBuilds only accepts exact git+url#commit\n# keys (the commit changes on every push), so the git installs are allowed\n# wholesale — matching the host workspace.\ndangerouslyAllowAllBuilds: true\n`"
     },
     {
       "file": "pnpm-workspace.yaml",

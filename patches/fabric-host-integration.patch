@@ -228,16 +228,21 @@ index 81cedbbb42..3e10dbf5ca 100644
      "demo:cordis": "node scripts/demo-cordis.mjs",
      "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
 diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
-index 8f982bed80..1b2072613f 100644
+index 8f982bed80..94a087dc01 100644
 --- a/packages/boot/app-boot/src/profile.ts
 +++ b/packages/boot/app-boot/src/profile.ts
-@@ -140,6 +140,9 @@ const PROFILE_PNPM_WORKSPACE = `packages:
+@@ -140,6 +140,14 @@ const PROFILE_PNPM_WORKSPACE = `packages:
  
  nodeLinker: hoisted
  autoInstallPeers: false
 +# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):
 +# the Fabric trio arrives through git specs, so the profile allows them.
 +blockExoticSubdeps: false
++# Git-hosted plugins (the trio, ex-setting) build themselves on install via
++# their prepare script; pnpm 11 allowBuilds only accepts exact git+url#commit
++# keys (the commit changes on every push), so the git installs are allowed
++# wholesale — matching the host workspace.
++dangerouslyAllowAllBuilds: true
  `
  
  /**
