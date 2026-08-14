@@ -2,7 +2,6 @@
   "name": "cordis-fabric-dsh",
   "description": "DSH integrations for the Cordis Fabric layer: DSH-facing facades, the package invariant, and the DSH profile bootstrap that composes the pure fabric hooks",
   "version": "0.0.1-rc.2",
-  "private": true,
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -97,5 +96,8 @@
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-timeout": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
