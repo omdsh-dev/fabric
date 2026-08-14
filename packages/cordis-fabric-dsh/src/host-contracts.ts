@@ -273,28 +273,4 @@ declare module '@deepseek-ai/cordis' {
     /** The host webserver the serve primitive registers routes on. */
     httpServer: HostHttpServer
   }
-
-  interface Events {
-    /** A live agent was created. */
-    'agent/created'(this: Context, payload: { agent: HostAgent }): void
-    /** A live agent was disposed. */
-    'agent/disposed'(this: Context, payload: { agent: HostAgent }): void
-    /** An agent's idle/running status transitioned. */
-    'agent/status'(this: Context, payload: { agent: HostAgent; status: HostAgentStatus }): void
-    /** Waterfall around tool dispatch; call `next()` to delegate. */
-    'tools/pre-execute'(
-      this: Context,
-      exec: HostToolExecution,
-      next: () => Promise<HostPreToolDecision>,
-    ): Promise<HostPreToolDecision>
-    /** Waterfall around a normalized dispatch outcome; call `next()` to accept. */
-    'tools/post-execute'(
-      this: Context,
-      exec: HostToolExecution,
-      result: Readonly<HostToolExecutionResult>,
-      next: () => Promise<HostPostToolDecision>,
-    ): Promise<HostPostToolDecision>
-    /** A browser slot registry emitted a change for one slot name. */
-    'slots/changed'(this: Context, name: string): void
-  }
 }

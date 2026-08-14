@@ -48,7 +48,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onCreated(listener: (agent: HostAgent) => void): () => boolean {
-    return this.ctx.on('agent/created', (payload) => { listener(payload.agent) })
+    return this.ctx.on('agent/created' as never, ((payload: { agent: HostAgent }) => { listener(payload.agent) }) as never)
   }
 
   /**
@@ -57,7 +57,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onDisposed(listener: (agent: HostAgent) => void): () => boolean {
-    return this.ctx.on('agent/disposed', (payload) => { listener(payload.agent) })
+    return this.ctx.on('agent/disposed' as never, ((payload: { agent: HostAgent }) => { listener(payload.agent) }) as never)
   }
 
   /**
@@ -66,7 +66,7 @@ export class FabricAgentService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onStatus(listener: (agent: HostAgent, status: HostAgentStatus) => void): () => boolean {
-    return this.ctx.on('agent/status', (payload) => { listener(payload.agent, payload.status) })
+    return this.ctx.on('agent/status' as never, ((payload: { agent: HostAgent; status: HostAgentStatus }) => { listener(payload.agent, payload.status) }) as never)
   }
 
   /**

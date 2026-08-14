@@ -66,7 +66,7 @@ export class FabricToolsService extends Service {
    * @returns the exact `ctx.on()` disposer removing this listener.
    */
   onPreExecute(listener: (exec: HostToolExecution, next: () => Promise<HostPreToolDecision>) => Promise<HostPreToolDecision>): () => boolean {
-    return this.ctx.on('tools/pre-execute', listener)
+    return this.ctx.on('tools/pre-execute' as never, listener as never)
   }
 
   /**
@@ -81,6 +81,6 @@ export class FabricToolsService extends Service {
       next: () => Promise<HostPostToolDecision>,
     ) => Promise<HostPostToolDecision>,
   ): () => boolean {
-    return this.ctx.on('tools/post-execute', listener)
+    return this.ctx.on('tools/post-execute' as never, listener as never)
   }
 }
