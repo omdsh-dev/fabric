@@ -1,35 +1,28 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { FabricClientService, apply, name, type FabricSlotOptions } from '../src/client/index.ts'
+import { materialize, prepareClientBundles, seedMap } from './module-loader.ts'
 
-/** Fake authoritative browser command service (provides `commandUi`): single-name
- * registrations owned by the calling fiber (a Service so cordis binds
- * `this.ctx` to the caller's fiber and its effects ride that fiber). The real
- * CommandUiRuntime lives in @deepseek-ai/dsh-client-ui-commands, whose
- * dependency tree is not installable from the registry. */
-class FakeCommandUiRuntime extends Service {
-  private readonly commands = new Map<string, CommandContribution>()
+// ui-primitives is a heavy render-only package (markdown/highlighting);
+// the command service only touches it on render paths, so stub it in the
+// module table instead of pulling its dependency tree into tests.
+seedMap({ '@deepseek-ai/dsh-client-ui-primitives': {} })
 
-  /** Create and install the fake browser command service. */
-  constructor(ctx: Context) {
-    super(ctx, 'commandUi')
-  }
+// The registry browser bundles ship in the dsh closure-factory format
+// (window.__ModuleLoader__.load), so the real CommandUiRuntime is loaded
+// through the test module loader: seed the platform table, register the
+// bundle, and materialize its factory. The type arrives type-only from the
+// registry package.
+await prepareClientBundles(
+  ['@deepseek-ai/cordis', '@deepseek-ai/dsh-client-ui-slots', 'react', 'react/jsx-runtime'],
+  ['@deepseek-ai/dsh-client-ui-commands/client', '@deepseek-ai/dsh-client-runtime/client'],
+)
+const { CommandUiRuntime } = materialize<typeof import('@deepseek-ai/dsh-client-ui-commands/client')>('@deepseek-ai/dsh-client-ui-commands')
 
-  register(contribution: CommandContribution): () => void {
-    if (this.commands.has(contribution.name)) {
-      throw new Error(`client-command: contribution "${contribution.name}" is already registered`)
-    }
-    this.ctx.effect(() => {
-      this.commands.set(contribution.name, contribution)
-      return () => { this.commands.delete(contribution.name) }
-    }, `fake-commandUi.register(${contribution.name})`)
-    return () => { this.commands.delete(contribution.name) }
-  }
-}
-
-/** Real slot/command faces are faked; the fabric client delegates through them. */
+/** Real slot/command faces; the fabric client delegates through them. */
 async function bench() {
   const ctx = new Context()
   const slots = new Map<string, { options: FabricSlotOptions; component: unknown; dispose: () => void }>()
@@ -61,7 +54,7 @@ async function bench() {
       return () => { record.disposed = true; slots.delete(options.name) }
     },
   })
-  await ctx.plugin(FakeCommandUiRuntime).await()
+  await ctx.plugin(CommandUiRuntime).await()
   await apply(ctx)
   return { ctx, slots, registrations }
 }
@@ -129,7 +122,7 @@ describe('cordis-fabric-dsh browser entry', () => {
     ctx.provide('slots', {
       register() { return () => {} },
     })
-    await ctx.plugin(FakeCommandUiRuntime).await()
+    await ctx.plugin(CommandUiRuntime).await()
     await apply(ctx)
     const mod = await ctx.plugin({
       name: 'mod-client',

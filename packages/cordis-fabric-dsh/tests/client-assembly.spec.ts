@@ -1,68 +1,30 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
 import { apply, FabricClientService } from '../src/client/index.ts'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { materialize, prepareClientBundles, seedMap } from './module-loader.ts'
 
-// The real browser slot service declares the slots/changed event; the
-// registry package carrying it (dsh-client-runtime) is not installable, so
-// the fake declares the same event bridge (mirrors the upstream runtime).
-declare module '@deepseek-ai/cordis' {
-  interface Events {
-    'slots/changed'(key: string): void
-  }
-}
+// ui-primitives is a heavy render-only package (markdown/highlighting);
+// the command service only touches it on render paths, so stub it in the
+// module table instead of pulling its dependency tree into tests.
+seedMap({ '@deepseek-ai/dsh-client-ui-primitives': {} })
 
-/** Fake authoritative browser command service (provides `commandUi`): a Service
- * so cordis binds `this.ctx` to the caller's fiber and its effects ride that
- * fiber. The real CommandUiRuntime lives in @deepseek-ai/dsh-client-ui-commands,
- * whose dependency tree is not installable from the registry. */
-class FakeCommandUiRuntime extends Service {
-  private readonly commands = new Map<string, CommandContribution>()
-
-  /** Create and install the fake browser command service. */
-  constructor(ctx: Context) {
-    super(ctx, 'commandUi')
-  }
-
-  register(contribution: CommandContribution): () => void {
-    if (this.commands.has(contribution.name)) {
-      throw new Error(`client-command: contribution "${contribution.name}" is already registered`)
-    }
-    this.ctx.effect(() => {
-      this.commands.set(contribution.name, contribution)
-      return () => { this.commands.delete(contribution.name) }
-    }, `fake-commandUi.register(${contribution.name})`)
-    return () => { this.commands.delete(contribution.name) }
-  }
-}
-
-/**
- * Fake authoritative slot registry (provides `slots`): single-hole names
- * with a duplicate-name failure and `slots/changed` notifications. The real
- * browser slot service lives in @deepseek-ai/dsh-client-runtime, whose
- * dependency tree is not installable from the registry.
- */
-class FakeSlotRegistry extends Service {
-  private readonly slots = new Map<string, unknown>()
-
-  /** Create and install the fake slot registry. */
-  constructor(ctx: Context) {
-    super(ctx, 'slots')
-  }
-
-  register(options: { name: string }, component: unknown): () => void {
-    if (this.slots.has(options.name)) {
-      throw new Error(`slot registry: single-hole slot "${options.name}" is already registered`)
-    }
-    this.ctx.effect(() => {
-      this.slots.set(options.name, component)
-      this.ctx.emit('slots/changed', options.name)
-      return () => { this.slots.delete(options.name) }
-    }, `fake-slots.register(${options.name})`)
-    return () => { this.slots.delete(options.name) }
-  }
-}
+// The registry browser bundles ship in the dsh closure-factory format
+// (window.__ModuleLoader__.load), so the real CommandUiRuntime and
+// SlotRegistry are loaded through the test module loader: seed the platform
+// table, register the bundles, and materialize their factories. The types
+// arrive type-only from the registry packages (the runtime declares the
+// slots/changed event bridge).
+await prepareClientBundles(
+  ['@deepseek-ai/cordis', '@deepseek-ai/dsh-client-ui-slots', 'react', 'react/jsx-runtime'],
+  ['@deepseek-ai/dsh-client-ui-commands/client', '@deepseek-ai/dsh-client-runtime/client'],
+)
+const { CommandUiRuntime } = materialize<typeof import('@deepseek-ai/dsh-client-ui-commands/client')>('@deepseek-ai/dsh-client-ui-commands')
+const { SlotRegistry } = materialize<typeof import('@deepseek-ai/dsh-client-runtime/client')>('@deepseek-ai/dsh-client-runtime')
 
 /**
  * Browser assembly: the real browser command and slot services (the
@@ -73,6 +35,10 @@ class FakeSlotRegistry extends Service {
  */
 async function assemble() {
   const ctx = new Context()
+  // The Loader resolves entries against ctx.baseUrl; under happy-dom the
+  // environment location is http://localhost:3000, so pin the base (and the
+  // fixture url below) to real file paths via process.cwd().
+  ctx.baseUrl = join(process.cwd(), 'packages/cordis-fabric-dsh/tests')
   ctx.provide('inputTriggers', {
     registerSource() { return () => {} },
   })
@@ -84,15 +50,15 @@ async function assemble() {
   // CommandUiRuntime injects `remote` for the forwarded directory invalidation.
   ctx.provide('remote', { commands: commandsRemote, $on: () => () => {} })
   ctx.provide('remote.commands', commandsRemote)
-  await ctx.plugin(FakeSlotRegistry).await()
-  await ctx.plugin(FakeCommandUiRuntime).await()
+  await ctx.plugin(SlotRegistry).await()
+  await ctx.plugin(CommandUiRuntime).await()
   await apply(ctx)
   // Observe the slot registry notifications from the Mod's registration.
   const changed: string[] = []
   const listen = ctx.on('slots/changed', (key: string) => { changed.push(key) })
   await ctx.plugin(Loader)
   const id = await ctx.loader.create({
-    name: new URL('./fixtures/node_modules/fabric-client-fixture-mod/index.mjs', import.meta.url).href,
+    name: pathToFileURL(join(process.cwd(), 'packages/cordis-fabric-dsh/tests/fixtures/node_modules/fabric-client-fixture-mod/index.mjs')).href,
   })
   await ctx.loader.await()
   return { ctx, id, changed, listen }
