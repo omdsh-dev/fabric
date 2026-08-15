@@ -68,15 +68,6 @@
       "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
     },
     {
-      "file": "package.json",
-      "old": "    \"dsh\": \"node --import tsx/esm apps/cli/src/bin.ts\",",
-      "new": "    \"dsh\": \"node --import ./scripts/dsh-register.mjs apps/cli/src/bin.ts\","
-    },
-    {
-      "file": "scripts/dsh-register.mjs",
-      "add": "import { register } from 'tsx/esm/api'\n\n// The dsh source launch registers tsx with the base tsconfig explicitly:\n// tsx does not follow tsconfig `extends` when resolving `paths`, so without\n// this the @deepseek-ai/* aliases (vendor sources) never resolve. A shell\n// env prefix (TSX_TSCONFIG_PATH=...) would work but breaks on Windows.\nregister({ tsconfig: 'tsconfig.base.json' })\n"
-    },
-    {
       "file": "packages/bundle/web-app/cordis.patch.yml",
       "old": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n",
       "new": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n\n# The Fabric extension rows are explicit opt-in (disabled by default): the\n# pure `cordis-fabric` package is a library with no plugin `apply`, so an\n# enabled row fails every boot. The launcher bootstrap reads the rows from\n# the composed profile; a profile opts in by enabling them.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n      disabled: true\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n      disabled: true\n"

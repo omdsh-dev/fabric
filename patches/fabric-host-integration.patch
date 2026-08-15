@@ -214,19 +214,6 @@ index 3017292382..aafac74448 100644
        ]
      },
      "packages/client/modules": {
-diff --git a/package.json b/package.json
-index 81cedbbb42..e70fd9fa2c 100644
---- a/package.json
-+++ b/package.json
-@@ -133,7 +133,7 @@
-     "release:pack": "tsx scripts/release/pack.ts",
-     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
-     "release:publish": "tsx scripts/release/publish.ts",
--    "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
-+    "dsh": "node --import ./scripts/dsh-register.mjs apps/cli/src/bin.ts",
-     "demo:code-mode": "node scripts/demo-code-mode.mjs",
-     "demo:cordis": "node scripts/demo-cordis.mjs",
-     "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
 diff --git a/packages/boot/app-boot/src/profile.ts b/packages/boot/app-boot/src/profile.ts
 index 8f982bed80..94a087dc01 100644
 --- a/packages/boot/app-boot/src/profile.ts
@@ -722,19 +709,6 @@ index 0000000000..8a97ab0712
 +    await rm(root, { recursive: true, force: true })
 +  }
 +}, 30_000)
-diff --git a/scripts/dsh-register.mjs b/scripts/dsh-register.mjs
-new file mode 100644
-index 0000000000..c877681b38
---- /dev/null
-+++ b/scripts/dsh-register.mjs
-@@ -0,0 +1,7 @@
-+import { register } from 'tsx/esm/api'
-+
-+// The dsh source launch registers tsx with the base tsconfig explicitly:
-+// tsx does not follow tsconfig `extends` when resolving `paths`, so without
-+// this the @deepseek-ai/* aliases (vendor sources) never resolve. A shell
-+// env prefix (TSX_TSCONFIG_PATH=...) would work but breaks on Windows.
-+register({ tsconfig: 'tsconfig.base.json' })
 diff --git a/tsconfig.client.json b/tsconfig.client.json
 index e599f76f1b..d61dd4ab6d 100644
 --- a/tsconfig.client.json
