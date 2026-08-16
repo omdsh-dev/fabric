@@ -9,6 +9,15 @@
  *   (DSH_HARNESS env is honored when --harness is absent; profile resolution
  *    follows dsh: DSH_HOME/profiles/<name>.)
  *
+ * Installed form — no bundle checkout required: the bundle ships this
+ * launcher (bin `fabric-dsh`), so after `dsh plugin --profile web add
+ * github:dsh-external/fabric` (or scripts/install.sh):
+ *
+ *   $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
+ *     --harness <deepseek-harness> web --port 8000
+ *
+ * (home and profile name then derive from the install path itself.)
+ *
  * Composition: the command resolves the profile's patch layers (bundle
  * cordis.patch.yml files in `dsh.profile.bundles` order, the profile's own
  * cordis.patch.yml, $DSH_HOME/cordis.patch.yml, then --patch overlays),
@@ -22,6 +31,7 @@ import { tmpdir, homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 function parseArgs(argv) {
   const args = { harness: process.env.DSH_HARNESS, profile: undefined, patchFiles: [], passthrough: [] }
@@ -52,10 +62,25 @@ if (!existsSync(bin)) {
 }
 
 // Resolve the profile like dsh does: --profile flag, else $DSH_PROFILE,
-// else the default profile name.
-const dshHome = process.env.DSH_HOME ?? join(homedir(), '.dsh')
-const profileName = args.profile ?? process.env.DSH_PROFILE ?? 'default'
+// else the default profile name. When this launcher runs from an INSTALLED
+// bundle (`<home>/profiles/<name>/node_modules/cordis-fabric-bundle/...`),
+// derive both the home and the profile from its own path, so no bundle
+// checkout and no env are required to launch.
+const installedMatch = fileURLToPath(import.meta.url)
+  .match(/^(.*)\/profiles\/([^/]+)\/node_modules\/cordis-fabric-bundle\/scripts\/fabric-dsh\.mjs$/)
+const dshHome = installedMatch !== null
+  ? installedMatch[1]
+  : process.env.DSH_HOME ?? join(homedir(), '.dsh')
+const profileName = installedMatch !== null
+  ? (args.profile ?? installedMatch[2])
+  : args.profile ?? process.env.DSH_PROFILE ?? 'default'
 const profileDir = join(dshHome, 'profiles', profileName)
+if (!existsSync(profileDir)) {
+  console.error(`fabric-dsh: profile ${profileName} not found at ${profileDir} (DSH_HOME=${dshHome})`)
+  console.error(`  install the Fabric bundle first: scripts/install.sh <deepseek-harness-checkout> --dsh-home ${dshHome}`)
+  console.error(`  or: DSH_HOME=${dshHome} pnpm -C <deepseek-harness-checkout> dsh plugin --profile ${profileName} add github:dsh-external/fabric`)
+  process.exit(1)
+}
 const requireFromProfile = createRequire(join(profileDir, 'package.json'))
 let yaml
 try { yaml = requireFromProfile('js-yaml') } catch { /* not in the profile */ }
@@ -175,21 +200,35 @@ if (mode === 'plugin') {
   cliArgs = [...(args.profile ? ['--profile', args.profile] : []), ...patchArgs, ...args.passthrough]
 }
 
+// Heal the profile's module fallback BEFORE the preload imports the
+// profile's trio: the preload runs before the CLI's own prepareProfile
+// heals it, and the trio's peer (@deepseek-ai/cordis) must already resolve
+// from the profile for the profile-authoritative copy to load. The heal is
+// the CLI's own API (idempotent re-link), not a host source change.
+const heal = spawnSync(
+  process.execPath,
+  ['--import', 'tsx/esm', '--input-type=module', '--eval',
+    `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(join(harness, 'apps/cli/package.json'))})`],
+  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_HOME: dshHome, TSX_TSCONFIG_PATH: join(harness, 'tsconfig.base.json') } },
+)
+if (heal.error !== undefined) throw heal.error
+if (heal.status !== 0) process.exit(heal.status ?? 1)
+
 const result = spawnSync(
   process.execPath,
-  ['--import', 'tsx/esm', '--import', join(harnessRelativePreload(), 'preload.mjs'), bin, ...cliArgs],
+  ['--import', 'tsx/esm', '--import', join(bundledPreloadDir(), 'preload.mjs'), bin, ...cliArgs],
   // cwd is the harness: tsx resolves `tsx/esm` and auto-discovers the entry's
   // tsconfig (apps/cli, extending the base) from there, exactly like the
   // official dsh script. TSX_TSCONFIG_PATH is pinned to the harness base so a
   // stale shell value (e.g. an old staging checkout) cannot poison paths.
-  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_FABRIC_CONFIG: configPath, TSX_TSCONFIG_PATH: join(harness, 'tsconfig.base.json') } },
+  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_FABRIC_CONFIG: configPath, DSH_FABRIC_PROFILE: profileDir, DSH_HOME: dshHome, TSX_TSCONFIG_PATH: join(harness, 'tsconfig.base.json') } },
 )
 rmSync(temp, { recursive: true, force: true })
 if (result.error !== undefined) throw result.error
 process.exit(result.status ?? 0)
 
-/** Prefer the preload bundled with the trio resolved from this repo. */
-function harnessRelativePreload() {
-  const repo = process.cwd()
-  return join(repo, 'packages/cordis-fabric')
+/** The preload rides beside this launcher (the bundle repo's
+ * packages/cordis-fabric), independent of the caller's cwd. */
+function bundledPreloadDir() {
+  return fileURLToPath(new URL('../packages/cordis-fabric', import.meta.url))
 }

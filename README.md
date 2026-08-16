@@ -67,16 +67,19 @@ Restart the web app afterwards. The profile rows are disabled opt-ins; enable `c
 
 The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`.
 
-For the Fabric layer to actually engage, the load-time transformation hooks must exist before any target module import. The `fabric-dsh` launcher does exactly that with zero host changes:
+For the Fabric layer to actually engage, the load-time transformation hooks must exist before any target module import. The `fabric-dsh` launcher does exactly that with zero host changes. It ships inside the installed bundle, so once the profile has the bundle, no bundle checkout is needed — run the profile's own bin:
 
 ```sh
-# from this bundle repo, against a plain official deepseek-harness checkout
-DSH_HOME=$HOME/.dsh_dev node scripts/fabric-dsh.mjs --harness <deepseek-harness-checkout> --profile web web --port 8000
+# against a plain official deepseek-harness checkout
+$DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
+  --harness <deepseek-harness-checkout> web --port 8000
 ```
 
-First-time host preparation from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout>` (install + build; the host patch is empty, so nothing is patched or branched).
+(home and profile derive from the install path; the checkout form `node <bundle-repo>/scripts/fabric-dsh.mjs --harness <checkout> --profile web ...` stays available for development.)
 
-`fabric-dsh` composes the profile's patch layers, writes the composed descriptors to `$DSH_FABRIC_CONFIG`, injects `packages/cordis-fabric/preload.mjs` through `--import` (which registers the loader hooks before the CLI entry loads), pins the tsx tsconfig, and appends the profile's pnpm settings (`blockExoticSubdeps: false`, `dangerouslyAllowAllBuilds: true`) when missing. The Host plugin verifies required patch bindings one tick after boot.
+First-time setup from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <dir>]` — harness deps + build, profile seed (pnpm settings the git-resolved trio needs), bundle install through the official plugin channel (`dsh plugin --profile web add github:dsh-external/fabric`, which joins `cordis-fabric-bundle` to `dsh.profile.bundles`), and the `cordis-fabric-dsh` row enable. The host patch is empty, so nothing is patched or branched.
+
+`fabric-dsh` composes the profile's patch layers, writes the composed descriptors to `$DSH_FABRIC_CONFIG`, injects `packages/cordis-fabric/preload.mjs` through `--import` (which registers the loader hooks before the CLI entry loads, resolving the trio from the profile so hooks and plugins share one module instance — healing the profile's module fallback first, since the preload runs before the CLI's own boot heals it), pins the tsx tsconfig, and appends the profile's pnpm settings (`blockExoticSubdeps: false`, `dangerouslyAllowAllBuilds: true`) when missing. The Host plugin verifies required patch bindings one tick after boot.
 
 **npm-installed official `dsh`** — cannot run `fabric-dsh` (its CLI ships prebuilt and there is no source entry to preload); it works once the official repository merges the wiring (the fork at `65bcaf9902` contains it).
 

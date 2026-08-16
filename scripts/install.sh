@@ -1,28 +1,43 @@
 #!/usr/bin/env bash
-# Prepares a plain official deepseek-harness source checkout for fabric-dsh
-# launches. The host patch is now empty (every seam rides the fabric-dsh
-# launcher), so there is no branch, patch, or commit step — this script only
-# installs the workspace dependencies (pulling the trio through its git
-# specs) and builds the CLI and client bundles.
+# One-step Fabric setup for a plain official deepseek-harness checkout:
+#
+#   1. harness — pnpm install --no-frozen-lockfile (plus the tsdown unrun
+#      loader some Ubuntu hosts lack) and the CLI/client bundle build;
+#   2. profile ($DSH_HOME, default ~/.dsh) — seed the pnpm settings the
+#      git-resolved trio needs (pnpm >=10 blocks exotic subdeps and builds
+#      by default), then install the bundle through the official plugin
+#      channel (`dsh plugin --profile web add github:dsh-external/fabric`),
+#      which also joins cordis-fabric-bundle to dsh.profile.bundles. The
+#      bundle layer composes after the existing layers; when
+#      @deepseek-ai/dsh-ex-setting is present, its layer overrides the
+#      cordis-fabric row the fabric bundle inserts, so put
+#      cordis-fabric-bundle before it in dsh.profile.bundles (or attach the
+#      descriptors in the profile's own layer — the ex-setting bundle patch
+#      shows the exposed-namespaces example);
+#   3. enable the cordis-fabric-dsh row in the profile's cordis.patch.yml
+#      (idempotent). The cordis-fabric row stays disabled — the pure package
+#      is a library with no plugin apply; attach its config.fabric.patches
+#      descriptors in the profile layer afterwards (the ex-setting bundle
+#      patch shows the exposed-namespaces example).
 #
 # Usage:
-#   scripts/install.sh <deepseek-harness-checkout>
+#   scripts/install.sh <deepseek-harness-checkout> [--dsh-home <dir>]
 #
-# In the checkout:
-#   pnpm install --no-frozen-lockfile   # lockfile gains the three git deps
-#   pnpm run build                      # CLI + client bundles
-#
-# Afterwards, launch through fabric-dsh (the host source stays untouched):
-#
-#   DSH_HOME=$HOME/.dsh_dev node <bundle-repo>/scripts/fabric-dsh.mjs \
-#     --harness <deepseek-harness-checkout> --profile web web --port 8000
-#
-# On Ubuntu hosts the tsdown unrun loader may be missing; when the build
-# reports it, this script installs it with `npm install unrun -w` and
-# re-runs.
+# Afterwards (the bundle ships the launcher — no bundle checkout needed):
+#   <dir>/profiles/web/node_modules/.bin/fabric-dsh \
+#     --harness <deepseek-harness-checkout> web --port 8000
 set -euo pipefail
 
-HARNESS="${1:?usage: scripts/install.sh <deepseek-harness-checkout>}"
+HARNESS="${1:?usage: scripts/install.sh <deepseek-harness-checkout> [--dsh-home <dir>]}"
+shift
+
+DSH_HOME_DIR="${DSH_HOME:-$HOME/.dsh}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dsh-home) DSH_HOME_DIR="${2:?--dsh-home needs a value}"; shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
 
 if ! git -C "$HARNESS" rev-parse --git-dir >/dev/null 2>&1; then
   echo "error: $HARNESS is not a git checkout" >&2
@@ -38,6 +53,35 @@ pnpm install -wD unrun
 echo "== pnpm run build"
 pnpm run build
 
+PROFILE_DIR="$DSH_HOME_DIR/profiles/web"
+mkdir -p "$PROFILE_DIR"
+
+# Seed the pnpm settings the git-resolved trio needs. initProfile never
+# touches existing files, so writing this before the plugin add sticks.
+WS="$PROFILE_DIR/pnpm-workspace.yaml"
+if [ ! -f "$WS" ]; then
+  printf 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\nblockExoticSubdeps: false\ndangerouslyAllowAllBuilds: true\n' > "$WS"
+else
+  grep -q '^blockExoticSubdeps:' "$WS" || printf 'blockExoticSubdeps: false\n' >> "$WS"
+  grep -q '^dangerouslyAllowAllBuilds:' "$WS" || printf 'dangerouslyAllowAllBuilds: true\n' >> "$WS"
+fi
+
+echo "== dsh plugin --profile web add github:dsh-external/fabric"
+# Pin the tsconfig like fabric-dsh does: a stale ambient TSX_TSCONFIG_PATH
+# (e.g. an old staging checkout) would poison the CLI's tsx resolution.
+DSH_HOME="$DSH_HOME_DIR" TSX_TSCONFIG_PATH="$HARNESS/tsconfig.base.json" pnpm dsh plugin --profile web add github:dsh-external/fabric
+
+# Enable the Host plugin row (idempotent; the pure cordis-fabric row stays
+# disabled — it has no plugin apply and only carries descriptors).
+PATCH="$PROFILE_DIR/cordis.patch.yml"
+if ! grep -q 'id: cordis-fabric-dsh' "$PATCH"; then
+  if grep -q '^\[\]$' "$PATCH"; then
+    sed -i 's/^\[\]$/- id: cordis-fabric-dsh\n  disabled: false/' "$PATCH"
+  else
+    printf '\n- id: cordis-fabric-dsh\n  disabled: false\n' >> "$PATCH"
+  fi
+fi
+
 echo
-echo "done. Launch through fabric-dsh, e.g.:"
-echo "  DSH_HOME=\$HOME/.dsh_dev node <bundle-repo>/scripts/fabric-dsh.mjs --harness $HARNESS --profile web web --port 8000"
+echo "done. The bundle ships the fabric-dsh launcher; launch it from the profile:"
+echo "  $DSH_HOME_DIR/profiles/web/node_modules/.bin/fabric-dsh --harness $HARNESS web --port 8000"

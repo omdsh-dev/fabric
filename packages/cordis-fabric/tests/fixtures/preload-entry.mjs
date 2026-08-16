@@ -15,6 +15,16 @@ import { checkRequiredPatches, flushBindingReports, runtime } from 'cordis-fabri
 
 const configPath = process.env.DSH_FABRIC_CONFIG
 
+if (process.env.DSH_FABRIC_PROFILE !== undefined && process.env.DSH_FABRIC_PROFILE !== '') {
+  // Profile-authoritative resolution case: the stub package installed under
+  // the profile dir records how many descriptors its bootstrapFabric
+  // received. The real hooks never install, so the fixture import above ran
+  // unmodified.
+  const marker = globalThis.__fabricProfileMarker
+  console.log(`PROFILE-MARKER count=${marker?.count}`)
+  process.exit(marker?.count === 1 ? 0 : 1)
+}
+
 if (configPath === undefined || configPath === '') {
   // No config: the preload must be inert — the host runs unmodified. The
   // fixture import above must have produced no bindings and no behavior

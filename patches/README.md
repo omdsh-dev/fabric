@@ -24,7 +24,11 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
 
 - **loader hooks** — the preload calls `bootstrapFabric` (the same loader-hook
   registration the patched profile-boot used to perform) before the CLI entry
-  loads, reading the composed descriptors from `$DSH_FABRIC_CONFIG`;
+  loads, reading the composed descriptors from `$DSH_FABRIC_CONFIG`. The trio
+  resolves from the profile (`DSH_FABRIC_PROFILE`) so hooks, binding reports,
+  and handlers share the one module instance the plugins use; fabric-dsh
+  heals the profile's module fallback first (the preload runs before the
+  CLI's own boot would);
 - **patch composition** — fabric-dsh merges the profile's patch layers
   (bundle `cordis.patch.yml` files, the profile layer, the `$DSH_HOME` layer,
   `--patch` overlays) with the Loader's id-targeted semantics and extracts the
@@ -43,8 +47,11 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
 Usage:
 
 ```sh
-DSH_HOME=$HOME/.dsh_dev pnpm run dsh plugin --profile web add github:dsh-external/fabric
-node scripts/fabric-dsh.mjs --harness <deepseek-harness-checkout> --profile web web --port 8000
+# one-time: harness deps/build + profile seed + bundle install + row enable
+pnpm run install:host -- <deepseek-harness-checkout> --dsh-home "$HOME/.dsh_dev"
+# the bundle ships the launcher — no bundle checkout needed afterwards
+"$HOME/.dsh_dev/profiles/web/node_modules/.bin/fabric-dsh" \
+  --harness <deepseek-harness-checkout> web --port 8000
 ```
 
 The empty `fabric-host-integration.patch` remains as a no-op so existing apply

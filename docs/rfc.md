@@ -100,10 +100,11 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
 - Host source installs declare them in `apps/cli/package.json`; with the host
-  patch now empty, `scripts/install.sh` only runs
-  `pnpm install --no-frozen-lockfile` (pulling and building the trio) and the
-  host build — no branch, patch, or commit — and launches go through
-  `scripts/fabric-dsh.mjs`.
+  patch now empty, `scripts/install.sh` installs and builds the harness, then
+  seeds the profile's pnpm settings, installs the bundle through the plugin
+  channel (`dsh plugin --profile web add github:dsh-external/fabric`, joining
+  `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
+  `cordis-fabric-dsh` row. Launches go through `scripts/fabric-dsh.mjs`.
 - Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
   ex-setting, `tsc -b && tsdown` for the trio) in an isolated environment —
   devDependencies install there, so `lightningcss` and friends are available.

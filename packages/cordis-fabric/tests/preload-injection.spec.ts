@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,7 +35,7 @@ writeFileSync(configPath, JSON.stringify([patch]))
 afterAll(() => rmSync(tempDir, { recursive: true, force: true }))
 
 /** Spawn the fabric-dsh launcher shape and return the entry's stdout. */
-function run(configEnv: string | undefined): string {
+function run(configEnv: string | undefined, profileEnv?: string): string {
   // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
@@ -43,6 +43,8 @@ function run(configEnv: string | undefined): string {
   delete childEnv.TSX_TSCONFIG_PATH
   if (configEnv === undefined) delete childEnv.DSH_FABRIC_CONFIG
   else childEnv.DSH_FABRIC_CONFIG = configEnv
+  if (profileEnv === undefined) delete childEnv.DSH_FABRIC_PROFILE
+  else childEnv.DSH_FABRIC_PROFILE = profileEnv
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', '--import', preload, entry], {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     encoding: 'utf8',
@@ -61,5 +63,27 @@ describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
   it('stays inert without DSH_FABRIC_CONFIG (host runs unmodified)', () => {
     const out = run(undefined)
     expect(out).toContain('NO-CONFIG bindings=0 add(2,3)=5')
+  })
+
+  it('resolves the trio from the profile when DSH_FABRIC_PROFILE is set', () => {
+    // A stub "cordis-fabric" under the profile dir records the descriptor
+    // count its bootstrapFabric received; the preload must import THIS copy
+    // (the profile's installed copy is authoritative at runtime) rather
+    // than the one beside the preload.
+    const profileDir = join(tempDir, 'profile')
+    const stubDir = join(profileDir, 'node_modules', 'cordis-fabric')
+    mkdirSync(stubDir, { recursive: true })
+    writeFileSync(join(profileDir, 'package.json'), '{}\n')
+    writeFileSync(join(stubDir, 'package.json'), JSON.stringify({
+      name: 'cordis-fabric', version: '1.0.0', type: 'module', exports: { '.': './index.js' },
+    }))
+    writeFileSync(join(stubDir, 'index.js'), [
+      'export function bootstrapFabric(descriptors) {',
+      '  globalThis.__fabricProfileMarker = { count: descriptors.length }',
+      '}',
+      '',
+    ].join('\n'))
+    const out = run(configPath, profileDir)
+    expect(out).toContain('PROFILE-MARKER count=1')
   })
 })
