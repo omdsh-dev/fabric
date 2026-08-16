@@ -30,6 +30,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -99,8 +100,21 @@ try {
   const seams = config.seams ?? []
   const editedSeams = seams.filter(seam => 'old' in seam)
   const addedSeams = seams.filter(seam => 'add' in seam)
-  if (revert.length > 0 || editedSeams.length > 0) {
-    git(args.harness, ['-C', trimmed, 'checkout', baseline, '--', ...revert, ...editedSeams.map(s => s.file)])
+  // Files the baseline lacks (upstream-only additions) cannot be checked out
+  // back — leaving them reverted means removing them, so skip them here and
+  // let the diff simply not include them.
+  const revertPaths = []
+  for (const path of [...revert, ...editedSeams.map(s => s.file)]) {
+    try {
+      git(args.harness, ['cat-file', '-e', `${baseline}:${path}`])
+      revertPaths.push(path)
+    } catch {
+      // Upstream-only file: reverting means removing it so the diff drops it.
+      try { rmSync(join(trimmed, path), { force: true }) } catch { /* already absent */ }
+    }
+  }
+  if (revertPaths.length > 0) {
+    git(args.harness, ['-C', trimmed, 'checkout', baseline, '--', ...revertPaths])
   }
   for (const seam of editedSeams) {
     const path = join(trimmed, seam.file)
@@ -122,16 +136,22 @@ try {
 
   // baseline..trimmed minus the excluded paths.
   const patch = git(args.harness, ['-C', trimmed, 'diff', baseline, '--', '.', ...excludes])
-  if (!patch.trim()) throw new Error('empty patch — nothing changed between baseline and upstream outside the excluded paths')
+  if (!patch.trim()) {
+    // Zero-seam state: every wiring is externalized (the fabric-dsh launcher
+    // supplies it at runtime). Write the empty patch so consumers applying it
+    // remain no-ops, and skip the apply verification.
+    await writeFile(out, '')
+    console.log(`wrote ${out}: 0 files (no host seams remain)`)
+  } else {
+    // Verify: forward apply on a baseline tree, reverse apply on the trimmed tree.
+    await writeFile(out, patch)
+    execFileSync('git', ['-C', baselineTree, 'apply', '--check', out], { encoding: 'utf8' })
+    execFileSync('git', ['-C', trimmed, 'apply', '--check', '-R', out], { encoding: 'utf8' })
 
-  // Verify: forward apply on a baseline tree, reverse apply on the trimmed tree.
-  await writeFile(out, patch)
-  execFileSync('git', ['-C', baselineTree, 'apply', '--check', out], { encoding: 'utf8' })
-  execFileSync('git', ['-C', trimmed, 'apply', '--check', '-R', out], { encoding: 'utf8' })
-
-  const files = patch.split('\n').filter(line => line.startsWith('diff --git ')).length
-  console.log(`wrote ${out}: ${files} files, ${patch.split('\n').length - 1} lines`)
-  console.log(`verified: forward apply @ ${baseline}, reverse apply on trimmed tree`)
+    const files = patch.split('\n').filter(line => line.startsWith('diff --git ')).length
+    console.log(`wrote ${out}: ${files} files, ${patch.split('\n').length - 1} lines`)
+    console.log(`verified: forward apply @ ${baseline}, reverse apply on trimmed tree`)
+  }
 } finally {
   for (const worktree of worktrees) {
     try { git(args.harness, ['worktree', 'remove', '--force', worktree]) } catch { /* already gone */ }

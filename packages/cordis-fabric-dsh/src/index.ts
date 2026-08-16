@@ -16,13 +16,14 @@ import { FabricAgentService } from './agent.ts'
 import { FabricToolsService } from './tools.ts'
 import { FabricPromptService } from './prompt.ts'
 import { FabricCommandsService } from './commands.ts'
+import { scheduleRequiredPatchCheck } from './profile-bootstrap.ts'
 
 export { FabricAgentService } from './agent.ts'
 export { FabricToolsService } from './tools.ts'
 export { FabricPromptService } from './prompt.ts'
 export { FabricCommandsService } from './commands.ts'
 export {
-  installFabricBootstrap, checkFabricRequiredPatches,
+  installFabricBootstrap, checkFabricRequiredPatches, scheduleRequiredPatchCheck,
   type FabricProfileRow, type FabricProfileRows,
 } from './profile-bootstrap.ts'
 
@@ -40,4 +41,8 @@ export async function apply(ctx: Context): Promise<void> {
   await ctx.plugin(FabricToolsService)
   await ctx.plugin(FabricPromptService)
   await ctx.plugin(FabricCommandsService)
+  // Post-boot patch verification under the fabric-dsh launcher (no-op for
+  // plain dsh): the launcher injects the hooks and writes the composed
+  // descriptors to $DSH_FABRIC_CONFIG; the Host plugin owns the loud check.
+  scheduleRequiredPatchCheck(ctx)
 }

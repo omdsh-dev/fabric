@@ -29,7 +29,8 @@
     "lib/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
-    "src"
+    "src",
+    "preload.mjs"
   ],
   "license": "BSD-3-Clause",
   "scripts": {

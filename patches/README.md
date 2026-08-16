@@ -17,49 +17,47 @@ This workspace ships exactly three packages: `cordis-fabric`, `cordis-fabric-api
 
 ## Host integration patch
 
-`fabric-host-integration.patch` carries the deepseek-harness host-side changes the three packages need in order to RUN. The three packages only know how to install hooks and mount facades; a DSH host at the pre-split snapshot does not call them, so the bundle would be inert without this patch.
+The host patch is now EMPTY (0 files): every host-side seam the trio needs
+moved into the plug-and-play `fabric-dsh` launcher (`scripts/fabric-dsh.mjs`
+plus `packages/cordis-fabric/preload.mjs`). Running the official `dsh` leaves
+the host source untouched; `fabric-dsh` supplies the wiring at launch:
 
-The patch keeps only the seams the official plugin registration system cannot provide. Everything the official channels handle is deliberately excluded: installing the trio (`dsh plugin --profile <p> add github:dsh-external/fabric`), bundle roster rows and dependencies, catalog generation over the workspace, invariant/gate exemptions for trio-in-workspace, and documentation (`README*`, `docs/`, `.agents/`). The 17-file diff covers the seams only:
+- **loader hooks** — the preload calls `bootstrapFabric` (the same loader-hook
+  registration the patched profile-boot used to perform) before the CLI entry
+  loads, reading the composed descriptors from `$DSH_FABRIC_CONFIG`;
+- **patch composition** — fabric-dsh merges the profile's patch layers
+  (bundle `cordis.patch.yml` files, the profile layer, the `$DSH_HOME` layer,
+  `--patch` overlays) with the Loader's id-targeted semantics and extracts the
+  `cordis-fabric` row's `config.fabric.patches`;
+- **post-boot check** — the Host plugin (`scheduleRequiredPatchCheck`)
+  verifies required bindings one tick after mount under the launcher;
+- **bundle rows** — the trio's own `cordis.patch.yml` inserts the
+  `cordis-fabric` / `cordis-fabric-dsh` rows as disabled opt-ins (installed
+  through the official plugin channel);
+- **profile pnpm settings** — fabric-dsh appends `blockExoticSubdeps: false`
+  and `dangerouslyAllowAllBuilds: true` to the profile's `pnpm-workspace.yaml`
+  (the keys the profile template patch used to bake in);
+- **tool-cordis catalog** — `FabricService` registers the fabric SERVICE_API
+  entries at mount time (built hosts degrade to uncatalogued rows).
 
-- `apps/cli/` — launcher wiring and bootstrap verification: `src/profile-boot.ts` calls `installFabricBootstrap` in the boot prepare phase (before any target module import) and `checkFabricRequiredPatches` after boot; `ProfileRows` becomes the fabric row type; `tests/fabric-bootstrap-*` and its fixture verify it; `package.json` wires the CLI build. The trio dependencies are git subdirectory specs (`github:dsh-external/fabric#main&path:/packages/...`), so a plain official checkout resolves and builds them on install (`prepare` runs on the consumer machine) without the trio living in the host workspace; the removed project references let TypeScript resolve the trio types from `node_modules`.
-- `packages/client/tsdown.client.ts` — the `clientBundle` opt-in source `transform` (the browser build seam; `dsh.client` has no transform field, so the host build tool must expose it).
-- `packages/extensions/tool-cordis/src/api-catalog.ts` — the official package's catalog entries for the fabric services and types; the catalog is compiled into the official package with no runtime registration path, so the entries must be patched in.
-- `scripts/` — host-side seam tests (`client-bundle-source-transform.spec.ts`, `dev-web-fabric.spec.ts`).
-- `tsconfig.host.json` / `tsconfig.client.json` (include/exclude the new seam spec), `knip.json` and `.gitignore` (the `apps/cli` bootstrap fixture), and `pnpm-workspace.yaml` (`dangerouslyAllowAllBuilds: true` — pnpm 11 allowBuilds only accepts exact `git+url#commit` keys for git installs, so the trio's prepare builds are allowed wholesale; the lockfile changes because the CLI gains two git deps, so the first install runs with `--no-frozen-lockfile`).
-- `packages/boot/app-boot/src/profile.ts` — the pnpm settings template gains `blockExoticSubdeps: false` (pnpm 11 blocks git-resolved subdependencies by default, and the carrier's trio arrives through git specs). Applies to newly initialized profiles only — dsh never overwrites existing profile files.
-- `packages/bundle/web-app/cordis.patch.yml` — the bundle patch inserts the `cordis-fabric` / `cordis-fabric-dsh` rows as disabled opt-ins (the pure `cordis-fabric` package has no plugin `apply`, so an enabled row fails every boot). The bundle layer applies on every boot (including profiles initialized before the patch, whose files dsh never touches), and the trio resolves from the source worktree's `node_modules` through the CLI's git deps — no bundle registration or profile edit needed; a profile opts in by enabling the rows.
-
-Apply it from a deepseek-harness checkout that lacks the wiring (works on the pinned snapshot `9f9e2782a4` (0813) and the current official main):
-
-```sh
-git apply patches/fabric-host-integration.patch
-```
-
-or with the applier (idempotent: detects hosts that already contain the wiring):
-
-```sh
-pnpm run patch:host -- <deepseek-harness-checkout>
-```
-
-The bundle itself installs through the official plugin channel: `dsh plugin --profile <p> add github:dsh-external/fabric`.
-
-A source host is fully functional after this flow (the trio resolves through the CLI's git specs and builds itself on `pnpm install`):
+Usage:
 
 ```sh
-git clone <deepseek-harness> && cd deepseek-harness
-git apply <this-patch>            # or: pnpm run patch:host -- .
-pnpm install --no-frozen-lockfile # first install: lockfile gains the two git deps,
-                                  # pulls the trio from GitHub and runs its prepare build
-pnpm run build                    # build the CLI and client bundles
-pnpm dsh web            # the web-app bundle layer already composes the fabric rows
+DSH_HOME=$HOME/.dsh_dev pnpm run dsh plugin --profile web add github:dsh-external/fabric
+node scripts/fabric-dsh.mjs --harness <deepseek-harness-checkout> --profile web web --port 8000
 ```
 
-A host that already contains the wiring (the fork at `65bcaf9902` or later) needs nothing. An npm-installed official `dsh` cannot take the patch (its CLI ships prebuilt); those hosts work once the official repository merges the wiring.
-
-Regenerate the patch with the extraction script instead of by hand — it reproduces the seam-only diff mechanically (worktree at the upstream commit, reverts the registry-handled files to the baseline, applies the seam edits, excludes trio and documentation, and verifies forward and reverse apply). The values live in `patches/host-patch.config.json`:
+The empty `fabric-host-integration.patch` remains as a no-op so existing apply
+flows keep working; `extract-patch.mjs` writes it when no seams remain and
+`patch.sh` treats it as a successful no-op. The extraction machinery
+(`patches/host-patch.config.json`) stays as the record of what USED to be
+patched and as the tool that re-adds a seam if a future host change ever
+needs one again:
 
 ```sh
 pnpm run extract:patch -- --harness <fork-checkout>
 ```
 
-The `--harness` checkout must contain both snapshots (the fork worktree, e.g. the `feat-fabric` branch). The script fails loud when a seam anchor has drifted upstream.
+The `--harness` checkout must contain both snapshots (the fork worktree, e.g.
+the `feat-fabric` branch). The script fails loud when a seam anchor has
+drifted upstream.

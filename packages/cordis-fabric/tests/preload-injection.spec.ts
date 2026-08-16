@@ -1,0 +1,65 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterAll, describe, expect, it } from 'vitest'
+
+/**
+ * Preload injection equivalence: the fabric-dsh launcher runs the host CLI as
+ * `node --import tsx/esm --import <cordis-fabric/preload.mjs> bin.ts` with
+ * DSH_FABRIC_CONFIG pointing at the composed descriptors. These cases spawn
+ * that exact launcher shape and verify the preload bootstraps the Fabric
+ * hooks before the entry module imports its targets — the same guarantee the
+ * removed host patch (profile-boot installFabricBootstrap) used to provide.
+ */
+const preload = fileURLToPath(new URL('../preload.mjs', import.meta.url))
+const entry = fileURLToPath(new URL('./fixtures/preload-entry.mjs', import.meta.url))
+
+const patch = {
+  id: 'preload/multiply-add',
+  target: {
+    module: 'fabric-target-fixture',
+    versionRange: '^1.0.0',
+    filePath: 'index.mjs',
+    functionQuery: { functionName: 'add', kind: 'Sync' },
+  },
+  operation: 'before',
+  required: true,
+}
+
+const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-preload-'))
+const configPath = join(tempDir, 'fabric-config.json')
+writeFileSync(configPath, JSON.stringify([patch]))
+
+afterAll(() => rmSync(tempDir, { recursive: true, force: true }))
+
+/** Spawn the fabric-dsh launcher shape and return the entry's stdout. */
+function run(configEnv: string | undefined): string {
+  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
+  // tsconfig (whose paths lack these packages); children must resolve
+  // against this repo's own tsconfig so source-mode imports stay on src.
+  const childEnv: NodeJS.ProcessEnv = { ...process.env }
+  delete childEnv.TSX_TSCONFIG_PATH
+  if (configEnv === undefined) delete childEnv.DSH_FABRIC_CONFIG
+  else childEnv.DSH_FABRIC_CONFIG = configEnv
+  const result = spawnSync(process.execPath, ['--import', 'tsx/esm', '--import', preload, entry], {
+    cwd: fileURLToPath(new URL('../..', import.meta.url)),
+    encoding: 'utf8',
+    env: childEnv,
+  })
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+  return result.stdout
+}
+
+describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
+  it('bootstraps the hooks before the entry imports its targets', () => {
+    const out = run(configPath)
+    expect(out).toContain('BEFORE add(2,3)=5 AFTER add(2,3)=23')
+  })
+
+  it('stays inert without DSH_FABRIC_CONFIG (host runs unmodified)', () => {
+    const out = run(undefined)
+    expect(out).toContain('NO-CONFIG bindings=0 add(2,3)=5')
+  })
+})

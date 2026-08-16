@@ -40,6 +40,13 @@ if ! git -C "$HARNESS" rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
+# Zero-seam state: every wiring is externalized (the fabric-dsh launcher
+# supplies it at runtime), so an empty patch is a successful no-op.
+if [ ! -s "$PATCH" ]; then
+  echo "no host seams remain — nothing to apply"
+  exit 0
+fi
+
 if git -C "$HARNESS" apply --check -R "$PATCH" 2>/dev/null; then
   echo "host already contains the wiring — nothing to apply"
   exit 0

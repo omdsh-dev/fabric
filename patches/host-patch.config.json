@@ -29,48 +29,23 @@
     "scripts/package-invariants.ts",
     "scripts/test-invariants.ts",
     "scripts/verify-built-package-invariants.mjs",
-    "scripts/verify-package-readme-model-experience.ts"
+    "scripts/verify-package-readme-model-experience.ts",
+    "apps/cli/src/profile-boot.ts",
+    "apps/cli/package.json",
+    "packages/extensions/tool-cordis/src/api-catalog.ts",
+    "apps/cli/tests/fabric-bootstrap-runner.mjs",
+    "apps/cli/tests/fabric-bootstrap.spec.ts",
+    "apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/index.cjs",
+    "apps/cli/tests/fixtures/node_modules/fabric-bootstrap-fixture/package.json",
+    "knip.json",
+    ".gitignore",
+    "packages/client/tsdown.client.ts",
+    "pnpm-workspace.yaml",
+    "scripts/client-bundle-source-transform.spec.ts",
+    "scripts/dev-web-fabric.spec.ts",
+    "tsconfig.client.json",
+    "tsconfig.host.json",
+    "packages/boot/app-boot/src/profile.ts"
   ],
-  "seams": [
-    {
-      "file": ".gitignore",
-      "old": "node_modules/\nlib/",
-      "new": "node_modules/\n# Test fixtures that must mimic an installed package tree.\n!apps/cli/tests/fixtures/node_modules/\n!apps/cli/tests/fixtures/node_modules/**\nlib/"
-    },
-    {
-      "file": "knip.json",
-      "old": "    \"apps/cli\": {\n      \"entry\": [\n        \"tests/**/*.spec.ts\",\n        \"tests/**/*.e2e.ts\",\n        \"tests/**/*.snapshot.ts\"\n      ],\n      \"project\": [\n        \"src/**/*.ts\",\n        \"tests/**/*.ts\"\n      ],\n      \"ignoreDependencies\": [\n        \"@deepseek-ai/.+\"\n      ]\n    },",
-      "new": "    \"apps/cli\": {\n      \"entry\": [\n        \"tests/**/*.spec.ts\",\n        \"tests/**/*.e2e.ts\",\n        \"tests/**/*.snapshot.ts\"\n      ],\n      \"project\": [\n        \"src/**/*.ts\",\n        \"tests/**/*.ts\"\n      ],\n      \"ignoreDependencies\": [\n        \"@deepseek-ai/.+\",\n        \"fabric-bootstrap-fixture\"\n      ]\n    },"
-    },
-    {
-      "file": "tsconfig.client.json",
-      "old": "    \"scripts/client-bundle-css.spec.ts\",\n    \"scripts/client-bundle-purity.spec.ts\"\n  ],",
-      "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
-    },
-    {
-      "file": "tsconfig.host.json",
-      "old": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\"\n  ],",
-      "new": "    \"scripts/client-bundle-css.spec.ts\",\n    \"packages/typert/generator/tests/fixtures/**\",\n    \"scripts/client-bundle-purity.spec.ts\",\n    \"scripts/client-bundle-source-transform.spec.ts\"\n  ],"
-    },
-    {
-      "file": "packages/boot/app-boot/src/profile.ts",
-      "old": "nodeLinker: hoisted\nautoInstallPeers: false\n`",
-      "new": "nodeLinker: hoisted\nautoInstallPeers: false\n# pnpm 11 blocks git-resolved subdependencies by default (blockExoticSubdeps):\n# the Fabric trio arrives through git specs, so the profile allows them.\nblockExoticSubdeps: false\n# Git-hosted plugins (the trio, ex-setting) build themselves on install via\n# their prepare script; pnpm 11 allowBuilds only accepts exact git+url#commit\n# keys (the commit changes on every push), so the git installs are allowed\n# wholesale — matching the host workspace.\ndangerouslyAllowAllBuilds: true\n`"
-    },
-    {
-      "file": "pnpm-workspace.yaml",
-      "old": "# (git hooks) genuinely need theirs.\nallowBuilds:\n  esbuild: true",
-      "new": "# (git hooks) genuinely need theirs.\n# The Fabric trio resolves from git subdirectory specs and builds itself\n# through its prepare scripts; pnpm 11 allowBuilds only accepts exact\n# git+url#commit keys (the commit changes on every push), so the git\n# installs are allowed wholesale.\ndangerouslyAllowAllBuilds: true\n\nallowBuilds:\n  esbuild: true"
-    },
-    {
-      "file": "apps/cli/package.json",
-      "old": "    \"node-addon-require-builtin\": \"^0.1.4\"",
-      "new": "    \"node-addon-require-builtin\": \"^0.1.4\",\n    \"cordis-fabric\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric\",\n    \"cordis-fabric-dsh\": \"github:dsh-external/fabric#main&path:/packages/cordis-fabric-dsh\""
-    },
-    {
-      "file": "packages/bundle/web-app/cordis.patch.yml",
-      "old": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n",
-      "new": "- insert:\n    - id: agent-presets\n      name: '@deepseek-ai/dsh-agent-presets'\n      config:\n        default: standard\n\n# The Fabric extension rows are explicit opt-in (disabled by default): the\n# pure `cordis-fabric` package is a library with no plugin `apply`, so an\n# enabled row fails every boot. The launcher bootstrap reads the rows from\n# the composed profile; a profile opts in by enabling them.\n- insert:\n    - id: cordis-fabric\n      name: 'cordis-fabric'\n      disabled: true\n    - id: cordis-fabric-dsh\n      name: 'cordis-fabric-dsh'\n      disabled: true\n"
-    }
-  ]
+  "seams": []
 }

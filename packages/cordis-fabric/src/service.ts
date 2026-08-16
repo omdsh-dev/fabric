@@ -13,6 +13,7 @@
  */
 
 import { Service } from '@deepseek-ai/cordis'
+import { registerCatalogEntries } from './catalog.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
 import type { FabricBinding, FabricPatch, FabricPatchInfo, FabricHandler, PatchId } from './types.ts'
@@ -39,6 +40,11 @@ export class FabricService extends Service {
    */
   constructor(ctx: Context) {
     super(ctx, 'fabric')
+    // Register the fabric inspect-catalog entries at mount (the host patch
+    // used to bake them into the official tool-cordis catalog). Fire and
+    // forget: a built host without the src export degrades to uncatalogued
+    // rows, never a failure.
+    void registerCatalogEntries()
   }
 
   /**

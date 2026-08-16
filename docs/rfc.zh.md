@@ -57,7 +57,7 @@ trio 以 git 子目录 spec 被消费:
 github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
-- host 源码安装在 `apps/cli/package.json`(patch 接缝)中声明它们;`pnpm install --no-frozen-lockfile` 拉取并构建;`scripts/install.sh` 创建/重建本地 `fabric` 分支(从 `master` 删除重建、丢弃未提交残留)、应用 patch、一次提交、安装、构建。
+- host 源码安装在 `apps/cli/package.json` 中声明它们;宿主补丁现已为空,`scripts/install.sh` 只跑 `pnpm install --no-frozen-lockfile`(拉取并构建 trio)和宿主构建——不建分支、不打补丁、不提交——启动一律走 `scripts/fabric-dsh.mjs`。
 - 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,trio 是 `tsc -b && tsdown`)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
 
 ### 3.1 pnpm 11 供应链接缝

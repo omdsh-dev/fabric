@@ -8,6 +8,7 @@
  * @module cordis-fabric-dsh/profile-bootstrap
  */
 
+import type { Context } from '@deepseek-ai/cordis'
 import type { FabricPatchStub } from 'cordis-fabric'
 
 /** One composed profile row's config surface (the loader row shape). */
@@ -83,4 +84,30 @@ export async function checkFabricRequiredPatches(rows: FabricProfileRows): Promi
   if (!Array.isArray(descriptors) || descriptors.length === 0) return
   const { checkRequiredPatches } = await import('cordis-fabric')
   checkRequiredPatches(descriptors as FabricPatchStub[])
+}
+
+/**
+ * Boot-completion patch check for the fabric-dsh launcher: the launcher
+ * writes the composed descriptors to $DSH_FABRIC_CONFIG and injects the
+ * loader hooks through a preload, so no host boot code needs patching. The
+ * Host plugin schedules this check one tick after mount (all tree entries
+ * have applied by then); a required patch that bound nothing fails the
+ * launch loud, like the patched profile-boot used to. Without the env the
+ * check is a no-op (plain `dsh` stays untouched).
+ * @param ctx - the owning context (effects ride its fiber).
+ */
+export function scheduleRequiredPatchCheck(ctx: Context): void {
+  const configPath = process.env.DSH_FABRIC_CONFIG
+  if (configPath === undefined || configPath === '') return
+  ctx.effect(() => {
+    const timer = setTimeout(() => {
+      void (async () => {
+        const { readFileSync } = await import('node:fs')
+        const { checkRequiredPatches } = await import('cordis-fabric')
+        const descriptors = JSON.parse(readFileSync(configPath, 'utf8'))
+        checkRequiredPatches(descriptors)
+      })()
+    }, 0)
+    return () => { clearTimeout(timer) }
+  }, 'fabric: required patch check')
 }

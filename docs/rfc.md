@@ -99,11 +99,11 @@ The trio is consumed as git subdirectory specs:
 github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
-- Host source installs declare them in `apps/cli/package.json` (a patch seam);
-  `pnpm install --no-frozen-lockfile` pulls and builds them, and
-  `scripts/install.sh` creates/recreates a local `fabric` branch (delete +
-  rebuild from `master`, discarding uncommitted residue), applies the patch,
-  commits it once, installs, and builds.
+- Host source installs declare them in `apps/cli/package.json`; with the host
+  patch now empty, `scripts/install.sh` only runs
+  `pnpm install --no-frozen-lockfile` (pulling and building the trio) and the
+  host build — no branch, patch, or commit — and launches go through
+  `scripts/fabric-dsh.mjs`.
 - Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
   ex-setting, `tsc -b && tsdown` for the trio) in an isolated environment —
   devDependencies install there, so `lightningcss` and friends are available.
