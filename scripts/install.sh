@@ -7,18 +7,14 @@
 #      git-resolved trio needs (pnpm >=10 blocks exotic subdeps and builds
 #      by default), then install the bundle through the official plugin
 #      channel (`dsh plugin --profile web add github:dsh-external/fabric`),
-#      which also joins cordis-fabric-bundle to dsh.profile.bundles. The
-#      bundle layer composes after the existing layers; when
-#      @deepseek-ai/dsh-ex-setting is present, its layer overrides the
-#      cordis-fabric row the fabric bundle inserts, so put
-#      cordis-fabric-bundle before it in dsh.profile.bundles (or attach the
-#      descriptors in the profile's own layer — the ex-setting bundle patch
-#      shows the exposed-namespaces example);
+#      which also joins cordis-fabric-bundle to dsh.profile.bundles;
 #   3. enable the cordis-fabric-dsh row in the profile's cordis.patch.yml
 #      (idempotent). The cordis-fabric row stays disabled — the pure package
-#      is a library with no plugin apply; attach its config.fabric.patches
-#      descriptors in the profile layer afterwards (the ex-setting bundle
-#      patch shows the exposed-namespaces example).
+#      is a library with no plugin apply, only the canonical carrier for
+#      `config.fabric.patches` descriptors. Fabric-required rows (those
+#      declaring the patches themselves, e.g. the ex-setting crawler) ship
+#      disabled too: plain `dsh` skips them, and the fabric-dsh launcher
+#      enables them at launch.
 #
 # Usage:
 #   scripts/install.sh <deepseek-harness-checkout> [--dsh-home <dir>]

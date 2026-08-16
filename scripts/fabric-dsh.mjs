@@ -21,10 +21,14 @@
  * Composition: the command resolves the profile's patch layers (bundle
  * cordis.patch.yml files in `dsh.profile.bundles` order, the profile's own
  * cordis.patch.yml, $DSH_HOME/cordis.patch.yml, then --patch overlays),
- * merges them with the Loader's id-targeted semantics, extracts the
- * `cordis-fabric` row's `config.fabric.patches` (or deprecated
- * `config.patches`) descriptors, writes them to a temp JSON, and launches
- * the official CLI with the preload reading that file.
+ * merges them with the Loader's id-targeted semantics, aggregates the
+ * `config.fabric.patches` descriptors every row declares (the cordis-fabric
+ * row is the canonical carrier), writes them to a temp JSON, and launches
+ * the official CLI with the preload reading that file. A row that declares
+ * fabric patches is Fabric-required: it ships disabled, and this command
+ * enables it through a generated --patch overlay (after every user layer),
+ * so a plain `dsh` boot skips such rows entirely while this launch loads
+ * them with the hooks already installed.
  */
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
@@ -165,14 +169,30 @@ for (const [key, value] of [['blockExoticSubdeps', 'false'], ['dangerouslyAllowA
 }
 if (wsChanged) writeFileSync(wsYamlPath, wsContent)
 
-const fabricRow = rows.get('cordis-fabric')
-const fabricConfig = fabricRow?.config
-const descriptors = fabricConfig?.fabric?.patches ?? fabricConfig?.patches
-const patches = Array.isArray(descriptors) ? descriptors : []
+// Fabric-required rows: a row whose config declares `config.fabric.patches`
+// (the cordis-fabric carrier row aside) hard-depends on the Fabric layer.
+// Such rows ship DISABLED; the launcher enables them through a generated
+// overlay applied after every user layer, so a plain `dsh` boot skips them
+// entirely (the app runs, the dependent plugins stay unloaded) while
+// fabric-dsh loads them with the hooks already installed.
+const enableOverlay = []
+const byId = new Map()
+for (const [id, row] of rows) {
+  const config = row?.config
+  const declared = config?.fabric?.patches ?? config?.patches
+  if (!Array.isArray(declared)) continue
+  for (const patch of declared) {
+    if (patch !== null && typeof patch === 'object' && typeof patch.id === 'string') byId.set(patch.id, patch)
+  }
+  if (id !== 'cordis-fabric' && row.disabled !== false) enableOverlay.push({ id, disabled: false })
+}
+const patches = [...byId.values()]
 
 const temp = mkdtempSync(join(tmpdir(), 'dsh-fabric-config-'))
 const configPath = join(temp, 'config.json')
 writeFileSync(configPath, JSON.stringify(patches))
+const enablePath = join(temp, 'enable.yaml')
+writeFileSync(enablePath, enableOverlay.length > 0 ? yaml.dump(enableOverlay) : '[]\n')
 
 // The CLI argv shape depends on the mode (official args.ts rules):
 // - `plugin` takes its own required --profile AFTER the subcommand;
@@ -182,7 +202,7 @@ writeFileSync(configPath, JSON.stringify(patches))
 // - a generic boot takes the launcher flags FIRST (parent position): the
 //   app args only start at the first token the launcher does not know.
 const [mode] = args.passthrough
-const patchArgs = args.patchFiles.flatMap((f) => ['--patch', f])
+const patchArgs = [...args.patchFiles.flatMap((f) => ['--patch', f]), ...(enableOverlay.length > 0 ? ['--patch', enablePath] : [])]
 let cliArgs
 if (mode === 'plugin') {
   if (patchArgs.length > 0) {
@@ -195,7 +215,10 @@ if (mode === 'plugin') {
     console.error(`fabric-dsh: \`web\` boots the web profile; drop --profile ${args.profile} or omit the web alias`)
     process.exit(1)
   }
-  cliArgs = [...args.passthrough, ...patchArgs]
+  // web's own --patch must precede the app args (passThroughOptions sends
+  // everything after the first unknown token to the app).
+  const [web, ...appArgs] = args.passthrough
+  cliArgs = [web, ...patchArgs, ...appArgs]
 } else {
   cliArgs = [...(args.profile ? ['--profile', args.profile] : []), ...patchArgs, ...args.passthrough]
 }

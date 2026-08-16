@@ -15,6 +15,7 @@ import type { FabricPatchStub } from 'cordis-fabric'
 export interface FabricProfileRow {
   name?: string
   config?: unknown
+  disabled?: boolean
 }
 
 /** The composed profile rows this bootstrap reads (id → row). */
@@ -90,29 +91,55 @@ export async function checkFabricRequiredPatches(rows: FabricProfileRows): Promi
 function composedFabricRows(ctx: Context): FabricProfileRows {
   const rows = new Map<string, FabricProfileRow>()
   const loader = (ctx as unknown as {
-    loader?: { entries?: () => Iterable<{ options?: Partial<{ id?: unknown; config?: unknown }> }> }
+    loader?: { entries?: () => Iterable<{ options?: Partial<{ id?: unknown; config?: unknown; disabled?: unknown }> }> }
   }).loader
   for (const entry of loader?.entries?.() ?? []) {
     const options = entry.options
     if (options !== undefined && typeof options.id === 'string') {
-      rows.set(options.id, { config: options.config })
+      const row: FabricProfileRow = { config: options.config }
+      if (typeof options.disabled === 'boolean') row.disabled = options.disabled
+      rows.set(options.id, row)
     }
   }
   return rows
 }
 
 /**
- * Boot-completion patch check for both launch modes — the Fabric hard gate.
+ * Fabric-required rows: rows (the cordis-fabric carrier aside) whose config
+ * declares `config.fabric.patches`. They ship disabled and the fabric-dsh
+ * launcher enables them; the post-boot check uses this list to catch a boot
+ * where such a row is enabled WITHOUT the hooks (a misconfigured plain
+ * `dsh` launch) or where the hooks are present but a required patch bound
+ * nothing.
+ */
+function fabricRequiredRows(rows: FabricProfileRows): Array<{ id: string; disabled?: boolean }> {
+  const out: Array<{ id: string; disabled?: boolean }> = []
+  for (const [id, row] of rows) {
+    if (id === 'cordis-fabric') continue
+    const raw = fabricDescriptors(row?.config as FabricRowConfig | undefined, () => {})
+    if (Array.isArray(raw) && raw.length > 0) {
+      const entry: { id: string; disabled?: boolean } = { id }
+      if (typeof row?.disabled === 'boolean') entry.disabled = row.disabled
+      out.push(entry)
+    }
+  }
+  return out
+}
+
+/**
+ * Boot-completion patch check for both launch modes — the Fabric gate.
  * The launcher (fabric-dsh) writes the composed descriptors to
- * $DSH_FABRIC_CONFIG and injects the loader hooks through a preload, so no
- * host boot code needs patching; this plugin schedules the check one tick
- * after mount (all tree entries have applied by then).
+ * $DSH_FABRIC_CONFIG, injects the loader hooks through a preload, and
+ * enables the Fabric-required rows through a generated overlay; this plugin
+ * schedules the check one tick after mount (all tree entries have applied
+ * by then).
  *
  * - fabric ON ($DSH_FABRIC_CONFIG present): a `required` patch that bound
  *   nothing fails the launch loud, like the patched profile-boot used to;
- * - fabric OFF (plain `dsh`): there are no hooks at all, so any `required`
- *   patch cannot run — the boot fails loud instead of letting the dependent
- *   plugin silently degrade.
+ * - fabric OFF (plain `dsh`): Fabric-required rows stay disabled by default
+ *   and the boot skips them (the dependent plugins simply do not load). If
+ *   one is nevertheless ENABLED, the hooks are absent and its transforms
+ *   can never run — the boot fails loud instead of silently degrading.
  * @param ctx - the owning context (effects ride its fiber).
  */
 export function scheduleRequiredPatchCheck(ctx: Context): void {
@@ -120,27 +147,22 @@ export function scheduleRequiredPatchCheck(ctx: Context): void {
   ctx.effect(() => {
     const timer = setTimeout(() => {
       void (async () => {
-        // The composed roster is authoritative in both modes: under the
-        // launcher its env JSON mirrors the same row (the preload's binding
-        // reports are checked against that file).
-        const fabricRow = composedFabricRows(ctx).get('cordis-fabric')
-        const raw = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, () => {})
-        if (!Array.isArray(raw) || raw.length === 0) return
-        const descriptors = raw as FabricPatchStub[]
-        const required = descriptors.filter((patch) => patch.required === true)
+        const required = fabricRequiredRows(composedFabricRows(ctx))
         if (required.length === 0) return
-        if (configPath !== undefined && configPath !== '') {
-          // Check the exact file the preload installed from (the launcher's
-          // composition is the truth of what was bound).
-          const { readFileSync } = await import('node:fs')
-          const { checkRequiredPatches } = await import('cordis-fabric')
-          checkRequiredPatches(JSON.parse(readFileSync(configPath, 'utf8')))
-        } else {
+        if (configPath === undefined || configPath === '') {
+          const enabled = required.filter(({ disabled }) => disabled === false)
+          if (enabled.length === 0) return
           throw new Error(
-            'fabric: the profile declares required Fabric patch(es) but the Fabric hooks are not installed; '
-            + 'launch through fabric-dsh: ' + required.map((patch) => patch.id).join(', '),
+            'fabric: rows ' + enabled.map(({ id }) => id).join(', ')
+            + ' declare Fabric patches but are enabled on a plain-dsh boot (the hooks are not installed); '
+            + 'launch through fabric-dsh, which enables Fabric-required rows itself',
           )
         }
+        // Check the exact file the preload installed from (the launcher's
+        // composition is the truth of what was bound).
+        const { readFileSync } = await import('node:fs')
+        const { checkRequiredPatches } = await import('cordis-fabric')
+        checkRequiredPatches(JSON.parse(readFileSync(configPath, 'utf8')))
       })()
     }, 0)
     return () => { clearTimeout(timer) }

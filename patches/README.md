@@ -31,13 +31,17 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
   CLI's own boot would);
 - **patch composition** — fabric-dsh merges the profile's patch layers
   (bundle `cordis.patch.yml` files, the profile layer, the `$DSH_HOME` layer,
-  `--patch` overlays) with the Loader's id-targeted semantics and extracts the
-  `cordis-fabric` row's `config.fabric.patches`;
-- **post-boot check / hard gate** — the Host plugin
-  (`scheduleRequiredPatchCheck`) verifies required bindings one tick after
-  mount under the launcher; on plain `dsh` the same check is the Fabric
-  hard gate — a profile declaring `required` patches fails the boot loud
-  instead of letting the dependent plugin silently degrade;
+  `--patch` overlays) with the Loader's id-targeted semantics and aggregates
+  the `config.fabric.patches` every row declares (the `cordis-fabric` row is
+  the canonical carrier);
+- **Fabric-required rows** — a row whose config declares
+  `config.fabric.patches` hard-depends on the Fabric layer: it ships
+  disabled, and fabric-dsh enables it through a generated `--patch` overlay
+  (after every user layer). A plain `dsh` boot therefore skips such rows
+  entirely (the app runs, the dependent plugins stay unloaded), while
+  fabric-dsh loads them with the hooks installed and verifies required
+  bindings one tick after mount; explicitly enabling such a row on a plain
+  `dsh` boot fails loud (the Host plugin's post-boot gate);
 - **bundle rows** — the trio's own `cordis.patch.yml` inserts the
   `cordis-fabric` / `cordis-fabric-dsh` rows as disabled opt-ins (installed
   through the official plugin channel);
