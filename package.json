@@ -9,6 +9,22 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "license": "BSD-3-Clause",
+  "files": [
+    "scripts",
+    "cordis.patch.yml",
+    "patches",
+    "packages/cordis-fabric/package.json",
+    "packages/cordis-fabric/preload.mjs",
+    "packages/cordis-fabric/src",
+    "packages/cordis-fabric/lib",
+    "packages/cordis-fabric-api/package.json",
+    "packages/cordis-fabric-api/src",
+    "packages/cordis-fabric-api/lib",
+    "packages/cordis-fabric-dsh/package.json",
+    "packages/cordis-fabric-dsh/src",
+    "packages/cordis-fabric-dsh/lib",
+    "README.md"
+  ],
   "scripts": {
     "build": "node scripts/prepare.mjs",
     "test": "vitest run",

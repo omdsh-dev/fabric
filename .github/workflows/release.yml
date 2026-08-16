@@ -1,0 +1,43 @@
+name: release
+
+# Every push to main builds the trio (prepare scripts compile lib/) and
+# publishes the packed bundle tarball to a GitHub Release tagged v<version>
+# (the version from package.json). The release carries the compiled lib/ —
+# the repo's git installs build through prepare, while the release artifact
+# ships the build output ready-made. Bump the version to cut a new release;
+# re-pushing the same version refreshes that release's artifact.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify:self-contained
+      - run: pnpm test
+      - run: pnpm run build
+      - name: Pack the bundle
+        run: pnpm pack --pack-destination dist
+      - name: Publish to the version release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/*.tgz --clobber
+          else
+            gh release create "$tag" dist/*.tgz --title "$tag" --generate-notes
+          fi

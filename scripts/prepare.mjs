@@ -38,5 +38,5 @@ run('tsc', tsc, ['-b', 'tsconfig.json'], root)
 
 // Bundle each package's node and browser entries from lib/types into lib.
 for (const pkg of packages) {
-  run('tsdown', tsdown, ['--config', 'tsdown.config.ts'], join(root, 'packages', pkg))
+  run('tsdown', tsdown, ['--config-loader', 'unrun', '--config', 'tsdown.config.ts'], join(root, 'packages', pkg))
 }

@@ -65,7 +65,7 @@ dsh plugin --profile web add github:dsh-external/fabric
 
 Restart the web app afterwards. The profile rows are disabled opt-ins; enable `cordis-fabric` / `cordis-fabric-dsh` in the profile composition to activate the Fabric layer.
 
-The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`.
+The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`. The release workflow (`.github/workflows/release.yml`) builds on every push to `main` and packs a prebuilt bundle tarball to the `v<version>` GitHub Release.
 
 For the Fabric layer to actually engage, the load-time transformation hooks must exist before any target module import. The `fabric-dsh` launcher does exactly that with zero host changes. It ships inside the installed bundle, so once the profile has the bundle, no bundle checkout is needed — run the profile's own bin:
 
