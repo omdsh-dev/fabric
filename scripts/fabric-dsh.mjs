@@ -51,6 +51,20 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2))
+
+// A bare spawnSync parent never returns once its child dies of SIGINT: the
+// sync wait loop swallows the signal and the launcher hangs even after the
+// child's graceful shutdown finished. The shell keeps waiting on this hung
+// foreground job, so a single ^C looks broken — typed input (arrow keys)
+// echoes literally and only a second ^C, which kills the hung launcher,
+// returns the terminal to normal. An installed handler settles the loop:
+// spawnSync returns as soon as the child exits and the shell regains the
+// prompt after ONE ^C. The child (the official CLI) still receives every
+// signal directly — the kernel delivers to the whole foreground process
+// group — and owns its own graceful/first-vs-second ^C escalation.
+process.on('SIGINT', () => {})
+process.on('SIGTERM', () => {})
+
 // `web` is the CLI's hardcoded alias for --profile web: the layer
 // composition must follow the same profile the CLI will actually boot.
 if (args.profile === undefined && args.passthrough[0] === 'web') args.profile = 'web'
