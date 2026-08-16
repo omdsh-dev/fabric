@@ -29,7 +29,9 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
   and handlers share the one module instance the plugins use; fabric-dsh
   heals the profile's module fallback first (the preload runs before the
   CLI's own boot would), then prints a `fabric-dsh:` marker on stderr —
-  the boot output always shows whether a launch is fabric-enabled;
+  the boot output always shows whether a launch is fabric-enabled. The Host
+  plugin's post-boot check also prints a hook summary on stderr, listing
+  every patch and the target file it hooked (or that it never loaded);
 - **patch composition** — fabric-dsh merges the profile's patch layers
   (bundle `cordis.patch.yml` files, the profile layer, the `$DSH_HOME` layer,
   `--patch` overlays) with the Loader's id-targeted semantics and aggregates

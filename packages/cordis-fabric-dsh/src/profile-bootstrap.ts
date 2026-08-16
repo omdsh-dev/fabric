@@ -126,6 +126,36 @@ function fabricRequiredRows(rows: FabricProfileRows): Array<{ id: string; disabl
   return out
 }
 
+/** One recorded load-time binding, as the runtime reports it. */
+interface FabricBindingView {
+  module: string
+  file: string
+  nodes: number
+}
+
+/**
+ * Print the post-boot hook summary: which patch bound to which target file.
+ * Runs under fabric-dsh after the required check, so the boot output lists
+ * exactly what the Fabric layer hooked (or that a target never loaded).
+ * Written straight to stderr like the preload's launch marker, so no
+ * logging-level filter can hide it.
+ */
+function logHookSummary(descriptors: readonly FabricPatchStub[], runtime: { bindingsOf: (id: string) => FabricBindingView[] }): void {
+  if (descriptors.length === 0) return
+  const lines: string[] = []
+  for (const patch of descriptors) {
+    const bindings = runtime.bindingsOf(patch.id)
+    if (bindings.length === 0) {
+      lines.push(`  not hooked ${patch.id} (target not loaded at boot)`)
+      continue
+    }
+    for (const binding of bindings) {
+      lines.push(`  hooked ${patch.id} → ${binding.module} ${binding.file} (${binding.nodes} node(s))`)
+    }
+  }
+  process.stderr.write(`fabric: hooks summary — ${descriptors.length} patch(es):\n${lines.join('\n')}\n`)
+}
+
 /**
  * Boot-completion patch check for both launch modes — the Fabric gate.
  * The launcher (fabric-dsh) writes the composed descriptors to
@@ -136,6 +166,7 @@ function fabricRequiredRows(rows: FabricProfileRows): Array<{ id: string; disabl
  *
  * - fabric ON ($DSH_FABRIC_CONFIG present): a `required` patch that bound
  *   nothing fails the launch loud, like the patched profile-boot used to;
+ *   on success the hook summary is logged;
  * - fabric OFF (plain `dsh`): Fabric-required rows stay disabled by default
  *   and the boot skips them (the dependent plugins simply do not load). If
  *   one is nevertheless ENABLED, the hooks are absent and its transforms
@@ -147,22 +178,27 @@ export function scheduleRequiredPatchCheck(ctx: Context): void {
   ctx.effect(() => {
     const timer = setTimeout(() => {
       void (async () => {
-        const required = fabricRequiredRows(composedFabricRows(ctx))
-        if (required.length === 0) return
-        if (configPath === undefined || configPath === '') {
-          const enabled = required.filter(({ disabled }) => disabled === false)
-          if (enabled.length === 0) return
-          throw new Error(
-            'fabric: rows ' + enabled.map(({ id }) => id).join(', ')
-            + ' declare Fabric patches but are enabled on a plain-dsh boot (the hooks are not installed); '
-            + 'launch through fabric-dsh, which enables Fabric-required rows itself',
-          )
+        if (configPath !== undefined && configPath !== '') {
+          // fabric ON: the exact file the preload installed from is the
+          // truth of what was bound.
+          const { readFileSync } = await import('node:fs')
+          const { checkRequiredPatches, flushBindingReports, runtime } = await import('cordis-fabric')
+          const descriptors = JSON.parse(readFileSync(configPath, 'utf8')) as FabricPatchStub[]
+          // The async hook path delivers binding reports over a port; wait
+          // for them before judging (no-op on the synchronous path).
+          await flushBindingReports(1000)
+          checkRequiredPatches(descriptors)
+          logHookSummary(descriptors, runtime as unknown as { bindingsOf: (id: string) => FabricBindingView[] })
+          return
         }
-        // Check the exact file the preload installed from (the launcher's
-        // composition is the truth of what was bound).
-        const { readFileSync } = await import('node:fs')
-        const { checkRequiredPatches } = await import('cordis-fabric')
-        checkRequiredPatches(JSON.parse(readFileSync(configPath, 'utf8')))
+        // fabric OFF: gate on Fabric-required rows that are enabled anyway.
+        const enabled = fabricRequiredRows(composedFabricRows(ctx)).filter(({ disabled }) => disabled === false)
+        if (enabled.length === 0) return
+        throw new Error(
+          'fabric: rows ' + enabled.map(({ id }) => id).join(', ')
+          + ' declare Fabric patches but are enabled on a plain-dsh boot (the hooks are not installed); '
+          + 'launch through fabric-dsh, which enables Fabric-required rows itself',
+        )
       })()
     }, 0)
     return () => { clearTimeout(timer) }
