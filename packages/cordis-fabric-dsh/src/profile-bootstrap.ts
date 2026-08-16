@@ -86,26 +86,61 @@ export async function checkFabricRequiredPatches(rows: FabricProfileRows): Promi
   checkRequiredPatches(descriptors as FabricPatchStub[])
 }
 
+/** The live loader's composed entries, read as the id → row map. */
+function composedFabricRows(ctx: Context): FabricProfileRows {
+  const rows = new Map<string, FabricProfileRow>()
+  const loader = (ctx as unknown as {
+    loader?: { entries?: () => Iterable<{ options?: Partial<{ id?: unknown; config?: unknown }> }> }
+  }).loader
+  for (const entry of loader?.entries?.() ?? []) {
+    const options = entry.options
+    if (options !== undefined && typeof options.id === 'string') {
+      rows.set(options.id, { config: options.config })
+    }
+  }
+  return rows
+}
+
 /**
- * Boot-completion patch check for the fabric-dsh launcher: the launcher
- * writes the composed descriptors to $DSH_FABRIC_CONFIG and injects the
- * loader hooks through a preload, so no host boot code needs patching. The
- * Host plugin schedules this check one tick after mount (all tree entries
- * have applied by then); a required patch that bound nothing fails the
- * launch loud, like the patched profile-boot used to. Without the env the
- * check is a no-op (plain `dsh` stays untouched).
+ * Boot-completion patch check for both launch modes — the Fabric hard gate.
+ * The launcher (fabric-dsh) writes the composed descriptors to
+ * $DSH_FABRIC_CONFIG and injects the loader hooks through a preload, so no
+ * host boot code needs patching; this plugin schedules the check one tick
+ * after mount (all tree entries have applied by then).
+ *
+ * - fabric ON ($DSH_FABRIC_CONFIG present): a `required` patch that bound
+ *   nothing fails the launch loud, like the patched profile-boot used to;
+ * - fabric OFF (plain `dsh`): there are no hooks at all, so any `required`
+ *   patch cannot run — the boot fails loud instead of letting the dependent
+ *   plugin silently degrade.
  * @param ctx - the owning context (effects ride its fiber).
  */
 export function scheduleRequiredPatchCheck(ctx: Context): void {
   const configPath = process.env.DSH_FABRIC_CONFIG
-  if (configPath === undefined || configPath === '') return
   ctx.effect(() => {
     const timer = setTimeout(() => {
       void (async () => {
-        const { readFileSync } = await import('node:fs')
-        const { checkRequiredPatches } = await import('cordis-fabric')
-        const descriptors = JSON.parse(readFileSync(configPath, 'utf8'))
-        checkRequiredPatches(descriptors)
+        // The composed roster is authoritative in both modes: under the
+        // launcher its env JSON mirrors the same row (the preload's binding
+        // reports are checked against that file).
+        const fabricRow = composedFabricRows(ctx).get('cordis-fabric')
+        const raw = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, () => {})
+        if (!Array.isArray(raw) || raw.length === 0) return
+        const descriptors = raw as FabricPatchStub[]
+        const required = descriptors.filter((patch) => patch.required === true)
+        if (required.length === 0) return
+        if (configPath !== undefined && configPath !== '') {
+          // Check the exact file the preload installed from (the launcher's
+          // composition is the truth of what was bound).
+          const { readFileSync } = await import('node:fs')
+          const { checkRequiredPatches } = await import('cordis-fabric')
+          checkRequiredPatches(JSON.parse(readFileSync(configPath, 'utf8')))
+        } else {
+          throw new Error(
+            'fabric: the profile declares required Fabric patch(es) but the Fabric hooks are not installed; '
+            + 'launch through fabric-dsh: ' + required.map((patch) => patch.id).join(', '),
+          )
+        }
       })()
     }, 0)
     return () => { clearTimeout(timer) }

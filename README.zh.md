@@ -79,7 +79,7 @@ $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
 
 首次准备(在本 bundle 仓库里执行):`pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <目录>]`——宿主装依赖 + 构建、profile 播种(git 依赖三包需要的 pnpm 设置)、官方插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行。宿主补丁为空,不打补丁、不建分支。
 
-`fabric-dsh` 组合 profile 的补丁层,把合成的 descriptors 写入 `$DSH_FABRIC_CONFIG`,通过 `--import` 注入 `packages/cordis-fabric/preload.mjs`(在 CLI 入口加载前注册 loader hooks;三包从 profile 解析,保证 hooks 与插件共享同一模块实例——preload 先于 CLI 自身的 boot 执行,故先 heal profile 的模块回退),钉住 tsx tsconfig,并在缺省时追加 profile 的 pnpm 设置(`blockExoticSubdeps: false`、`dangerouslyAllowAllBuilds: true`)。Host 插件在启动后一个 tick 校验 required patch 绑定。
+`fabric-dsh` 组合 profile 的补丁层,把合成的 descriptors 写入 `$DSH_FABRIC_CONFIG`,通过 `--import` 注入 `packages/cordis-fabric/preload.mjs`(在 CLI 入口加载前注册 loader hooks;三包从 profile 解析,保证 hooks 与插件共享同一模块实例——preload 先于 CLI 自身的 boot 执行,故先 heal profile 的模块回退),钉住 tsx tsconfig,并在缺省时追加 profile 的 pnpm 设置(`blockExoticSubdeps: false`、`dangerouslyAllowAllBuilds: true`)。Host 插件在启动后一个 tick 执行 Fabric 硬门禁:fabric-dsh 下 `required` patch 未绑定则拒启;普通 `dsh` 下任何 `required` patch 直接拒启(硬依赖 Fabric 的插件不能静默降级)。
 
 **npm 安装的官方 `dsh`** — 跑不了 `fabric-dsh`(CLI 是预构建产物,没有可 preload 的源码入口);等官方仓库合入接线后即可(拆分提交 `65bcaf9902` 已包含)。
 

@@ -33,8 +33,11 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
   (bundle `cordis.patch.yml` files, the profile layer, the `$DSH_HOME` layer,
   `--patch` overlays) with the Loader's id-targeted semantics and extracts the
   `cordis-fabric` row's `config.fabric.patches`;
-- **post-boot check** — the Host plugin (`scheduleRequiredPatchCheck`)
-  verifies required bindings one tick after mount under the launcher;
+- **post-boot check / hard gate** — the Host plugin
+  (`scheduleRequiredPatchCheck`) verifies required bindings one tick after
+  mount under the launcher; on plain `dsh` the same check is the Fabric
+  hard gate — a profile declaring `required` patches fails the boot loud
+  instead of letting the dependent plugin silently degrade;
 - **bundle rows** — the trio's own `cordis.patch.yml` inserts the
   `cordis-fabric` / `cordis-fabric-dsh` rows as disabled opt-ins (installed
   through the official plugin channel);
