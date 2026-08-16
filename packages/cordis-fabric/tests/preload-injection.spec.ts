@@ -35,7 +35,7 @@ writeFileSync(configPath, JSON.stringify([patch]))
 afterAll(() => rmSync(tempDir, { recursive: true, force: true }))
 
 /** Spawn the fabric-dsh launcher shape and return the entry's stdout. */
-function run(configEnv: string | undefined, profileEnv?: string): string {
+function run(configEnv: string | undefined, profileEnv?: string): { stdout: string; stderr: string } {
   // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
@@ -51,18 +51,25 @@ function run(configEnv: string | undefined, profileEnv?: string): string {
     env: childEnv,
   })
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
-  return result.stdout
+  return { stdout: result.stdout, stderr: result.stderr }
 }
 
 describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
   it('bootstraps the hooks before the entry imports its targets', () => {
     const out = run(configPath)
-    expect(out).toContain('BEFORE add(2,3)=5 AFTER add(2,3)=23')
+    expect(out.stdout).toContain('BEFORE add(2,3)=5 AFTER add(2,3)=23')
   })
 
   it('stays inert without DSH_FABRIC_CONFIG (host runs unmodified)', () => {
     const out = run(undefined)
-    expect(out).toContain('NO-CONFIG bindings=0 add(2,3)=5')
+    expect(out.stdout).toContain('NO-CONFIG bindings=0 add(2,3)=5')
+  })
+
+  it('prints the fabric-enabled launch marker only when the hooks install', () => {
+    const enabled = run(configPath)
+    expect(enabled.stderr).toContain('fabric-dsh: Fabric hooks installed (1 descriptor(s))')
+    const inert = run(undefined)
+    expect(inert.stderr).not.toContain('fabric-dsh:')
   })
 
   it('resolves the trio from the profile when DSH_FABRIC_PROFILE is set', () => {
@@ -84,6 +91,6 @@ describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
       '',
     ].join('\n'))
     const out = run(configPath, profileDir)
-    expect(out).toContain('PROFILE-MARKER count=1')
+    expect(out.stdout).toContain('PROFILE-MARKER count=1')
   })
 })

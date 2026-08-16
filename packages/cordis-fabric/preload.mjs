@@ -36,4 +36,8 @@ if (configPath !== undefined && configPath !== '') {
   }
   const descriptors = JSON.parse(readFileSync(configPath, 'utf8'))
   bootstrapFabric(descriptors)
+  // The launch marker: only a fabric-dsh launch reaches this line, so the
+  // boot output always tells the user whether this is a fabric-enabled
+  // launch or a plain dsh one.
+  process.stderr.write(`fabric-dsh: Fabric hooks installed (${descriptors.length} descriptor(s)) — this launch is fabric-enabled\n`)
 }
