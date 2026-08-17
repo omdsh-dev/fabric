@@ -60,7 +60,7 @@ The bundle patch only composes these package rows. The launcher/bootstrap wiring
 The bundle installs through DSH's official bundle-plugin channel from the prebuilt release artifact:
 
 ```sh
-dsh plugin add https://github.com/dsh-external/fabric/releases/download/latest/pkg.tgz
+dsh plugin add https://github.com/omdsh-dev/fabric/releases/download/latest/pkg.tgz
 ```
 
 Restart the web app afterwards. The profile rows are disabled opt-ins; enable `cordis-fabric` / `cordis-fabric-dsh` in the profile composition to activate the Fabric layer.
@@ -77,7 +77,7 @@ $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
 
 (home and profile derive from the install path; the checkout form `node <bundle-repo>/scripts/fabric-dsh.mjs --harness <checkout> --profile web ...` stays available for development.)
 
-First-time setup from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <dir>]` — harness deps + build, profile seed (pnpm settings the git-resolved trio needs), bundle install through the official plugin channel (`dsh plugin --profile web add https://github.com/dsh-external/fabric/releases/download/latest/pkg.tgz`, which joins `cordis-fabric-bundle` to `dsh.profile.bundles`), and the `cordis-fabric-dsh` row enable. The host patch is empty, so nothing is patched or branched.
+First-time setup from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <dir>]` — harness deps + build, profile seed (pnpm settings the git-resolved trio needs), bundle install through the official plugin channel (`dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/download/latest/pkg.tgz`, which joins `cordis-fabric-bundle` to `dsh.profile.bundles`), and the `cordis-fabric-dsh` row enable. The host patch is empty, so nothing is patched or branched.
 
 `fabric-dsh` composes the profile's patch layers, writes the composed descriptors to `$DSH_FABRIC_CONFIG`, injects `packages/cordis-fabric/preload.mjs` through `--import` (which registers the loader hooks before the CLI entry loads, resolving the trio from the profile so hooks and plugins share one module instance — healing the profile's module fallback first, since the preload runs before the CLI's own boot heals it), pins the tsx tsconfig, and appends the profile's pnpm settings (`blockExoticSubdeps: false`, `dangerouslyAllowAllBuilds: true`) when missing. A row that declares `config.fabric.patches` is Fabric-required: it ships disabled, and fabric-dsh enables such rows through a generated overlay — a plain `dsh` boot skips them entirely (the app runs, the dependent plugins stay unloaded), while fabric-dsh loads them with the hooks installed; the Host plugin then verifies required bindings one tick after boot, and a Fabric-required row explicitly enabled on plain `dsh` fails the launch loud. The boot output identifies a fabric-enabled launch on stderr: a `fabric-dsh:` marker when the hooks install, then a hook summary listing every patch and the target file it hooked.
 
