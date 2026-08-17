@@ -6,11 +6,9 @@ const runner = fileURLToPath(new URL('./child-runner-compat.mjs', import.meta.ur
 
 /** Run one compat child case and return its stdout. */
 function runCase(name: string): string {
-  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
   const childEnv = { ...process.env }
-  delete childEnv.TSX_TSCONFIG_PATH
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner, name], {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     encoding: 'utf8',

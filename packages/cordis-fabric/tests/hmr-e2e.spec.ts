@@ -25,11 +25,9 @@ const runner = fileURLToPath(new URL('./hmr-e2e-runner.mjs', import.meta.url))
 
 /** Run one HMR child case and return its stdout. */
 function runCase(mode: string): string {
-  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
   const childEnv = { ...process.env }
-  delete childEnv.TSX_TSCONFIG_PATH
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner, mode], {
     cwd: fileURLToPath(new URL('../../..', import.meta.url)),
     encoding: 'utf8',

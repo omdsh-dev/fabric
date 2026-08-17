@@ -36,11 +36,9 @@ afterAll(() => rmSync(tempDir, { recursive: true, force: true }))
 
 /** Spawn the fabric-dsh launcher shape and return the entry's stdout. */
 function run(configEnv: string | undefined, profileEnv?: string): { stdout: string; stderr: string } {
-  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
   const childEnv: NodeJS.ProcessEnv = { ...process.env }
-  delete childEnv.TSX_TSCONFIG_PATH
   if (configEnv === undefined) delete childEnv.DSH_FABRIC_CONFIG
   else childEnv.DSH_FABRIC_CONFIG = configEnv
   if (profileEnv === undefined) delete childEnv.DSH_FABRIC_PROFILE

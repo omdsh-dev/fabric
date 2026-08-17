@@ -246,7 +246,7 @@ const heal = spawnSync(
   process.execPath,
   ['--import', 'tsx/esm', '--input-type=module', '--eval',
     `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(join(harness, 'apps/cli/package.json'))})`],
-  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_HOME: dshHome, TSX_TSCONFIG_PATH: join(harness, 'tsconfig.base.json') } },
+  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_HOME: dshHome } },
 )
 if (heal.error !== undefined) throw heal.error
 if (heal.status !== 0) process.exit(heal.status ?? 1)
@@ -256,9 +256,8 @@ const result = spawnSync(
   ['--import', 'tsx/esm', '--import', join(bundledPreloadDir(), 'preload.mjs'), bin, ...cliArgs],
   // cwd is the harness: tsx resolves `tsx/esm` and auto-discovers the entry's
   // tsconfig (apps/cli, extending the base) from there, exactly like the
-  // official dsh script. TSX_TSCONFIG_PATH is pinned to the harness base so a
-  // stale shell value (e.g. an old staging checkout) cannot poison paths.
-  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_FABRIC_CONFIG: configPath, DSH_FABRIC_PROFILE: profileDir, DSH_HOME: dshHome, TSX_TSCONFIG_PATH: join(harness, 'tsconfig.base.json') } },
+  // official dsh script.
+  { stdio: 'inherit', cwd: harness, env: { ...process.env, DSH_FABRIC_CONFIG: configPath, DSH_FABRIC_PROFILE: profileDir, DSH_HOME: dshHome } },
 )
 rmSync(temp, { recursive: true, force: true })
 if (result.error !== undefined) throw result.error

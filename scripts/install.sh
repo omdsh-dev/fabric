@@ -6,7 +6,7 @@
 #   2. profile ($DSH_HOME, default ~/.dsh) — seed the pnpm settings the
 #      git-resolved trio needs (pnpm >=10 blocks exotic subdeps and builds
 #      by default), then install the bundle through the official plugin
-#      channel (`dsh plugin --profile web add github:dsh-external/fabric`),
+#      channel (`dsh plugin --profile web add https://github.com/dsh-external/fabric/releases/download/latest/pkg.tgz`),
 #      which also joins cordis-fabric-bundle to dsh.profile.bundles;
 #   3. enable the cordis-fabric-dsh row in the profile's cordis.patch.yml
 #      (idempotent). The cordis-fabric row stays disabled — the pure package
@@ -62,10 +62,8 @@ else
   grep -q '^dangerouslyAllowAllBuilds:' "$WS" || printf 'dangerouslyAllowAllBuilds: true\n' >> "$WS"
 fi
 
-echo "== dsh plugin --profile web add github:dsh-external/fabric"
-# Pin the tsconfig like fabric-dsh does: a stale ambient TSX_TSCONFIG_PATH
-# (e.g. an old staging checkout) would poison the CLI's tsx resolution.
-DSH_HOME="$DSH_HOME_DIR" TSX_TSCONFIG_PATH="$HARNESS/tsconfig.base.json" pnpm dsh plugin --profile web add github:dsh-external/fabric
+echo "== dsh plugin --profile web add https://github.com/dsh-external/fabric/releases/download/latest/pkg.tgz"
+DSH_HOME="$DSH_HOME_DIR" pnpm dsh plugin --profile web add https://github.com/dsh-external/fabric/releases/download/latest/pkg.tgz
 
 # Enable the Host plugin row (idempotent; the pure cordis-fabric row stays
 # disabled — it has no plugin apply and only carries descriptors).

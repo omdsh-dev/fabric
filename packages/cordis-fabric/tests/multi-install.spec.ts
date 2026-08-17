@@ -5,10 +5,8 @@ import { describe, expect, it } from 'vitest'
 const runner = fileURLToPath(new URL('./multi-install.mjs', import.meta.url))
 
 function runScenario(name: string): string {
-  // The ambient harness TSX_TSCONFIG_PATH can point at another tree's
   // tsconfig; the child must resolve against this repo's own tsconfig.
   const childEnv = { ...process.env }
-  delete childEnv.TSX_TSCONFIG_PATH
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', runner, name], {
     cwd: fileURLToPath(new URL('../..', import.meta.url)),
     encoding: 'utf8',
