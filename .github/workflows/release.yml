@@ -28,10 +28,16 @@ jobs:
       - run: pnpm run verify:self-contained
       - run: pnpm test
       - run: pnpm run build
-      - name: Pack the bundle
+      - name: Pack the bundle and the trio
         run: |
           pnpm pack --pack-destination dist
           mv dist/*.tgz dist/pkg.tgz
+          pnpm -C packages/cordis-fabric pack --pack-destination "$PWD/dist"
+          pnpm -C packages/cordis-fabric-api pack --pack-destination "$PWD/dist"
+          pnpm -C packages/cordis-fabric-dsh pack --pack-destination "$PWD/dist"
+          mv dist/cordis-fabric-*.tgz dist/cordis-fabric.tgz
+          mv dist/cordis-fabric-api-*.tgz dist/cordis-fabric-api.tgz
+          mv dist/cordis-fabric-dsh-*.tgz dist/cordis-fabric-dsh.tgz
       - name: Publish to the version release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,7 +45,7 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           tag="v${version}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/pkg.tgz --clobber
+            gh release upload "$tag" dist/*.tgz --clobber
           else
-            gh release create "$tag" dist/pkg.tgz --title "$tag" --generate-notes
+            gh release create "$tag" dist/*.tgz --title "$tag" --generate-notes
           fi
