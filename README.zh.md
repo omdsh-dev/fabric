@@ -70,18 +70,21 @@ dsh plugin --profile web add github:dsh-external/fabric
 Fabric 层要真正生效,load-time 变换钩子必须在任何目标模块导入前存在。`fabric-dsh` 启动器做到这一点,宿主零改动。它随 bundle 一起装进 profile,所以 profile 装好 bundle 后不再需要 bundle 仓库检出,直接跑 profile 自带的 bin:
 
 ```sh
+# dsh 从 registry 安装(项目依赖或 PATH 上的全局命令)
+$DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh --port 8000
+
 # 针对纯官方 deepseek-harness checkout
 $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
   --harness <deepseek-harness-checkout> web --port 8000
 ```
 
-(DSH_HOME 与 profile 名从安装路径自身推导;开发形态 `node <bundle-repo>/scripts/fabric-dsh.mjs --harness <checkout> --profile web ...` 仍然可用。)
+(DSH_HOME 与 profile 名从安装路径自身推导。不带 `--harness` 时运行注册表安装的 `@deepseek-ai/dsh`——发布的 CLI 入口是纯 ESM,无需 tsx 与源码检出;CLI 依次从 `--dsh`/`DSH_CLI`、调用方项目依赖、PATH 上的 `dsh` 解析,能跟随 pnpm 的 cmd-shim 脚本。开发形态 `node <bundle-repo>/scripts/fabric-dsh.mjs --harness <checkout> --profile web ...` 仍然可用。)
 
 首次准备(在本 bundle 仓库里执行):`pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <目录>]`——宿主装依赖 + 构建、profile 播种(git 依赖三包需要的 pnpm 设置)、官方插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行。宿主补丁为空,不打补丁、不建分支。
 
-`fabric-dsh` 组合 profile 的补丁层,把合成的 descriptors 写入 `$DSH_FABRIC_CONFIG`,通过 `--import` 注入 `packages/cordis-fabric/preload.mjs`(在 CLI 入口加载前注册 loader hooks;三包从 profile 解析,保证 hooks 与插件共享同一模块实例——preload 先于 CLI 自身的 boot 执行,故先 heal profile 的模块回退),钉住 tsx tsconfig,并在缺省时追加 profile 的 pnpm 设置(`blockExoticSubdeps: false`、`dangerouslyAllowAllBuilds: true`)。声明 `config.fabric.patches` 的行即 Fabric 依赖行:默认 disabled,fabric-dsh 用生成的 overlay 启用它——普通 `dsh` 启动完全跳过这类行(应用照常运行、依赖插件不加载),fabric-dsh 则在 hooks 就位后加载它们,Host 插件在启动后一个 tick 校验 required 绑定;在普通 `dsh` 下显式启用 Fabric 依赖行会直接拒启。启动输出在 stderr 上标识 fabric 启动:hooks 装好时打 `fabric-dsh:` 标记,随后打印 hook 汇总,列出每条 patch 及其命中的目标文件。
+`fabric-dsh` 组合 profile 的补丁层,把合成的 descriptors 写入 `$DSH_FABRIC_CONFIG`,通过 `--import` 注入 `packages/cordis-fabric/preload.mjs`(在 CLI 入口加载前注册 loader hooks;三包从 profile 解析,保证 hooks 与插件共享同一模块实例——preload 先于 CLI 自身的 boot 执行,故先 heal profile 的模块回退),源码检出形态下钉住 tsx tsconfig,并在缺省时追加 profile 的 pnpm 设置(`blockExoticSubdeps: false`、`dangerouslyAllowAllBuilds: true`)。声明 `config.fabric.patches` 的行即 Fabric 依赖行:默认 disabled,fabric-dsh 用生成的 overlay 启用它——普通 `dsh` 启动完全跳过这类行(应用照常运行、依赖插件不加载),fabric-dsh 则在 hooks 就位后加载它们,Host 插件在启动后一个 tick 校验 required 绑定;在普通 `dsh` 下显式启用 Fabric 依赖行会直接拒启。启动输出在 stderr 上标识 fabric 启动:hooks 装好时打 `fabric-dsh:` 标记,随后打印 hook 汇总,列出每条 patch 及其命中的目标文件。
 
-**npm 安装的官方 `dsh`** — 跑不了 `fabric-dsh`(CLI 是预构建产物,没有可 preload 的源码入口);等官方仓库合入接线后即可(拆分提交 `65bcaf9902` 已包含)。
+**npm 安装的官方 `dsh`** — 直接可用:不带 `--harness` 的 `fabric-dsh` 运行注册表安装的 CLI(预构建入口是纯 ESM,preload 照常注入),无需源码检出、tsx 或宿主补丁。
 
 两个前提:
 
