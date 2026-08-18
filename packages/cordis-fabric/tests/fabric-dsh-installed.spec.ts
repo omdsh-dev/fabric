@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 
 /**
- * Installed-mode launcher resolution: without --harness, fabric-dsh runs a
+ * Installed-mode launcher resolution: without --source, fabric-dsh runs a
  * registry-installed @deepseek-ai/dsh — the published lib/bin.js is plain
- * ESM, so no tsx and no checkout. The CLI resolves from --dsh/DSH_CLI, the
+ * ESM, so no tsx and no checkout. The CLI resolves from DSH_CLI, the
  * caller's project dependencies, or a PATH shim (symlink shims and pnpm's
  * cmd-shim script form alike). These offline fixtures stand in for each
  * resolution path; the stub `cordis-fabric` in the profile records what the
@@ -102,12 +102,13 @@ writeFileSync(join(scriptShimDir, 'dsh'), [
 
 afterAll(() => rmSync(tempDir, { recursive: true, force: true }))
 
-function run(argv: string[], options: { cwd?: string; path?: string; launcher?: string } = {}): { status: number; stdout: string; stderr: string } {
+function run(argv: string[], options: { cwd?: string; path?: string; launcher?: string; dsh?: string } = {}): { status: number; stdout: string; stderr: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, DSH_HOME: home }
-  delete env.DSH_HARNESS
+  delete env.DSH_SOURCE
   delete env.DSH_CLI
   delete env.DSH_FABRIC_CONFIG
   delete env.DSH_FABRIC_PROFILE
+  if (options.dsh !== undefined) env.DSH_CLI = options.dsh
   if (options.path !== undefined) env.PATH = options.path
   const result = spawnSync(process.execPath, [options.launcher ?? launcher, ...argv], {
     cwd: options.cwd ?? home,
@@ -141,6 +142,13 @@ function expectInstalledWeb(out: { status: number; stdout: string; stderr: strin
 }
 
 describe('fabric-dsh installed mode (registry-installed dsh)', () => {
+  it('uses --source as the source-checkout selector', () => {
+    const source = join(tempDir, 'missing-source')
+    const out = run(['--source', source, '--profile', 't1', '--dump-config'], { path: '/usr/bin:/bin' })
+    expect(out.status).toBe(1)
+    expect(out.stderr).toContain(`no CLI entry at ${join(source, 'apps/cli/src/bin.ts')}`)
+  })
+
   it('infers web and forwards it when invoked from the installed profile bin', () => {
     expectInstalledWeb(run(['--port', '8000'], {
       launcher: join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'),
@@ -149,8 +157,8 @@ describe('fabric-dsh installed mode (registry-installed dsh)', () => {
     }))
   })
 
-  it('runs the CLI given explicitly through --dsh', () => {
-    expectBoot(run(['--dsh', binFile, '--profile', 't1', '--dump-config']))
+  it('resolves an explicit DSH_CLI override', () => {
+    expectBoot(run(['--profile', 't1', '--dump-config'], { dsh: binFile }))
   })
 
   it("resolves the CLI from the caller's project dependencies", () => {
@@ -165,14 +173,10 @@ describe('fabric-dsh installed mode (registry-installed dsh)', () => {
     expectBoot(run(['--profile', 't1', '--dump-config'], { path: `${scriptShimDir}:/usr/bin:/bin` }))
   })
 
-  it('chases a script shim passed through --dsh', () => {
-    expectBoot(run(['--dsh', join(scriptShimDir, 'dsh'), '--profile', 't1', '--dump-config'], { path: '/usr/bin:/bin' }))
-  })
-
   it('fails with guidance when no CLI is resolvable', () => {
     const out = run(['--profile', 't1', '--dump-config'], { path: '/usr/bin:/bin' })
     expect(out.status).toBe(1)
     expect(out.stderr).toContain('no installed @deepseek-ai/dsh found')
-    expect(out.stderr).toContain('--dsh')
+    expect(out.stderr).toContain('DSH_CLI')
   })
 })

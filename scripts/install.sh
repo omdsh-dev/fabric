@@ -21,7 +21,7 @@
 #
 # Afterwards (the bundle ships the launcher — no bundle checkout needed):
 #   <dir>/profiles/web/node_modules/.bin/fabric-dsh \
-#     --harness <deepseek-harness-checkout> web --port 8000
+#     --source <deepseek-harness-checkout> web --port 8000
 set -euo pipefail
 
 HARNESS="${1:?usage: scripts/install.sh <deepseek-harness-checkout> [--dsh-home <dir>]}"
@@ -78,4 +78,4 @@ fi
 
 echo
 echo "done. The bundle ships the fabric-dsh launcher; launch it from the profile:"
-echo "  $DSH_HOME_DIR/profiles/web/node_modules/.bin/fabric-dsh --harness $HARNESS web --port 8000"
+echo "  $DSH_HOME_DIR/profiles/web/node_modules/.bin/fabric-dsh --source $HARNESS web --port 8000"

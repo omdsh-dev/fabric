@@ -61,7 +61,7 @@ Usage:
 pnpm run install:host -- <deepseek-harness-checkout> --dsh-home "$HOME/.dsh_dev"
 # the bundle ships the launcher — no bundle checkout needed afterwards
 "$HOME/.dsh_dev/profiles/web/node_modules/.bin/fabric-dsh" \
-  --harness <deepseek-harness-checkout> web --port 8000
+  --source <deepseek-harness-checkout> web --port 8000
 ```
 
 The empty `fabric-host-integration.patch` remains as a no-op so existing apply

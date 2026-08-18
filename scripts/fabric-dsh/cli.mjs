@@ -68,16 +68,17 @@ function normalizeCli(p) {
 }
 
 /**
- * Resolve a registry-installed @deepseek-ai/dsh: --dsh/DSH_CLI first, then
- * the caller's project dependencies, then a `dsh` on PATH. Shims are followed
- * to the real package file: pnpm store layouts resolve a package's declared
- * deps only from its real location.
+ * Resolve a registry-installed @deepseek-ai/dsh from DSH_CLI, the caller's
+ * project dependencies, or a `dsh` on PATH. Shims are followed to the real
+ * package file: pnpm store layouts resolve a package's declared deps only
+ * from its real location.
  */
-function resolveInstalledCli(explicit, { cwd = process.cwd(), env = process.env } = {}) {
+function resolveInstalledCli({ cwd = process.cwd(), env = process.env } = {}) {
+  const explicit = env.DSH_CLI
   if (explicit !== undefined) {
     const cli = normalizeCli(chaseShim(resolve(explicit)))
     if (cli !== undefined) return cli
-    console.error(`fabric-dsh: ${explicit} does not lead to an @deepseek-ai/dsh package (expected .../@deepseek-ai/dsh/lib/bin.js)`)
+    console.error(`fabric-dsh: DSH_CLI=${explicit} does not lead to an @deepseek-ai/dsh package (expected .../@deepseek-ai/dsh/lib/bin.js)`)
     process.exit(1)
   }
   try {
@@ -92,23 +93,23 @@ function resolveInstalledCli(explicit, { cwd = process.cwd(), env = process.env 
       if (cli !== undefined) return cli
     } catch { /* shim did not lead to the package */ }
   }
-  console.error('fabric-dsh: no --harness given and no installed @deepseek-ai/dsh found')
-  console.error('  pass --dsh <path to .../lib/bin.js> (or set DSH_CLI), run from a project with @deepseek-ai/dsh installed, or put dsh on PATH')
-  console.error('  (to run a source checkout instead, pass --harness <deepseek-harness-checkout>)')
+  console.error('fabric-dsh: no --source given and no installed @deepseek-ai/dsh found')
+  console.error('  run from a project with @deepseek-ai/dsh installed, put dsh on PATH, or set DSH_CLI to its package bin')
+  console.error('  (to run a source checkout instead, pass --source <deepseek-harness-checkout>)')
   process.exit(1)
 }
 
 /** Resolve either the source checkout entry or the published CLI entry. */
 export function resolveHost(args, { cwd = process.cwd(), env = process.env } = {}) {
-  const source = args.harness !== undefined
-  const harness = source ? resolve(args.harness) : undefined
-  const bin = source ? join(harness, 'apps/cli/src/bin.ts') : resolveInstalledCli(args.dsh, { cwd, env })
+  const source = args.source !== undefined
+  const sourceRoot = source ? resolve(args.source) : undefined
+  const bin = source ? join(sourceRoot, 'apps/cli/src/bin.ts') : resolveInstalledCli({ cwd, env })
   if (source && !existsSync(bin)) {
-    console.error(`fabric-dsh: no CLI entry at ${bin}`)
+    console.error(`fabric-dsh: no CLI entry at ${bin} (source: ${args.source})`)
     process.exit(1)
   }
   const realBin = realpathSync(bin)
   const cliPkgJson = join(dirname(dirname(realBin)), 'package.json')
   const fromCli = createRequire(realBin)
-  return { source, harness, bin, realBin, cliPkgJson, fromCli }
+  return { source, sourceRoot, bin, realBin, cliPkgJson, fromCli }
 }

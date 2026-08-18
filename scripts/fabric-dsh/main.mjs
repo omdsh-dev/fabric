@@ -5,14 +5,14 @@
  *
  * Usage:
  *   node scripts/fabric-dsh.mjs [dsh args...]                 (installed dsh)
- *   node scripts/fabric-dsh.mjs --harness <checkout> [...]    (source checkout)
+ *   node scripts/fabric-dsh.mjs --source <checkout> [...]  (source checkout)
  *
  * Installed mode (default) runs a registry-installed @deepseek-ai/dsh: the
  * published lib/bin.js is plain ESM, so no tsx and no checkout are needed.
- * The CLI resolves from --dsh <path> (or DSH_CLI), else the caller's project
- * dependencies, else a `dsh` on PATH. Source mode (DSH_HARNESS is honored
- * when --harness is absent) runs the checkout's apps/cli/src/bin.ts through
- * tsx instead. Profile resolution follows dsh: DSH_HOME/profiles/<name>.
+ * The CLI resolves from DSH_CLI, the caller's project dependencies, or a
+ * `dsh` on PATH. Source mode (DSH_SOURCE) runs the checkout's
+ * apps/cli/src/bin.ts through tsx instead. Profile resolution follows dsh:
+ * DSH_HOME/profiles/<name>.
  *
  * Installed bundle form — no bundle checkout required: the bundle ships this
  * launcher (bin `fabric-dsh`), so after `dsh plugin --profile web add
@@ -72,15 +72,15 @@ export function main({ argv = process.argv.slice(2), env = process.env, launcher
   // heals it, and the trio's peer (@deepseek-ai/cordis) must already resolve
   // from the profile for the profile-authoritative copy to load. The heal is
   // the CLI's own API (idempotent re-link), not a host source change. Source
-  // mode resolves dsh-app-boot from the harness; installed mode resolves it
-  // from the CLI's real location, cwd-independent.
+  // mode resolves dsh-app-boot from the source checkout; installed mode resolves
+  // it from the CLI's real location, cwd-independent.
   const healEval = host.source
     ? `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
     : `const { createRequire } = await import('node:module'); const { healProfilesModuleFallback } = await import(createRequire(${JSON.stringify(pathToFileURL(host.realBin).href)}).resolve('@deepseek-ai/dsh-app-boot')); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
   const heal = spawnSync(
     process.execPath,
     [...(host.source ? ['--import', 'tsx/esm'] : []), '--input-type=module', '--eval', healEval],
-    { stdio: 'inherit', ...(host.source ? { cwd: host.harness } : {}), env: { ...env, DSH_HOME: profile.dshHome } },
+    { stdio: 'inherit', ...(host.source ? { cwd: host.sourceRoot } : {}), env: { ...env, DSH_HOME: profile.dshHome } },
   )
   if (heal.error !== undefined) throw heal.error
   if (heal.status !== 0) process.exit(heal.status ?? 1)
@@ -94,9 +94,9 @@ export function main({ argv = process.argv.slice(2), env = process.env, launcher
       host.bin,
       ...cliArgs,
     ],
-    // Source mode runs from the harness: tsx resolves its tsconfig there.
-    // Installed mode needs no pinned cwd: the published bin is plain ESM.
-    { stdio: 'inherit', ...(host.source ? { cwd: host.harness } : {}), env: { ...env, DSH_FABRIC_CONFIG: config.configPath, DSH_FABRIC_PROFILE: profile.profileDir, DSH_HOME: profile.dshHome } },
+    // Source mode runs from the source checkout: tsx resolves its tsconfig
+    // there. Installed mode needs no pinned cwd: the published bin is plain ESM.
+    { stdio: 'inherit', ...(host.source ? { cwd: host.sourceRoot } : {}), env: { ...env, DSH_FABRIC_CONFIG: config.configPath, DSH_FABRIC_PROFILE: profile.profileDir, DSH_HOME: profile.dshHome } },
   )
   config.cleanup()
   if (result.error !== undefined) throw result.error

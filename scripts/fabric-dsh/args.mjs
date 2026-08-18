@@ -1,15 +1,13 @@
 export function parseArgs(argv, env = process.env) {
   const args = {
-    harness: env.DSH_HARNESS,
-    dsh: env.DSH_CLI,
+    source: env.DSH_SOURCE,
     profile: undefined,
     patchFiles: [],
     passthrough: [],
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
-    if (a === '--harness') args.harness = argv[++i]
-    else if (a === '--dsh') args.dsh = argv[++i]
+    if (a === '--source') args.source = argv[++i]
     else if (a === '--profile') args.profile = argv[++i]
     else if (a === '--patch') args.patchFiles.push(argv[++i])
     else if (a.startsWith('--patch=')) args.patchFiles.push(a.slice('--patch='.length))
