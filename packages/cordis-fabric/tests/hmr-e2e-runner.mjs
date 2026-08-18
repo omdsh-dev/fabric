@@ -16,14 +16,12 @@
  *   transferring patch ownership to the new generation), so the new
  *   generation's handler takes over (23 → 203) and stays owned.
  *
- * The upstream suite drives the config case through the vendored fork's
- * `hmr.registerConfig` + include `internal/update` re-applying `config.patches`;
- * neither exists on the registry plugins, so this standalone repo toggles the
- * row's own `disabled` flag in `cordis.yml` instead — the HMR plugin refreshes
- * include entries on file change, which exercises the same row lifecycle.
- * The `@deepseek-ai/cordis-plugin-*` imports map to the registry
- * `@cordisjs/plugin-*` equivalents and `cordis-fabric/src/*` resolves
- * relatively, matching the other child-runner fixtures.
+ * The config case uses the public `hmr.registerConfig` exact-file watcher and
+ * calls the Include tree's `refresh` callback. The callback completion is the
+ * write barrier; the only delay is the documented 50ms same-path Chokidar
+ * throttle, rather than an arbitrary watcher-settle timeout.
+ * The child uses registry `@deepseek-ai/cordis-plugin-*` packages and resolves
+ * `cordis-fabric/src/*` relatively, matching the other child-runner fixtures.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -78,12 +76,23 @@ async function eventually(test, message, timeoutMs = 20_000) {
   return true
 }
 
-/**
- * Chokidar coalesces rapid writes to one file (the same atomic-write window
- * the app-boot user-patch tests throttle); consecutive patch-file writes
- * must land outside that window or a refresh is silently dropped.
- */
-const settleWatch = () => new Promise(resolve => setTimeout(resolve, 75))
+function waitForConsumer(entry, fixture, active, expected, message) {
+  return eventually(
+    () => (entry.fiber !== undefined) === active && fixture.add(2, 3) === expected,
+    message,
+  )
+}
+
+const CHOKIDAR_CHANGE_THROTTLE_MS = 50
+
+/** Drain Chokidar's same-path change throttle before the next write. */
+const waitForNextChange = () => new Promise(resolve => setTimeout(resolve, CHOKIDAR_CHANGE_THROTTLE_MS + 25))
+
+async function writeConfigAndWait(filename, content, configRefreshes, message) {
+  const before = configRefreshes()
+  writeFileSync(filename, content)
+  return eventually(() => configRefreshes() > before, message)
+}
 
 /**
  * The consumer plugin source. `config` mode reads the multiplier from the
@@ -113,7 +122,7 @@ function consumerSource(mode) {
  * on the root fiber, and one file-backed Include entry mounting the consumer
  * row from `cordis.yml`.
  */
-async function bootTree(dir, hmrRoot) {
+async function bootTree(dir, hmrRoot, configPath) {
   const ctx = new Context()
   ctx.baseUrl = pathToFileURL(dir).href + '/'
   await ctx.plugin(Loader)
@@ -128,7 +137,18 @@ async function bootTree(dir, hmrRoot) {
   })
   const entry = ctx.loader.resolve(includeId)
   await ctx.loader.await()
-  return { ctx, entry }
+
+  let configRefreshes = 0
+  if (configPath !== undefined) {
+    const include = entry.subtree
+    if (include === undefined) throw new Error('HMR e2e: include subtree did not initialize')
+    await ctx.hmr.registerConfig(configPath, async () => {
+      await include.refresh()
+      configRefreshes += 1
+    })
+  }
+
+  return { ctx, entry, configRefreshes: () => configRefreshes }
 }
 
 // The load-time transformation hooks precede every target module import; the
@@ -161,30 +181,30 @@ async function main() {
         '    multiplier: 10',
         '',
       ].join('\n')
-      const { ctx } = await bootTree(dir, [dir])
+      const { ctx, configRefreshes } = await bootTree(dir, [], 'cordis.yml')
+      const consumer = ctx.loader.resolve('include:fabric-consumer')
       try {
         const fixture = await import(fixtureUrl)
         check('config v1 add(2,3)', fixture.add(2, 3), 23)
 
-        writeFileSync(yml, row('disabled'))
-        await settleWatch()
-        await eventually(() => fixture.add(2, 3) === 5, 'config: disabling the row did not release the patch')
+        await writeConfigAndWait(yml, row('disabled'), configRefreshes, 'config: disabling the row was not observed')
+        await waitForConsumer(consumer, fixture, false, 5, 'config: disabling the row did not release the patch')
         check('config disabled add(2,3)', fixture.add(2, 3), 5)
+        await waitForNextChange()
 
-        writeFileSync(yml, row(''))
-        await settleWatch()
-        await eventually(() => fixture.add(2, 3) === 23, 'config: re-enabling the row did not re-register the patch')
+        await writeConfigAndWait(yml, row(''), configRefreshes, 'config: re-enable write was not observed')
+        await waitForConsumer(consumer, fixture, true, 23, 'config: re-enabling the row did not re-register the patch')
         check('config re-enabled add(2,3)', fixture.add(2, 3), 23)
+        await waitForNextChange()
 
         // A second cycle proves the lifecycle is repeatable without residue.
-        writeFileSync(yml, row('disabled'))
-        await settleWatch()
-        await eventually(() => fixture.add(2, 3) === 5, 'config: second disable did not release the patch')
+        await writeConfigAndWait(yml, row('disabled'), configRefreshes, 'config: second disable write was not observed')
+        await waitForConsumer(consumer, fixture, false, 5, 'config: second disable did not release the patch')
         check('config second disable add(2,3)', fixture.add(2, 3), 5)
+        await waitForNextChange()
 
-        writeFileSync(yml, row(''))
-        await settleWatch()
-        await eventually(() => fixture.add(2, 3) === 23, 'config: second re-enable did not re-register the patch')
+        await writeConfigAndWait(yml, row(''), configRefreshes, 'config: second re-enable write was not observed')
+        await waitForConsumer(consumer, fixture, true, 23, 'config: second re-enable did not re-register the patch')
         check('config second re-enable add(2,3)', fixture.add(2, 3), 23)
       } finally {
         await ctx.fiber.dispose()
