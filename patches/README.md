@@ -15,12 +15,14 @@ Keep the patch version exact, document why the patch is required, and remove it 
 
 This workspace ships exactly three packages: `cordis-fabric`, `cordis-fabric-api`, and `cordis-fabric-dsh`. Anything else is never added as a fourth package. In particular, `@deepseek-ai/dsh-tool-cordis` is an official DeepSeek Harness package (its repository is `deepseek-ai/deepseek-harness`): it must not be republished or re-implemented here. When a behavior of an official package must change for this bundle, apply a pnpm patch through `patchedDependencies` exactly as above.
 
-## Host integration patch
+## Historical host integration seam
 
-The host patch is now EMPTY (0 files): every host-side seam the trio needs
-moved into the plug-and-play `fabric-dsh` launcher (`scripts/fabric-dsh.mjs`
-plus `packages/cordis-fabric/preload.mjs`). Running the official `dsh` leaves
-the host source untouched; `fabric-dsh` supplies the wiring at launch:
+Host-side seams were historically represented by
+`patches/fabric-host-integration.patch`. The generated patch is intentionally
+absent from the current checkout: every active seam the trio needs is supplied
+by the plug-and-play `fabric-dsh` launcher (`scripts/fabric-dsh.mjs` plus
+`packages/cordis-fabric/preload.mjs`). Running the official `dsh` leaves the
+host source untouched; `fabric-dsh` supplies the wiring at launch:
 
 - **loader hooks** — the preload calls `bootstrapFabric` (the same loader-hook
   registration the patched profile-boot used to perform) before the CLI entry
@@ -66,12 +68,10 @@ pnpm run install:host -- <deepseek-harness-checkout> --dsh-home "$HOME/.dsh_dev"
   --source <deepseek-harness-checkout> web --port 8000
 ```
 
-The empty `fabric-host-integration.patch` remains as a no-op so existing apply
-flows keep working; `extract-patch.mjs` writes it when no seams remain and
-`patch.sh` treats it as a successful no-op. The extraction machinery
-(`patches/host-patch.config.json`) stays as the record of what USED to be
-patched and as the tool that re-adds a seam if a future host change ever
-needs one again:
+The generated patch is not part of this checkout. The extraction machinery
+(`patches/host-patch.config.json`) remains the record of what USED to be
+patched and the tool that can re-add a seam if a future host change requires
+one:
 
 ```sh
 pnpm run extract:patch -- --harness <fork-checkout>

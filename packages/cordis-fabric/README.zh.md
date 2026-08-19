@@ -1,6 +1,6 @@
 # `cordis-fabric`
 
-[English](fabric.md) | 中文
+[English](README.md) | 中文
 
 基于 Orchestrion-JS 的 Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认 DSH composition 不会挂载它，patch 通过受信任代码注册。
 
@@ -35,11 +35,10 @@ disposeHooks()
 patch 可以设置 `required: true`：一旦应用启动完成、所有目标模块都已导入，`checkRequiredPatches(patches)` 会在某个 required patch 的变换从未重写过任何东西时 loud 失败，并点名该 patch id 与其目标——`filePath` 可能是错误的启动形态（`src/index.ts` 对 `lib/index.js`），或函数已移动。`dsh` 宿主在 `boot()` 完成后自动运行此检查。一个 patch id 覆盖多种启动形态，既可用 RegExp `filePath`（如 `/^(src\/index\.ts|lib\/index\.js)$/`），也可用 `filePaths` 数组便捷项（每项展开为同 id 下的一份 instrumentation，每个命中的文件一条绑定记录）。检查所依赖的加载期绑定按被变换的文件逐条记录，可通过 `ctx.fabric.bindings(id?)` 和每条 `list()` 条目查看。
 
 ```yaml
-# User overlay (e.g. $DSH_HOME/config.yaml or a --config file): enable the row
-# and declare the static patch descriptors. Handlers are NOT configured here —
-# plugins register them through ctx.fabric at runtime.
+# User overlay:纯 service row 作为 descriptor carrier 保持 disabled。
+# 它的 package root 没有 Loader `apply`;DSH integration row 单独启用。
 - id: cordis-fabric
-  disabled: false
+  disabled: true
   config:
     fabric:
       patches:
@@ -50,9 +49,12 @@ patch 可以设置 `required: true`：一旦应用启动完成、所有目标模
             filePath: 'lib/index.js'
             functionQuery: { functionName: 'greet', kind: 'Sync' }
           operation: 'before'
+
+- id: cordis-fabric-dsh
+  disabled: false
 ```
 
-同一行的浏览器 half（`./client`，实现位于 `src/browser/client`）在该行启用时于 web 树中挂载 `ctx.fabric`；client bundle 在构建期变换，只有在该 entry 物化后才生效。
+DSH integration row 负责挂载 Host facade。核心包的 browser half（`./client`，实现位于 `src/browser/client`）是独立的 dshClient artifact,在 browser entry 物化时安装 `ctx.fabric`;它不会把 package root 变成 Loader plugin。
 
 hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对后续才被变换的模块生效。`registerHooks` API 没有 unregister，因此返回的 disposer 只是停用该安装的状态，而不是移除 hook 函数本身。
 
@@ -120,7 +122,7 @@ resolver 把包自身的源码树映射到包身份；不使用上游 adapter，
 
 ### 测试 patches
 
-变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`cordis-fabric/testing/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
+变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`cordis-fabric/test/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
 
 ## Model Experience
 

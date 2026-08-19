@@ -1,135 +1,246 @@
-# Cordis Fabric Workspace
+# RFC: dsh-external-fabric — repository purpose, architecture, and decision record
 
 English | [中文](README.zh.md)
 
-The Fabric/Mixin extension layer for DSH as a self-contained workspace of three packages plus an installable profile bundle carrier. The workspace mirrors the upstream fabric split: a pure-Cordis pair (`cordis-fabric`, `cordis-fabric-api`) and the DSH integration package (`cordis-fabric-dsh`) that supplies the Host and browser facades, the package invariant, and the profile bootstrap.
+- Status: **living document** (each section records the decision and its history)
+- Scope: this standalone Fabric extension workspace
+- Upstream anchors: deepseek-harness snapshots `7b9644f2` (0812) / `9f9e2782a4` (0813),
+  fork tip `65bcaf9902` (`feat-fabric`)
 
-## Packages
+This document explains *why* this repository is shaped the way it is. Every
+non-obvious arrangement below was reached through a concrete failure recorded
+in the commit history; the sections follow the repository's evolution rather
+than its file layout.
 
-| Package | Kind | Contents |
+---
+
+## 1. Purpose: an external Fabric extension, not a fork
+
+deepseek-harness is a private monorepo. The Fabric/Mixin extension layer lives
+there as three extension packages, but a consumer cannot install them from the
+registry. This repository externalizes exactly those three packages so they can
+be installed through the official plugin channel:
+
+```
+dsh plugin --profile <p> add github:dsh-external/fabric
+```
+
+**Boundary (hard rule):** the workspace ships exactly three complete packages —
+`cordis-fabric` (pure transformation service), `cordis-fabric-api` (pure compat
+facade), `cordis-fabric-dsh` (DSH-facing facades, invariant, profile
+bootstrap). Anything else — the official `@deepseek-ai/dsh-tool-cordis`
+toolset included — is never added as a fourth package; official packages are
+corrected through pnpm dependency patches in `patches/`.
+
+## 2. Host integration: a historical seam-only patch
+
+The three packages only know how to install hooks and mount facades. A DSH host
+at the pre-split snapshot never called them, so the bundle was inert without
+host-side wiring. Earlier snapshots carried that wiring in
+`patches/fabric-host-integration.patch` (17 files) and followed one rule:
+
+> **Keep the actual code, drop the documentation, drop anything the official
+> plugin registration system can handle.**
+
+The generated host patch is intentionally absent from the current checkout:
+the active launcher path is now `scripts/fabric-dsh.mjs` plus
+`packages/cordis-fabric/preload.mjs`. The extraction metadata in `patches/`
+remains as the historical record and can regenerate a seam patch when a future
+host change requires one.
+
+Everything the official channels already cover is deliberately excluded:
+installing the trio (`dsh plugin add`), bundle roster rows and dependencies,
+catalog generation, invariant/gate exemptions for trio-in-workspace, and all
+documentation (`README*`, `docs/`, `.agents/`). What remains is what no channel
+can provide: launcher bootstrap (`apps/cli/src/profile-boot.ts` calls
+`installFabricBootstrap` before any target import and
+`checkFabricRequiredPatches` after boot), the `clientBundle` source-transform
+build seam (`packages/client/tsdown.client.ts`), catalog entries compiled into
+the official `tool-cordis` package, their tests, and the pnpm-policy seams.
+
+### 2.1 Mechanical reproduction
+
+`scripts/extract-patch.mjs` regenerates the patch from `patches/host-patch.config.json`
+(baseline / upstream / revert / seams / exclude). It checks out the upstream
+commit, reverts registry-handled files to the baseline, re-applies seam edits
+(and `add` seams for files that exist in neither snapshot), diffs, and verifies
+forward apply on the baseline and reverse apply on the trimmed tree. A seam
+anchor that has drifted upstream fails loud.
+
+### 2.2 Baseline history
+
+The fork rebases onto newer official snapshots. The patch baseline must follow,
+or the diff would drag an entire snapshot's mainline churn (CI files, docs,
+assets — hundreds of files) into the patch:
+
+| Baseline | Upstream | Era |
 |---|---|---|
-| `cordis-fabric` | pure Cordis | Trusted load-time transformation service (`FabricService`, `bootstrapFabric`), Orchestrion transform, node-loader hooks, bridge, browser transform, testkit. No DSH imports. |
-| `cordis-fabric-api` | pure Cordis | Cooperative compat facade over the fabric registry: `FabricCompatService` + `buildCompatInstrumentations`. Peers only Cordis and `cordis-fabric`. |
-| `cordis-fabric-dsh` | DSH-facing | Mod-facing facades (`ctx.fabricAgent`, `ctx.fabricTools`, `ctx.fabricPrompt`, `ctx.fabricCommands`), browser facade (`ctx.fabricClient`), the package invariant, and the profile bootstrap (`installFabricBootstrap`). |
+| `7b9644f2` (0812) | `1de04707` | initial externalization |
+| `9f9e2782a4` (0813) | `65bcaf9902` | after the fork's 0813 rebase |
 
-The flattened source subpaths are intentionally removed. Consumers must use the layered entries: `cordis-fabric/node/loader`, `cordis-fabric/browser/transform`, `cordis-fabric/browser/client`, `cordis-fabric/testing/testkit`, `cordis-fabric-api/compat/service`, and `cordis-fabric-dsh/host/*`, `cordis-fabric-dsh/browser/client`, or `cordis-fabric-dsh/bootstrap/profile`. There are no compatibility re-export shims for the old paths.
+### 2.3 The disabled opt-in rows
 
+The web-app bundle layer inserts `cordis-fabric` / `cordis-fabric-dsh` rows as
+**disabled opt-ins**: the pure `cordis-fabric` package is a library with no
+plugin `apply`, so an enabled row fails every boot ("invalid plugin"). A
+profile opts in by enabling the rows; the bundle layer applies on every boot,
+so pre-existing profiles are covered without edits.
 
-## Repository shape
+### 2.4 The TSX dead end (recorded and reverted)
 
-```text
-package.json              # workspace root and dsh.bundle bundle carrier
-pnpm-workspace.yaml       # packages/* workspace
-cordis.patch.yml          # explicit Fabric profile rows (opt-in, disabled)
-AGENTS.md                 # repository-local contributor rules
-docs/                     # detailed Fabric, API, and contract references
-patches/README.md         # pnpm dependency-patch contract
-scripts/                  # self-contained prepare and boundary verification
-packages/
-  cordis-fabric/          # pure transformation service + browser client entry
-    src/transform/         # shared instrumentation and AST transform
-    src/node/              # Node loader, identity, wire protocol
-    src/browser/           # browser transform and bundle serving
-    src/hmr/              # HMR ownership and cache re-transformation
-    src/testing/           # child-process testkit
-    tests/browser/        # browser transform and serve specs
-    tests/hmr/            # HMR end-to-end specs
-    tests/node/           # Node hook, load, and preload specs
-    tests/runtime/        # runtime and service specs
-    tests/testkit/        # child-process testkit specs
-  cordis-fabric-api/      # pure compat facade (peer-only library)
-    src/compat/             # compat contracts, builder, and service
-    tests/compat/           # compat child-process and unit specs
-  cordis-fabric-dsh/      # DSH facades, invariant, profile bootstrap
-    src/host/               # Agent/Tools/Prompt/Commands facades
-    src/browser/            # client facade
-    src/bootstrap/          # profile assembly and required checks
-    tests/host/             # host facade specs
-    tests/browser/          # browser facade and assembly specs
-    tests/assembly/         # complete host composition specs
-lib/                      # build outputs (ignored; each package prepares its own on install)
+The `dsh` source launch (`node --import tsx/esm apps/cli/src/bin.ts`) once
+appeared to need `TSX_TSCONFIG_PATH` or a register preload: `FiberState` (a
+const enum, only in `vendor/cordis/src`) failed to resolve. Both workarounds
+shipped and were then **reverted** — the real cause was a stale
+`TSX_TSCONFIG_PATH` in the shell pointing at an old staging checkout. With a
+clean environment tsx auto-discovers the entry's tsconfig (extending the base)
+and resolves the aliases to `src`. The official script runs unchanged; no
+host-patch seam exists for it.
+
+## 3. Install model: git subdirectory specs + prepare
+
+The trio is consumed as git subdirectory specs:
+
+```
+github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
-## Repository boundary
+- Host source installs declare them in `apps/cli/package.json`; with launcher-provided host wiring, `scripts/install.sh` installs and builds the harness, then
+  seeds the profile's pnpm settings, installs the bundle through the plugin
+  channel (`dsh plugin --profile web add github:dsh-external/fabric`, joining
+  `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
+  `cordis-fabric-dsh` row. Launches go through `scripts/fabric-dsh.mjs`.
+- Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
+  ex-setting, `tsc -b && tsdown` for the trio) in an isolated environment —
+  devDependencies install there, so `lightningcss` and friends are available.
 
-This repository is fully self-contained: every source file, compiler setting, test fixture, contributor instruction, and build helper lives below this repository root, and every development input resolves from this repository's own manifests and lockfile. The DSH host packages (`@deepseek-ai/dsh-agent`, `@deepseek-ai/dsh-invariants`, and the other `@deepseek-ai/dsh-*` services the facades delegate to) are installable from the npm registry; the facades import their real types directly (declared as peer + dev dependencies), and a composed DSH profile supplies the real services at runtime.
+### 3.1 pnpm 11 supply-chain seams
 
-Run `pnpm run verify:self-contained` to enforce the boundary: it rejects local-path dependency specs, compiler or code paths that leave the repository, external or broken Markdown links, absolute workstation paths, and the removal of any repository-layout contract.
+pnpm 11 blocks git-resolved installs by default; three seams make them work:
 
-## Bundle behavior
+- `blockExoticSubdeps: false` in the profile template (git-resolved
+  subdependencies);
+- `dangerouslyAllowAllBuilds: true` in the host workspace and profile template
+  (`allowBuilds` only accepts exact `git+url#commit` keys, which change every
+  push);
+- `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']` in this workspace — the
+  dsh-* rc train ships inside the 24h window and a name-only entry exempts all
+  versions.
 
-The bundle carrier adds both profile rows as disabled opt-ins:
+## 4. Registry dependency policy
 
-```yaml
-- id: cordis-fabric
-  name: 'cordis-fabric'
-  disabled: true
+The dsh-* host packages publish fast rc trains; this repository tracks them
+through registry ranges, and each lesson below came from a real breakage.
 
-- id: cordis-fabric-dsh
-  name: 'cordis-fabric-dsh'
-  disabled: true
+### 4.1 The dsh-compact trap
+
+`@deepseek-ai/dsh-client-runtime@0.0.1-rc.1` depended on
+`@deepseek-ai/dsh-compact`, which was **never published** (upstream deleted the
+package after publishing that runtime). The `0.1.0-rc.x` series dropped the
+dependency; verified installable end-to-end.
+
+### 4.2 The missing rc.5
+
+Upstream code is versioned `0.1.0-rc.5`, but the registry jumps
+`rc.3 → rc.6` — rc.5 was never published. Ranges therefore read `^0.1.0-rc.0`
+(resolving the newest published rc, and `rc.0` keeps stable releases in range
+too). Peers use the same range, which the host workspace's rc.5 satisfies —
+host installs reuse workspace packages instead of registry copies.
+
+### 4.3 Real host types, not a local contract
+
+The trio once declared a `host-contracts.ts` facade plus a global
+`@deepseek-ai/cordis` Events injection. That broke type-checking across host
+packages and was deleted in favor of importing the real `@deepseek-ai/dsh-*`
+types (declared as peers + devDeps) — exactly the upstream shape. `ctx.slots`
+typing comes from `dsh-client-runtime`'s declaration, as upstream.
+
+### 4.4 Runtime peers of the published libs
+
+With `autoInstallPeers: false`, the published `dsh-*` libs' load-time imports
+(`dsh-scope`, `dsh-llm`, `dsh-timeout`, `dsh-typert-protocol`) must be listed
+as devDependencies explicitly — each was added after a "Cannot find package"
+at test load.
+
+## 5. Browser client format: the closure factory
+
+The web shell loads `/plugins/<id>/client.js` as a classic script and resolves
+value imports through the loader module table (a synchronous `require` inside
+the factory). Plain ESM bundles cannot load there at all. Consequently both
+trio browser halves ship as closure factories:
+
+```js
+window.__ModuleLoader__.load({ id: "cordis-fabric", factory: (require) => { ...; return module.exports; } })
 ```
 
-Fabric patch handlers are trusted code registered through `ctx.fabric.register()`. Patch descriptors are configuration metadata, but executable handlers are never deserialized from YAML or model input. The service supports Node ESM/CommonJS load-time transformation, browser build-time transformation, priority composition, HMR-safe disposal, static target validation, generator delegation, and watched browser transforms.
+with `@deepseek-ai/cordis` external (a platform seed) and everything else
+inlined. `cordis-fabric` was converted first; `cordis-fabric-dsh` followed
+(the same gap, fixed after the ex-setting install exposed the first one).
+Upstream never notices this — its monorepo builds both through the shared
+`clientBundle()` preset.
 
-The bundle patch only composes these package rows. The launcher/bootstrap wiring the trio needs to RUN is supplied at launch by the plug-and-play `fabric-dsh` command — the host source stays completely untouched (the host patch is now empty; see `patches/README.md`). Running plain `dsh` walks official code only; `fabric-dsh` injects the loader hooks.
+### 5.1 ex-setting's three lessons (same contract, external repo)
 
-## Installation
+The sibling `omdsh-dev/ex-setting` bundle hit the same contract three times:
 
-The bundle installs through DSH's official bundle-plugin channel from the prebuilt release artifact:
+1. Its `dsh.client` manifest must be **nested** (`"dsh": { "client": ... }`),
+   not a top-level `dshClient` field — client-modules scans the nested form;
+2. its consumer-side build must use the **prepare config**, not just the local
+   one, or git installs serve the old artifact;
+3. cross-bundle value imports must not rely on a disabled row's factory —
+   ex-setting inlines/avoids what the module table cannot answer, and installs
+   static styles directly instead of routing them through a Fabric publish the
+   transform could not produce (browser-transform cannot match inside the
+   closure artifact).
 
-```sh
-dsh plugin add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
-```
+## 6. Test strategy
 
-Restart the web app afterwards. The profile rows are disabled opt-ins; enable `cordis-fabric` / `cordis-fabric-dsh` in the profile composition to activate the Fabric layer.
+The upstream suite resolves `src` through tsconfig paths; this repository only
+has registry `lib` artifacts, which drove the evolution below.
 
-The repository carries no build artifacts: the trio's `prepare` scripts build `lib/` during a Git install (pnpm installs the package's devDependencies and runs `prepare` on the consumer machine). Installations track `main`. The release workflow (`.github/workflows/release.yml`) builds on every push to `main` and packs a prebuilt bundle tarball to the `v<version>` GitHub Release.
+- **serve.spec** mounts the real `@deepseek-ai/dsh-host-webserver`
+  (`^0.1.0-rc.0` — rc.1 still registers `httpServer`; `webServer` landed in
+  rc.3, matching the serve primitive).
+- **hmr-e2e-runner** drives config HMR by toggling the row's `disabled` flag
+  in `cordis.yml`: the vendored fork's `hmr.registerConfig` and include
+  `internal/update` are fork-private and exist in **no** registry version
+  (verified against latest 1.0.16/1.0.6).
+- **client specs** originally faked `CommandUiRuntime`/`SlotRegistry` because
+  the runtime rc.1 tree was uninstallable and the bundles are closure
+  factories. After rc.6 became installable the real reason remained the
+  factory format, so the specs now mount the **real services** through a test
+  module loader (`packages/cordis-fabric-dsh/tests/browser/module-loader.ts`): happy-dom provides `window`; the
+  `__ModuleLoader__` sink installs at helper module load; platform seeds
+  (`cordis`, `ui-slots`, `react`) preload as ESM namespaces (the factory
+  `require` is synchronous and node cannot `require` ESM);
+  `ui-primitives` — a render-only heavy package — is stubbed; `materialize()`
+  executes a factory with the module-table require (recursing into other
+  registered bundles, memoized, `stripClientSuffix` normalizing `pkg/client`).
+  Loader `baseUrl` and fixture URLs are pinned to file paths because
+  happy-dom's `location` is `http://localhost:3000`.
 
-For the Fabric layer to actually engage, the load-time transformation hooks must exist before any target module import. The `fabric-dsh` launcher does exactly that with zero host changes. It ships inside the installed bundle, so once the profile has the bundle, no bundle checkout is needed — run the profile's own bin:
+## 7. Timeline (abridged)
 
-```sh
-# with dsh installed from the registry (project dependency or on PATH)
-$DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh --port 8000
+| Commit | Decision |
+|---|---|
+| `1e04b1a`..`2a42254` | externalization: standalone Fabric bundle, self-contained template |
+| `4018661`, `8ffaac4` | port the upstream three-package split + full host patch; HMR e2e |
+| `d9228c4`, `40600d4` | official plugin channel install; source-host install script |
+| `1ba7077`, `3331b80` | web-app bundle composes the rows; rows become disabled opt-ins |
+| `7b8e913`, `3fd3106` | patch rebases: 0812 baseline → 0813 baseline |
+| `9158f5d` | delete `host-contracts.ts`; real `@deepseek-ai/dsh-*` types |
+| `30ed5ff`, `b58c643` | registry dependency policy (rc.5 peer, installable suites) |
+| `58fbe75`, `33955ef` | both browser halves become closure factories |
+| `aa58a52` | publish publicly (upstream parity) |
+| `62ced22` | revert the TSX workarounds (environment misdiagnosis) |
+| `3fd1a56` | happy-dom + ModuleLoader materializer; real browser services in tests |
 
-# against a plain official deepseek-harness checkout
-$DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh \
-  --source <deepseek-harness-checkout> web --port 8000
-```
+## 8. Future work
 
-(home and profile derive from the install path. Without `--source` the launcher runs a registry-installed `@deepseek-ai/dsh` — the published CLI entry is plain ESM, so neither tsx nor a checkout is needed; the CLI resolves from `DSH_CLI`, the caller's project dependencies, or a `dsh` on PATH, following pnpm's cmd-shim scripts. The checkout form `node <bundle-repo>/scripts/fabric-dsh.mjs --source <checkout> --profile web ...` stays available for development.)
-
-First-time setup from this bundle repo: `pnpm run install:host -- <deepseek-harness-checkout> [--dsh-home <dir>]` — harness deps + build, profile seed (pnpm settings the git-resolved trio needs), bundle install through the official plugin channel (`dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`, which joins `cordis-fabric-bundle` to `dsh.profile.bundles`), and the `cordis-fabric-dsh` row enable. The host patch is empty, so nothing is patched or branched.
-
-`fabric-dsh` composes the profile's patch layers, writes the composed descriptors to `$DSH_FABRIC_CONFIG`, injects `packages/cordis-fabric/preload.mjs` through `--import` (which registers the loader hooks before the CLI entry loads, resolving the trio from the profile so hooks and plugins share one module instance — healing the profile's module fallback first, since the preload runs before the CLI's own boot heals it), pins the tsx tsconfig for source checkouts, and appends the profile's pnpm settings (`blockExoticSubdeps: false`, `dangerouslyAllowAllBuilds: true`) when missing. A row that declares `config.fabric.patches` is Fabric-required: it ships disabled, and fabric-dsh enables such rows through a generated overlay — a plain `dsh` boot skips them entirely (the app runs, the dependent plugins stay unloaded), while fabric-dsh loads them with the hooks installed; the Host plugin then verifies required bindings one tick after boot, and a Fabric-required row explicitly enabled on plain `dsh` fails the launch loud. The boot output identifies a fabric-enabled launch on stderr: a `fabric-dsh:` marker when the hooks install, then a hook summary listing every patch and the target file it hooked.
-
-The launcher installs no-op SIGINT/SIGTERM handlers: without them a bare `spawnSync` parent hangs after its child dies of a signal, keeping the terminal's foreground job alive until a second ^C kills the hung launcher. The child (the official CLI) receives every signal directly — the kernel delivers to the whole foreground process group — and owns its own first-^C graceful / second-^C force escalation, so the shell regains the prompt after one ^C.
-
-**npm-installed official `dsh`** — works directly: a `fabric-dsh` launch without `--source` runs the registry-installed CLI (the prebuilt entry is plain ESM and takes the preload the same way), with no source checkout, tsx, or host patch involved.
-
-Two prerequisites:
-
-- pnpm resolves GitHub dependencies over SSH, so the installing machine needs GitHub SSH access for `dsh-external/fabric`.
-- The launch must go through `fabric-dsh` (plain `dsh` never activates the Fabric hooks); see above.
-
-## Development
-
-```sh
-pnpm install
-pnpm run verify:self-contained
-pnpm run typecheck
-pnpm test
-pnpm run build
-```
-
-`lib/` is a build output, never committed: it is recreated by the trio's `prepare` scripts (the root `build` script runs them locally). In this workspace, the root manifest's git subdirectory specs for the trio are redirected to the local packages through `pnpm-workspace.yaml` overrides, so `pnpm install` never re-clones the repository.
-
-## Model Experience
-
-The low-level transformer contributes no model-visible content. The cooperative facades delegate prompt, tools, commands, agent events, and browser command/slot registrations to their authoritative DSH services; those owners retain logging, permissions, approval, cancellation, and rendering semantics.
-
-## Known Limitations and Deferred Work
-
-- Node load-time transformation requires precompiled JavaScript; browser transforms strip TypeScript before applying handlers.
-- The browser faces are split across the two dual-face packages (`cordis-fabric/client` for the bridge and service, `cordis-fabric-dsh/browser/client` for the Mod-facing facade); consumers that need the complete typed SlotMap should use the authoritative DSH slot service instead of widening the facade.
-- On an npm-installed official `dsh`, `fabric-dsh` cannot run (the CLI ships prebuilt and there is no source entry to preload); those hosts work once the official repository merges the wiring. Source hosts launch through `fabric-dsh` (see the Installation section).
+- If the registry ever publishes node-importable builds (plain ESM or the
+  `src` halves), the test module loader disappears and the specs import
+  packages directly.
+- Upstream promoting `createSnapshotStore` out of `dsh-client-runtime` shrinks
+  the seed table.
+- Upstream publishing `hmr.registerConfig` / `internal/update` would let the
+  HMR runner mirror the in-tree config flow again.

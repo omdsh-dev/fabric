@@ -1,6 +1,6 @@
 # 协作式 Fabric API 层
 
-[English](fabric-api.md) | 中文
+[English](README.md) | 中文
 
 协作式 Mod API 拆分为两个包:纯 compat facade(`cordis-fabric-api`)与 DSH 面向模块(`cordis-fabric-dsh`)。二者共同构成 DSH 对 Minecraft Fabric API 的对应物——位于 loader 与 Mixin 子系统之上的一层可选库——且是 opt-in:默认 DSH composition 不挂载它们。
 
@@ -11,7 +11,7 @@ Fabric 风格扩展架构由三层组成。前两层已存在;这两个包是第
 | 层 | 所有者 | 契约 |
 |---|---|---|
 | Mod loader | Cordis Loader | 发现配置中的插件、解析注入、挂载 fiber 并销毁 effect。 |
-| Mixin 子系统 | [`cordis-fabric`](fabric.md) | 变换目标代码并分发受信任的底层 patch。 |
+| Mixin 子系统 | `cordis-fabric` | 变换目标代码并分发受信任的底层 patch。 |
 | 协作式 Mod API | `cordis-fabric-api` + `cordis-fabric-dsh` | 由现有 DSH 所有者支撑的稳定 domain-level registration 和 event。 |
 
 Mod 仍然是普通 Cordis 插件,只声明它所消费的 Fabric 模块 service 的注入。每个 facade 委托给权威 service——`ctx.tools`、`ctx.systemPrompt`、`ctx.commands`、`agent/*` 事件以及浏览器侧的 `ctx.command`/`ctx.slots`——并返回底层 effect 的精确 disposer。Facade 不保存 domain state 的平行副本,也不能绕过 policy、approval、timeout、日志、取消或权威 executor。

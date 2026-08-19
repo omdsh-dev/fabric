@@ -1,6 +1,6 @@
 # `cordis-fabric`
 
-English | [中文](fabric.zh.md)
+English | [中文](README.zh.md)
 
 Fabric/Mixin-style extension layer over Orchestrion-JS for trusted Cordis plugins. The service is opt-in: nothing in the default DSH composition mounts it, and patches register through trusted code.
 
@@ -35,11 +35,10 @@ disposeHooks()
 A patch may set `required: true`: once the application boots and every target module has been imported, `checkRequiredPatches(patches)` fails loud, naming the patch id and its target, when a required patch's transform never rewrote anything — the `filePath` may be the wrong launch form (`src/index.ts` vs `lib/index.js`) or the function may have moved. The `dsh` host runs this check automatically after `boot()` completes. Several launch forms under one patch id are covered either by a RegExp `filePath` (e.g. `/^(src\/index\.ts|lib\/index\.js)$/`) or by the `filePaths` array convenience (each entry expands into its own instrumentation under the same id, one binding record per matched file). The load-time bindings the check is built on are recorded per transformed file and visible through `ctx.fabric.bindings(id?)` and each `list()` entry.
 
 ```yaml
-# User overlay (e.g. $DSH_HOME/config.yaml or a --config file): enable the row
-# and declare the static patch descriptors. Handlers are NOT configured here —
-# plugins register them through ctx.fabric at runtime.
+# User overlay: keep the pure service row as the descriptor carrier. Its
+# package root has no Loader `apply`; enable the DSH integration row separately.
 - id: cordis-fabric
-  disabled: false
+  disabled: true
   config:
     fabric:
       patches:
@@ -50,9 +49,15 @@ A patch may set `required: true`: once the application boots and every target mo
             filePath: 'lib/index.js'
             functionQuery: { functionName: 'greet', kind: 'Sync' }
           operation: 'before'
+
+- id: cordis-fabric-dsh
+  disabled: false
 ```
 
-The same row's browser half (`./client`, implemented by `src/browser/client`) mounts `ctx.fabric` in the web tree when the row is enabled; client bundles transform at build time and only take effect after that entry materializes.
+The DSH integration row mounts the Host facades. The core package's browser
+half (`./client`, implemented by `src/browser/client`) is a separate dshClient
+artifact that installs `ctx.fabric` when its browser entry materializes; it does
+not turn the package root into a Loader plugin.
 
 The hooks must be installed before the target module's first evaluation; a patch registered after that point only takes effect for modules transformed later. The `registerHooks` API has no unregister, so the returned disposer deactivates the installation's state rather than removing the hooks.
 
@@ -120,7 +125,7 @@ When the target bundle cannot be transformed at build time (its build is owned b
 
 ### Testing patches
 
-The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `cordis-fabric/testing/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
+The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `cordis-fabric/test/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
 
 ## Model Experience
 

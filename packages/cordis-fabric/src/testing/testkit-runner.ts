@@ -8,7 +8,7 @@
  * The child exits 0 for a completed run even when the entry threw (the
  * error travels in the envelope); infrastructure failures (bootstrap error,
  * bad payload) exit non-zero with the reason on stderr.
- * @module cordis-fabric/testing/testkit-runner
+ * @module cordis-fabric/test/testkit-runner
  */
 
 import { bootstrapFabric, flushBindingReports, runtime } from '../index.ts'

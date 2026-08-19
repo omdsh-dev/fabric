@@ -1,6 +1,6 @@
 # Cooperative Fabric API layer
 
-English | [中文](fabric-api.zh.md)
+English | [中文](README.zh.md)
 
 The cooperative Mod API is split across two packages: the pure compat facade in `cordis-fabric-api` and the DSH-facing modules in `cordis-fabric-dsh`. Together they are the DSH counterpart of Minecraft's Fabric API — an optional library above the loader and the Mixin subsystem — and they are opt-in: nothing in the default DSH composition mounts them.
 
@@ -11,7 +11,7 @@ Three layers make up the Fabric-style extension architecture. The first two alre
 | Layer | Owner | Contract |
 |---|---|---|
 | Mod loader | Cordis Loader | Discovers configured plugins, resolves injection, mounts fibers, and disposes effects. |
-| Mixin subsystem | [`cordis-fabric`](fabric.md) | Transforms target code and dispatches trusted low-level patches. |
+| Mixin subsystem | `cordis-fabric` | Transforms target code and dispatches trusted low-level patches. |
 | Cooperative Mod API | `cordis-fabric-api` + `cordis-fabric-dsh` | Stable, domain-level registrations and events backed by existing DSH owners. |
 
 A Mod remains an ordinary Cordis plugin that declares injection of only the Fabric module services it consumes. Each facade delegates to the authoritative service — `ctx.tools`, `ctx.systemPrompt`, `ctx.commands`, the `agent/*` events, and the browser `ctx.command`/`ctx.slots` — and returns the exact disposer of the underlying effect. No facade stores a parallel copy of domain state, and none can bypass policy, approval, timeout, logging, cancellation, or the authoritative executor.

@@ -151,7 +151,6 @@ for (const requiredPath of [
   'AGENTS.md',
   'README.md',
   'cordis.patch.yml',
-  'docs/dsh-plugin-contracts.md',
   'packages/cordis-fabric/package.json',
   'packages/cordis-fabric/src',
   'packages/cordis-fabric/tests',
