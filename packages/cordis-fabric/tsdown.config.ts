@@ -10,9 +10,19 @@ export default [
   defineConfig({
     entry: {
       index: 'lib/types/index.js',
-      'hook-entry': 'lib/types/hook-entry.js',
-      testkit: 'lib/types/testkit.js',
-      'testkit-runner': 'lib/types/testkit-runner.js',
+      'node/loader': 'lib/types/node/loader.js',
+      'node/hook-entry': 'lib/types/node/hook-entry.js',
+      'node/identity': 'lib/types/node/identity.js',
+      'node/wire': 'lib/types/node/wire.js',
+      'browser/transform': 'lib/types/browser/transform.js',
+      'browser/serve': 'lib/types/browser/serve.js',
+      'hmr/ownership': 'lib/types/hmr/ownership.js',
+      'hmr/reload': 'lib/types/hmr/reload.js',
+      'transform/config': 'lib/types/transform/config.js',
+      'transform/transform': 'lib/types/transform/transform.js',
+      'testing/testkit': 'lib/types/testing/testkit.js',
+      'testing/testkit-runner': 'lib/types/testing/testkit-runner.js',
+      'browser/client': 'lib/types/browser/client/index.js',
     },
     outDir: 'lib',
     format: ['esm'],
@@ -24,7 +34,7 @@ export default [
   }),
   defineConfig({
     entry: {
-      client: 'lib/types/client/index.js',
+      client: 'lib/types/browser/client/index.js',
     },
     outDir: 'lib',
     // Browser half ships in the dsh closure-factory artifact: the web shell

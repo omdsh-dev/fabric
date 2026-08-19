@@ -13,9 +13,9 @@
  */
 
 import { Service } from '@deepseek-ai/cordis'
-import { registerCatalogEntries } from './catalog.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
+import { registrationOwner } from './hmr/ownership.ts'
 import type { FabricBinding, FabricPatch, FabricPatchInfo, FabricHandler, PatchId } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -40,11 +40,6 @@ export class FabricService extends Service {
    */
   constructor(ctx: Context) {
     super(ctx, 'fabric')
-    // Register the fabric inspect-catalog entries at mount (the host patch
-    // used to bake them into the official tool-cordis catalog). Fire and
-    // forget: a built host without the src export degrades to uncatalogued
-    // rows, never a failure.
-    void registerCatalogEntries()
   }
 
   /**
@@ -164,29 +159,6 @@ export function getFabric(ctx: Context): FabricService {
   const existing = ctx.get('fabric')
   if (existing !== undefined) return existing
   return new FabricService(ctx)
-}
-
-/**
- * Resolve the identity a registration belongs to — the token the runtime
- * uses to keep a patch id exclusive to one owner while letting that owner's
- * HMR generations take it back.
- *
- * Under the Loader, every fiber in an entry tree carries the entry row
- * (`fiber.entry`), which is stable across that row's HMR generations and
- * distinct across rows, so it is the exact identity. Without a Loader
- * (unit/child harnesses), the plugin callback is the fallback: re-applying
- * the same plugin reuses its runtime record, while different plugins keep
- * distinct callbacks. The fiber itself is the last resort (root context).
- * @param ctx - the context the registration was made on.
- * @returns the registration owner token.
- */
-function registrationOwner(ctx: Context): unknown {
-  // The Loader augments Fiber with `entry` (see @cordisjs/plugin-loader); it
-  // is a plain property, so no type-level dependency is needed here.
-  const entry = (ctx.fiber as { entry?: unknown }).entry
-  if (entry !== undefined) return entry
-  const runtime = ctx.fiber.runtime
-  return runtime?.callback ?? ctx.fiber
 }
 
 /** Validate the static fields of a patch descriptor. */

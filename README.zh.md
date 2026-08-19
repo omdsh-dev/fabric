@@ -12,7 +12,8 @@ Fabric/Mixin 扩展层的自包含 workspace:三个完整包 + 一个可安装�
 | `cordis-fabric-api` | 纯 Cordis | 基于 fabric registry 的合作式 compat facade:`FabricCompatService` + `buildCompatInstrumentations`。peer 只依赖 Cordis 与 `cordis-fabric`。 |
 | `cordis-fabric-dsh` | DSH 面 | Mod-facing facade(`ctx.fabricAgent`、`ctx.fabricTools`、`ctx.fabricPrompt`、`ctx.fabricCommands`)、浏览器 facade(`ctx.fabricClient`)、包 invariant 与 profile bootstrap(`installFabricBootstrap`)。 |
 
-本仓库只存在这三个完整包。三包之外的任何代码——包括官方的 `@deepseek-ai/dsh-tool-cordis` 工具集或需要修正的上游依赖——一律不作为第四个包加入,而是以 pnpm 依赖补丁的形式存放在 `patches/` 中(见 `patches/README.md`)。
+平铺的源码 subpath 已被有意移除。消费者必须使用分层入口：`cordis-fabric/node/loader`、`cordis-fabric/browser/transform`、`cordis-fabric/browser/client`、`cordis-fabric/testing/testkit`、`cordis-fabric-api/compat/service`，以及 `cordis-fabric-dsh/host/*`、`cordis-fabric-dsh/browser/client` 或 `cordis-fabric-dsh/bootstrap/profile`。旧路径不再提供兼容 re-export shim。
+
 
 ## 仓库结构
 
@@ -26,8 +27,26 @@ patches/README.md         # pnpm 依赖补丁契约
 scripts/                  # 自包含 prepare 与边界验证
 packages/
   cordis-fabric/          # 纯变换服务 + 浏览器 client entry
+    src/transform/         # 共享 instrumentation 与 AST 变换
+    src/node/              # Node loader、identity、wire 协议
+    src/browser/           # browser transform 与 bundle serving
+    src/hmr/              # HMR ownership 与 cache 重新变换
+    src/testing/           # 子进程 testkit
+    tests/browser/        # browser transform 与 serve spec
+    tests/hmr/            # HMR 端到端 spec
+    tests/node/           # Node hook、load 与 preload spec
+    tests/runtime/        # runtime 与 service spec
+    tests/testkit/        # 子进程 testkit spec
   cordis-fabric-api/      # 纯 compat facade(peer-only 库)
+    src/compat/             # compat contract、builder 与 service
+    tests/compat/           # compat child-process 与 unit spec
   cordis-fabric-dsh/      # DSH facades、invariant、profile bootstrap
+    src/host/               # Agent/Tools/Prompt/Commands facade
+    src/browser/            # client facade
+    src/bootstrap/          # profile 组装与 required 检查
+    tests/host/             # host facade spec
+    tests/browser/          # browser facade 与 assembly spec
+    tests/assembly/         # 完整 host composition spec
 lib/                      # 构建产物(已忽略;每个包在安装时自行 prepare)
 ```
 
@@ -110,5 +129,5 @@ pnpm run build
 ## 已知限制
 
 - Node 加载期变换要求预编译 JavaScript;browser transform 会在应用 handler 前剥离 TypeScript。
-- 浏览器面分布在两个双面包中(`cordis-fabric/client` 提供 bridge 与 service,`cordis-fabric-dsh/client` 提供 Mod-facing facade);需要完整 SlotMap 类型的 consumer 应直接使用 DSH authoritative slot service。
+- 浏览器面分布在两个双面包中(`cordis-fabric/client` 提供 bridge 与 service,`cordis-fabric-dsh/browser/client` 提供 Mod-facing facade);需要完整 SlotMap 类型的 consumer 应直接使用 DSH authoritative slot service。
 - npm 安装的官方 `dsh` 上无法运行 `fabric-dsh`(CLI 预构建,没有源码入口可 preload);这类宿主要等官方合入接线。源码宿主一律通过 `fabric-dsh` 启动(见安装章节)。

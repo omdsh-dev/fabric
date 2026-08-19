@@ -10,54 +10,53 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./agent": {
-      "types": "./lib/types/agent.d.ts",
-      "default": "./lib/agent.js"
+    "./host/agent": {
+      "types": "./lib/types/host/agent.d.ts",
+      "default": "./lib/host/agent.js"
     },
-    "./tools": {
-      "types": "./lib/types/tools.d.ts",
-      "default": "./lib/tools.js"
+    "./host/tools": {
+      "types": "./lib/types/host/tools.d.ts",
+      "default": "./lib/host/tools.js"
     },
-    "./prompt": {
-      "types": "./lib/types/prompt.d.ts",
-      "default": "./lib/prompt.js"
+    "./host/prompt": {
+      "types": "./lib/types/host/prompt.d.ts",
+      "default": "./lib/host/prompt.js"
     },
-    "./commands": {
-      "types": "./lib/types/commands.d.ts",
-      "default": "./lib/commands.js"
+    "./host/commands": {
+      "types": "./lib/types/host/commands.d.ts",
+      "default": "./lib/host/commands.js"
     },
-    "./profile-bootstrap": {
-      "types": "./lib/types/profile-bootstrap.d.ts",
-      "default": "./lib/profile-bootstrap.js"
+    "./bootstrap/profile": {
+      "types": "./lib/types/bootstrap/profile.d.ts",
+      "default": "./lib/bootstrap/profile.js"
     },
     "./invariant": {
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
+    "./browser/client": {
+      "types": "./lib/types/browser/client/index.d.ts",
+      "default": "./lib/browser/client.js"
+    },
     "./client": {
-      "types": "./lib/types/client/index.d.ts",
+      "types": "./lib/types/browser/client/index.d.ts",
       "default": "./lib/client.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/agent.js",
-    "lib/tools.js",
-    "lib/prompt.js",
-    "lib/commands.js",
-    "lib/profile-bootstrap.js",
-    "lib/invariant.js",
-    "lib/client.js",
+    "lib/*.js",
+    "lib/host/*.js",
+    "lib/bootstrap/*.js",
+    "lib/browser/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map"
   ],
   "license": "BSD-3-Clause",
   "scripts": {
-    "build": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
+    "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "tsc --pretty false",
-    "prepare": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
+    "prepare": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
   },
   "dsh": {
     "client": {
@@ -79,7 +78,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1-0",
-    "cordis-fabric": "^0.0.1-rc.2",
+    "cordis-fabric": "workspace:^",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-commands": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-invariants": "^0.1.0-rc.0",

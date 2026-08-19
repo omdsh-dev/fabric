@@ -15,7 +15,8 @@
 | `around` | 决定原函数体是否执行，并可替换其结果（调用 `invoke()` 委托）。 |
 | `replace` | 完全接管调用；只有 handler 调用 `invoke()` 时才执行原函数体。 |
 
-机制是加载期代码变换：transform hook 把目标函数体重写为向进程内 bridge channel 发布调用记录，runtime 将其分发给当前注册的 handler。没有活跃 handler（禁用、销毁或从未启用）时，变换后的代码原样委托给原函数体。
+源码分层在三个既有包内部完成，不新增第四个包：`cordis-fabric/src/transform` 负责平台无关的 instrumentation 配置和 AST 重写；`src/node` 负责 Node hooks、模块身份和 loader-thread wire 传输；`src/browser` 负责浏览器变换和运行时 bundle serving；`src/hmr` 负责 HMR generation ownership 与 Node cache 重新变换；`src/testing` 负责子进程测试夹具。`cordis-fabric-api/src/compat` 分开合作式 contract、instrumentation builder 与 service。`cordis-fabric-dsh/src/host`、`src/browser`、`src/bootstrap` 分开 DSH facade、浏览器服务和 profile 组装。DSH catalog adapter 由 `cordis-fabric-dsh` 挂载，纯 Fabric service 不再依赖 catalog。
+
 
 ## 安装和 bootstrap
 
@@ -51,7 +52,7 @@ patch 可以设置 `required: true`：一旦应用启动完成、所有目标模
           operation: 'before'
 ```
 
-同一行的浏览器 half（`./client`）在该行启用时于 web 树中挂载 `ctx.fabric`；client bundle 在构建期变换，只有在该 entry 物化后才生效。
+同一行的浏览器 half（`./client`，实现位于 `src/browser/client`）在该行启用时于 web 树中挂载 `ctx.fabric`；client bundle 在构建期变换，只有在该 entry 物化后才生效。
 
 hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对后续才被变换的模块生效。`registerHooks` API 没有 unregister，因此返回的 disposer 只是停用该安装的状态，而不是移除 hook 函数本身。
 
@@ -93,8 +94,8 @@ export function apply(ctx: Context & { fabric: FabricService }): void {
 
 ## 平台支持
 
-- **Node Host（ESM + CommonJS）：** 通过同步 `module.registerHooks`（Node ≥ 22.22.3 / ≥ 24.11.1）和 CJS `_compile` 路径支持。模块身份先经 npm 布局解析器解析，失败时回退到最近的 `package.json`（`nodePackageResolver`）——Node 会把 workspace 链接 realpath 成真实路径，因此 workspace 包加载后的 URL 没有可供布局解析器命名的 `node_modules` 边界，而最近的 manifest 总能命名它。这正是补丁能按真实路径命中第一方 workspace 包（例如宿主工具 bundle）的原因。`registerHooks` 从 22.19.0 起就存在，但在 22.22.3 / 24.11.1 之前，当 loader-thread hooks（`module.register`，例如这些版本上的 tsx）同时存在时，其同步 load 链对 CommonJS 模块不返回 source，会导致 Node 的 load 校验崩溃；因此这些版本通过 `./hook-entry` loader-thread 模块走异步 `module.register` fallback。entry 只注册一次，并在每次加载时读取共享配置文件（主线程在每次安装与销毁时重写），因此重新变换、销毁与并发安装在两条路径上行为一致。
-- **Browser/Web：** bundle 期重写（`createWatchedBrowserTransform`（静态集合用 `createBrowserTransform`）+ `repoSourceResolver`，经 `clientBundle(id, libEntry, { transform })` 接入）重写 client 插件函数；本 package 的 client half（`./client`）在浏览器 Cordis 树中安装 bridge 并挂载 `ctx.fabric`。client bundle 在该 entry 物化前回退到原函数，因此 patch 对浏览器 Fabric runtime 就绪后的调用生效。web roster 的 `cordis-fabric` 行默认禁用（opt-in）。
+- **Node Host（ESM + CommonJS）：** 通过同步 `module.registerHooks`（Node ≥ 22.22.3 / ≥ 24.11.1）和 CJS `_compile` 路径支持。模块身份先经 npm 布局解析器解析，失败时回退到最近的 `package.json`（`nodePackageResolver`）——Node 会把 workspace 链接 realpath 成真实路径，因此 workspace 包加载后的 URL 没有可供布局解析器命名的 `node_modules` 边界，而最近的 manifest 总能命名它。这正是补丁能按真实路径命中第一方 workspace 包（例如宿主工具 bundle）的原因。`registerHooks` 从 22.19.0 起就存在，但在 22.22.3 / 24.11.1 之前，当 loader-thread hooks（`module.register`，例如这些版本上的 tsx）同时存在时，其同步 load 链对 CommonJS 模块不返回 source，会导致 Node 的 load 校验崩溃；这些版本因此通过 `node/hook-entry` loader-thread 模块走异步 `module.register` fallback。entry 只注册一次，并在每次加载时读取共享配置文件（主线程在每次安装与销毁时重写），因此重新变换、销毁与并发安装在两条路径上行为一致。
+- **Browser/Web：** bundle 期重写（`createWatchedBrowserTransform`（静态集合用 `createBrowserTransform`）+ `repoSourceResolver`，经 `clientBundle(id, libEntry, { transform })` 接入）重写 client 插件函数；本 package 的 client half（`./client`，实现位于 `src/browser/client`）在浏览器 Cordis 树中安装 bridge 并挂载 `ctx.fabric`。client bundle 在该 entry 物化前回退到原函数，因此 patch 对浏览器 Fabric runtime 就绪后的调用生效。web roster 的 `cordis-fabric` 行默认禁用（opt-in）。
 
 ## Browser 构建用法
 
@@ -119,7 +120,7 @@ resolver 把包自身的源码树映射到包身份；不使用上游 adapter，
 
 ### 测试 patches
 
-变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`cordis-fabric/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
+变换 hooks 无法卸载、已变换模块保持缓存，因此每个 patch 场景都需要全新进程。`cordis-fabric/testing/testkit` 的 `runPatchFixture({ patches, entry, args })` 让这变得机械：它派生一个子进程 bootstrap patches、导入 `entry`（其 default export 以 `args` 运行），并返回 `{ bindings, result, error, exitCode }`——抛出的错误 message 原样穿越进程边界（node-half spec 的富化错误断言无需手写 child runner），每个 patch 的加载期绑定记录让未绑定的 patch 在同一次调用中可见。
 
 ## Model Experience
 

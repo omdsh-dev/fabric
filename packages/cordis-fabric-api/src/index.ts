@@ -12,9 +12,10 @@
 
 export {
   buildCompatInstrumentations,
+} from './compat/instrumentation.ts'
+export {
   FabricCompatService,
-  default,
-} from './compat.ts'
+} from './compat/service.ts'
 export type {
   FabricCompatConfig, FabricCompatPatch, FabricCompatTarget,
-} from './compat.ts'
+} from './compat/types.ts'

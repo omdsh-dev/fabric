@@ -10,11 +10,12 @@ export default [
   defineConfig({
     entry: {
       index: 'lib/types/index.js',
-      agent: 'lib/types/agent.js',
-      tools: 'lib/types/tools.js',
-      prompt: 'lib/types/prompt.js',
-      commands: 'lib/types/commands.js',
-      'profile-bootstrap': 'lib/types/profile-bootstrap.js',
+      'host/agent': 'lib/types/host/agent.js',
+      'host/tools': 'lib/types/host/tools.js',
+      'host/prompt': 'lib/types/host/prompt.js',
+      'host/commands': 'lib/types/host/commands.js',
+      'bootstrap/profile': 'lib/types/bootstrap/profile.js',
+      'browser/client': 'lib/types/browser/client/index.js',
       invariant: 'lib/types/invariant.js',
     },
     outDir: 'lib',
@@ -27,7 +28,7 @@ export default [
   }),
   defineConfig({
     entry: {
-      client: 'lib/types/client/index.js',
+      client: 'lib/types/browser/client/index.js',
     },
     outDir: 'lib',
     // Browser half ships in the dsh closure-factory artifact: the web shell

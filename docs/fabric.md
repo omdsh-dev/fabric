@@ -15,7 +15,8 @@ A trusted plugin (A) can change the behavior of another plugin's function (B) **
 | `around` | Decide whether the original body runs and optionally replace its result (call `invoke()` to delegate). |
 | `replace` | Own the call entirely; the original body only runs if the handler calls `invoke()`. |
 
-The mechanism is load-time code transformation: the transform hooks rewrite the target function's body to publish a call record to a process-local bridge channel, and the runtime dispatches it to the currently registered handler. When no handler is active (disabled, disposed, or never enabled), transformed code delegates to the original body untouched.
+The source is layered inside the three packages rather than adding another package. `cordis-fabric/src/transform` owns platform-neutral instrumentation configuration and AST rewriting; `src/node` owns Node hooks, module identity, and loader-thread wire transport; `src/browser` owns browser transforms and runtime bundle serving; `src/hmr` owns HMR generation ownership and Node cache re-transformation; `src/testing` owns child-process fixtures. `cordis-fabric-api/src/compat` separates the cooperative contract, instrumentation builder, and service. `cordis-fabric-dsh/src/host`, `src/browser`, and `src/bootstrap` separate DSH facades, browser services, and profile assembly. The DSH catalog adapter is mounted by `cordis-fabric-dsh`, so the pure Fabric service has no catalog dependency.
+
 
 ## Installation and bootstrap
 
@@ -51,7 +52,7 @@ A patch may set `required: true`: once the application boots and every target mo
           operation: 'before'
 ```
 
-The same row's browser half (`./client`) mounts `ctx.fabric` in the web tree when the row is enabled; client bundles transform at build time and only take effect after that entry materializes.
+The same row's browser half (`./client`, implemented by `src/browser/client`) mounts `ctx.fabric` in the web tree when the row is enabled; client bundles transform at build time and only take effect after that entry materializes.
 
 The hooks must be installed before the target module's first evaluation; a patch registered after that point only takes effect for modules transformed later. The `registerHooks` API has no unregister, so the returned disposer deactivates the installation's state rather than removing the hooks.
 
@@ -93,8 +94,8 @@ The registration is a fiber effect owned by the registering plugin: disposing th
 
 ## Platform support
 
-- **Node Host (ESM + CommonJS):** supported via synchronous `module.registerHooks` (Node ≥ 22.22.3 / ≥ 24.11.1) and the CJS `_compile` path. Module identity resolves through the npm-layout parser first and falls back to the nearest `package.json` (`nodePackageResolver`) — Node realpaths workspace links, so a workspace package's loaded URL has no `node_modules` boundary for the layout parser to name, while the nearest manifest always can. This is what lets patches target first-party workspace packages (e.g. a host tool bundle) at their real paths. `registerHooks` exists from 22.19.0, but before 22.22.3 / 24.11.1 its synchronous load chain returns no source for CommonJS modules when loader-thread hooks (`module.register`, e.g. tsx on those versions) are also present, which crashes Node's load validation; those versions therefore use the async `module.register` fallback through the `./hook-entry` loader-thread module. The entry is registered once and reads a shared configuration file (rewritten by the main thread on every installation and disposal) on each load, so re-transformation, disposal, and concurrent installations behave the same on both paths.
-- **Browser/Web:** the bundle-time rewrite (`createWatchedBrowserTransform` (or `createBrowserTransform` for a static set) + `repoSourceResolver`, wired through `clientBundle(id, libEntry, { transform })`) rewrites client plugin functions, and the package's own client half (`./client`) installs the bridge and mounts `ctx.fabric` in the browser Cordis tree. Client bundles fall back to the original body until that entry materializes, so patches take effect for calls after the browser Fabric runtime is up. The web roster row `cordis-fabric` is disabled by default (opt-in).
+- **Node Host (ESM + CommonJS):** supported via synchronous `module.registerHooks` (Node ≥ 22.22.3 / ≥ 24.11.1) and the CJS `_compile` path. Module identity resolves through the npm-layout parser first and falls back to the nearest `package.json` (`nodePackageResolver`) — Node realpaths workspace links, so a workspace package's loaded URL has no `node_modules` boundary for the layout parser to name, while the nearest manifest always can. This is what lets patches target first-party workspace packages (e.g. a host tool bundle) at their real paths. `registerHooks` exists from 22.19.0, but before 22.22.3 / 24.11.1 its synchronous load chain returns no source for CommonJS modules when loader-thread hooks (`module.register`, e.g. tsx on those versions) are also present, which crashes Node's load validation; those versions therefore use the async `module.register` fallback through the `node/hook-entry` loader-thread module. The entry is registered once and reads a shared configuration file (rewritten by the main thread on every installation and disposal) on each load, so re-transformation, disposal, and concurrent installations behave the same on both paths.
+- **Browser/Web:** the bundle-time rewrite (`createWatchedBrowserTransform` (or `createBrowserTransform` for a static set) + `repoSourceResolver`, wired through `clientBundle(id, libEntry, { transform })`) rewrites client plugin functions, and the package's own client half (`./client`, implemented by `src/browser/client`) installs the bridge and mounts `ctx.fabric` in the browser Cordis tree. Client bundles fall back to the original body until that entry materializes, so patches take effect for calls after the browser Fabric runtime is up. The web roster row `cordis-fabric` is disabled by default (opt-in).
 
 ## Browser build usage
 
@@ -119,7 +120,7 @@ When the target bundle cannot be transformed at build time (its build is owned b
 
 ### Testing patches
 
-The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `cordis-fabric/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
+The transformation hooks cannot be unregistered and transformed modules stay cached, so every patch scenario needs a fresh process. `runPatchFixture({ patches, entry, args })` from `cordis-fabric/testing/testkit` makes that mechanical: it spawns a child that bootstraps the patches, imports `entry` (whose default export runs with `args`), and returns `{ bindings, result, error, exitCode }` — the thrown error's message travels verbatim (the enriched-error assertions of a node-half spec need no hand-rolled child runner), and each patch's load-time binding records make an unbound patch visible in the same call.
 
 ## Model Experience
 

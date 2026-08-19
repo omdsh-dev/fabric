@@ -12,7 +12,8 @@ The Fabric/Mixin extension layer for DSH as a self-contained workspace of three 
 | `cordis-fabric-api` | pure Cordis | Cooperative compat facade over the fabric registry: `FabricCompatService` + `buildCompatInstrumentations`. Peers only Cordis and `cordis-fabric`. |
 | `cordis-fabric-dsh` | DSH-facing | Mod-facing facades (`ctx.fabricAgent`, `ctx.fabricTools`, `ctx.fabricPrompt`, `ctx.fabricCommands`), browser facade (`ctx.fabricClient`), the package invariant, and the profile bootstrap (`installFabricBootstrap`). |
 
-Only these three packages exist as code in this repository. Anything outside them — for example the official `@deepseek-ai/dsh-tool-cordis` toolset or a corrected upstream dependency — is never added as a fourth package; it is applied as a pnpm dependency patch stored in `patches/` (see `patches/README.md`).
+The flattened source subpaths are intentionally removed. Consumers must use the layered entries: `cordis-fabric/node/loader`, `cordis-fabric/browser/transform`, `cordis-fabric/browser/client`, `cordis-fabric/testing/testkit`, `cordis-fabric-api/compat/service`, and `cordis-fabric-dsh/host/*`, `cordis-fabric-dsh/browser/client`, or `cordis-fabric-dsh/bootstrap/profile`. There are no compatibility re-export shims for the old paths.
+
 
 ## Repository shape
 
@@ -26,8 +27,26 @@ patches/README.md         # pnpm dependency-patch contract
 scripts/                  # self-contained prepare and boundary verification
 packages/
   cordis-fabric/          # pure transformation service + browser client entry
+    src/transform/         # shared instrumentation and AST transform
+    src/node/              # Node loader, identity, wire protocol
+    src/browser/           # browser transform and bundle serving
+    src/hmr/              # HMR ownership and cache re-transformation
+    src/testing/           # child-process testkit
+    tests/browser/        # browser transform and serve specs
+    tests/hmr/            # HMR end-to-end specs
+    tests/node/           # Node hook, load, and preload specs
+    tests/runtime/        # runtime and service specs
+    tests/testkit/        # child-process testkit specs
   cordis-fabric-api/      # pure compat facade (peer-only library)
+    src/compat/             # compat contracts, builder, and service
+    tests/compat/           # compat child-process and unit specs
   cordis-fabric-dsh/      # DSH facades, invariant, profile bootstrap
+    src/host/               # Agent/Tools/Prompt/Commands facades
+    src/browser/            # client facade
+    src/bootstrap/          # profile assembly and required checks
+    tests/host/             # host facade specs
+    tests/browser/          # browser facade and assembly specs
+    tests/assembly/         # complete host composition specs
 lib/                      # build outputs (ignored; each package prepares its own on install)
 ```
 
@@ -112,5 +131,5 @@ The low-level transformer contributes no model-visible content. The cooperative 
 ## Known Limitations and Deferred Work
 
 - Node load-time transformation requires precompiled JavaScript; browser transforms strip TypeScript before applying handlers.
-- The browser faces are split across the two dual-face packages (`cordis-fabric/client` for the bridge and service, `cordis-fabric-dsh/client` for the Mod-facing facade); consumers that need the complete typed SlotMap should use the authoritative DSH slot service instead of widening the facade.
+- The browser faces are split across the two dual-face packages (`cordis-fabric/client` for the bridge and service, `cordis-fabric-dsh/browser/client` for the Mod-facing facade); consumers that need the complete typed SlotMap should use the authoritative DSH slot service instead of widening the facade.
 - On an npm-installed official `dsh`, `fabric-dsh` cannot run (the CLI ships prebuilt and there is no source entry to preload); those hosts work once the official repository merges the wiring. Source hosts launch through `fabric-dsh` (see the Installation section).

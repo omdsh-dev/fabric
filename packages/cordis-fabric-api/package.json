@@ -10,24 +10,31 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./compat": {
-      "types": "./lib/types/compat.d.ts",
-      "default": "./lib/compat.js"
+    "./compat/service": {
+      "types": "./lib/types/compat/service.d.ts",
+      "default": "./lib/compat/service.js"
     },
-    "./src/*": "./src/*",
+    "./compat/instrumentation": {
+      "types": "./lib/types/compat/instrumentation.d.ts",
+      "default": "./lib/compat/instrumentation.js"
+    },
+    "./compat/types": {
+      "types": "./lib/types/compat/types.d.ts",
+      "default": "./lib/compat/types.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/compat.js",
+    "lib/*.js",
+    "lib/compat/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map"
   ],
   "license": "BSD-3-Clause",
   "scripts": {
-    "build": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
+    "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "tsc --pretty false",
-    "prepare": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
+    "prepare": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
   },
   "peerDependencies": {
     "cordis-fabric": "^0.0.1-rc.2",

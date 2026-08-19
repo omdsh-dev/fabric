@@ -51,8 +51,10 @@ the host source untouched; `fabric-dsh` supplies the wiring at launch:
 - **profile pnpm settings** — fabric-dsh appends `blockExoticSubdeps: false`
   and `dangerouslyAllowAllBuilds: true` to the profile's `pnpm-workspace.yaml`
   (the keys the profile template patch used to bake in);
-- **tool-cordis catalog** — `FabricService` registers the fabric SERVICE_API
-  entries at mount time (built hosts degrade to uncatalogued rows).
+- **tool-cordis catalog** — `cordis-fabric-dsh` registers the Fabric SERVICE_API
+  entries when its DSH integration plugin mounts (built hosts degrade to
+  uncatalogued rows); the pure `cordis-fabric` service has no host catalog
+  dependency;
 
 Usage:
 

@@ -22,22 +22,22 @@ Mod 仍然是普通 Cordis 插件,只声明它所消费的 Fabric 模块 service
 
 | Entry | Service | 平台 | 委托给 |
 |---|---|---|---|
-| `.` / `./compat` | `ctx.fabricCompat` | Host | 低层 `cordis-fabric` patch(缺口 adapter) |
+| `./compat/service` | `ctx.fabricCompat` | Host | 低层 `cordis-fabric` patch(缺口 adapter) |
 
 `cordis-fabric-dsh` 承载所有 DSH 耦合面(facade 通过真实 `@deepseek-ai/dsh-*` 类型转发给宿主,声明为 peer 依赖):
 
 | Entry | Service | 平台 | 委托给 |
 |---|---|---|---|
 | `.`(Host bundle) | 挂载全部四个 Host 模块 | Host | 下方四个 entry |
-| `./agent` | `ctx.fabricAgent` | Host | `agent/*` 事件和 `agent.inject()` |
-| `./tools` | `ctx.fabricTools` | Host | `ctx.tools` 和 `tools/*` |
-| `./prompt` | `ctx.fabricPrompt` | Host | `ctx.systemPrompt` |
-| `./commands` | `ctx.fabricCommands` | Host | `ctx.commands` |
-| `./client` | `ctx.fabricClient` | Web | `ctx.command` 和 `ctx.slots` |
+| `./host/agent` | `ctx.fabricAgent` | Host | `agent/*` 事件和 `agent.inject()` |
+| `./host/tools` | `ctx.fabricTools` | Host | `ctx.tools` 和 `tools/*` |
+| `./host/prompt` | `ctx.fabricPrompt` | Host | `ctx.systemPrompt` |
+| `./host/commands` | `ctx.fabricCommands` | Host | `ctx.commands` |
+| `./browser/client` | `ctx.fabricClient` | Web | `ctx.command` 和 `ctx.slots` |
 | `./invariant` | invariant 伴生插件 | Host | 宿主 `invariants` service |
-| `./profile-bootstrap` | `installFabricBootstrap` | Host | 组合后的 profile rows → `cordis-fabric` hooks |
+| `./bootstrap/profile` | `installFabricBootstrap` | Host | 组合后的 profile rows → `cordis-fabric` hooks |
 
-`cordis-fabric-dsh` 的 root entry 是标准 Host bundle;每个 subpath 也可以单独挂载,适合精简 composition。浏览器 entry 是 `dshClient` artifact,带有默认禁用的 web roster 行(opt-in)。
+`cordis-fabric-dsh` 的 root entry 是标准 Host bundle；每个新的分层 subpath 都可以单独挂载，适合精简 composition。浏览器 entry 保留为 `./client`，因为 DSH client-module 契约只发现这个固定 export；其实现位于 `src/browser/client`。旧的 Host 与 compat 平铺 subpath 已有意移除；请使用上方的分层入口，仓库不再提供兼容 re-export 模块。
 
 ## 安装
 
@@ -60,7 +60,7 @@ await ctx.plugin(fabricDsh)
 Compat facade 是 peer 库,由 Mod 自行挂载(bundle patch 不添加 `cordis-fabric-api` 行):
 
 ```ts
-import FabricCompatService from 'cordis-fabric-api'
+import { FabricCompatService } from 'cordis-fabric-api/compat/service'
 ```
 
 Mod 只声明它消费的模块:

@@ -22,22 +22,22 @@ A Mod remains an ordinary Cordis plugin that declares injection of only the Fabr
 
 | Entry | Service | Platform | Delegates to |
 |---|---|---|---|
-| `.` / `./compat` | `ctx.fabricCompat` | Host | low-level `cordis-fabric` patches (gap adapter) |
+| `./compat/service` | `ctx.fabricCompat` | Host | low-level `cordis-fabric` patches (gap adapter) |
 
 `cordis-fabric-dsh` carries everything DSH-coupled (its facades forward to the host through the real `@deepseek-ai/dsh-*` types, declared as peer dependencies):
 
 | Entry | Service | Platform | Delegates to |
 |---|---|---|---|
 | `.` (Host bundle) | mounts all four Host modules | Host | the four entries below |
-| `./agent` | `ctx.fabricAgent` | Host | `agent/*` events and `agent.inject()` |
-| `./tools` | `ctx.fabricTools` | Host | `ctx.tools` and `tools/*` |
-| `./prompt` | `ctx.fabricPrompt` | Host | `ctx.systemPrompt` |
-| `./commands` | `ctx.fabricCommands` | Host | `ctx.commands` |
-| `./client` | `ctx.fabricClient` | Web | `ctx.command` and `ctx.slots` |
+| `./host/agent` | `ctx.fabricAgent` | Host | `agent/*` events and `agent.inject()` |
+| `./host/tools` | `ctx.fabricTools` | Host | `ctx.tools` and `tools/*` |
+| `./host/prompt` | `ctx.fabricPrompt` | Host | `ctx.systemPrompt` |
+| `./host/commands` | `ctx.fabricCommands` | Host | `ctx.commands` |
+| `./browser/client` | `ctx.fabricClient` | Web | `ctx.command` and `ctx.slots` |
 | `./invariant` | invariant companion | Host | the host `invariants` service |
-| `./profile-bootstrap` | `installFabricBootstrap` | Host | composed profile rows → `cordis-fabric` hooks |
+| `./bootstrap/profile` | `installFabricBootstrap` | Host | composed profile rows → `cordis-fabric` hooks |
 
-The root entry of `cordis-fabric-dsh` is the standard Host bundle; every subpath is also directly mountable for thin compositions. The browser entries are `dshClient` artifacts with disabled web-roster rows (opt-in).
+The root entry of `cordis-fabric-dsh` is the standard Host bundle; each new layer subpath is directly mountable for thin compositions. The browser entry remains `./client` because the DSH client-module contract discovers that exact export; its implementation lives under `src/browser/client`. The old flat Host and compat subpaths are intentionally gone. Import the layer-specific entries above; no compatibility re-export modules are shipped.
 
 ## Installation
 
@@ -60,7 +60,7 @@ await ctx.plugin(fabricDsh)
 The compat facade is a peer library a Mod mounts itself (the bundle patch does not add a `cordis-fabric-api` row):
 
 ```ts
-import FabricCompatService from 'cordis-fabric-api'
+import { FabricCompatService } from 'cordis-fabric-api/compat/service'
 ```
 
 A Mod declares only the modules it consumes:

@@ -12,20 +12,22 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { FabricAgentService } from './agent.ts'
-import { FabricToolsService } from './tools.ts'
-import { FabricPromptService } from './prompt.ts'
-import { FabricCommandsService } from './commands.ts'
-import { scheduleRequiredPatchCheck } from './profile-bootstrap.ts'
+import { FabricAgentService } from './host/agent.ts'
+import { FabricToolsService } from './host/tools.ts'
+import { FabricPromptService } from './host/prompt.ts'
+import { FabricCommandsService } from './host/commands.ts'
+import { scheduleRequiredPatchCheck } from './bootstrap/profile.ts'
+import { registerCatalogEntries } from './catalog.ts'
 
-export { FabricAgentService } from './agent.ts'
-export { FabricToolsService } from './tools.ts'
-export { FabricPromptService } from './prompt.ts'
-export { FabricCommandsService } from './commands.ts'
+export { FabricAgentService } from './host/agent.ts'
+export { FabricToolsService } from './host/tools.ts'
+export { FabricPromptService } from './host/prompt.ts'
+export { FabricCommandsService } from './host/commands.ts'
 export {
   installFabricBootstrap, checkFabricRequiredPatches, scheduleRequiredPatchCheck,
   type FabricProfileRow, type FabricProfileRows,
-} from './profile-bootstrap.ts'
+} from './bootstrap/profile.ts'
+export { FABRIC_CATALOG_ENTRIES, registerCatalogEntries } from './catalog.ts'
 
 /** Cordis plugin name used by Loader diagnostics. */
 export const name = 'cordis-fabric-dsh'
@@ -37,6 +39,7 @@ export const inject = ['tools', 'systemPrompt', 'commands']
  * @param ctx - Cordis context that owns the services.
  */
 export async function apply(ctx: Context): Promise<void> {
+  void registerCatalogEntries()
   await ctx.plugin(FabricAgentService)
   await ctx.plugin(FabricToolsService)
   await ctx.plugin(FabricPromptService)

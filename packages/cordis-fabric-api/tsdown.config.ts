@@ -7,7 +7,9 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: {
     index: 'lib/types/index.js',
-    compat: 'lib/types/compat.js',
+    'compat/service': 'lib/types/compat/service.js',
+    'compat/instrumentation': 'lib/types/compat/instrumentation.js',
+    'compat/types': 'lib/types/compat/types.js',
   },
   outDir: 'lib',
   format: ['esm'],

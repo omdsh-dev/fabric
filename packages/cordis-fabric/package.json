@@ -10,32 +10,80 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./hook-entry": {
-      "types": "./lib/types/hook-entry.d.ts",
-      "default": "./lib/hook-entry.js"
+    "./node/loader": {
+      "types": "./lib/types/node/loader.d.ts",
+      "default": "./lib/node/loader.js"
     },
-    "./testkit": {
-      "types": "./lib/types/testkit.d.ts",
-      "default": "./lib/testkit.js"
+    "./node/hook-entry": {
+      "types": "./lib/types/node/hook-entry.d.ts",
+      "default": "./lib/node/hook-entry.js"
+    },
+    "./node/identity": {
+      "types": "./lib/types/node/identity.d.ts",
+      "default": "./lib/node/identity.js"
+    },
+    "./node/wire": {
+      "types": "./lib/types/node/wire.d.ts",
+      "default": "./lib/node/wire.js"
+    },
+    "./browser/client": {
+      "types": "./lib/types/browser/client/index.d.ts",
+      "default": "./lib/browser/client.js"
+    },
+    "./browser/transform": {
+      "types": "./lib/types/browser/transform.d.ts",
+      "default": "./lib/browser/transform.js"
+    },
+    "./browser/serve": {
+      "types": "./lib/types/browser/serve.d.ts",
+      "default": "./lib/browser/serve.js"
+    },
+    "./transform/config": {
+      "types": "./lib/types/transform/config.d.ts",
+      "default": "./lib/transform/config.js"
+    },
+    "./transform/transform": {
+      "types": "./lib/types/transform/transform.d.ts",
+      "default": "./lib/transform/transform.js"
+    },
+    "./hmr/ownership": {
+      "types": "./lib/types/hmr/ownership.d.ts",
+      "default": "./lib/hmr/ownership.js"
+    },
+    "./hmr/reload": {
+      "types": "./lib/types/hmr/reload.d.ts",
+      "default": "./lib/hmr/reload.js"
+    },
+    "./testing/testkit": {
+      "types": "./lib/types/testing/testkit.d.ts",
+      "default": "./lib/testing/testkit.js"
+    },
+    "./testing/testkit-runner": {
+      "types": "./lib/types/testing/testkit-runner.d.ts",
+      "default": "./lib/testing/testkit-runner.js"
     },
     "./client": {
-      "types": "./lib/types/client/index.d.ts",
+      "types": "./lib/types/browser/client/index.d.ts",
       "default": "./lib/client.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/*.js",
+    "lib/node/*.js",
+    "lib/browser/*.js",
+    "lib/transform/*.js",
+    "lib/hmr/*.js",
+    "lib/testing/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
     "preload.mjs"
   ],
   "license": "BSD-3-Clause",
   "scripts": {
-    "build": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
+    "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "tsc --pretty false",
-    "prepare": "tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
+    "prepare": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
   },
   "dsh": {
     "client": {

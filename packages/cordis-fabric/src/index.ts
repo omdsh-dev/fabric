@@ -17,7 +17,7 @@ export {
   publish,
   type FabricBridgeCall,
 } from './bridge.ts'
-export { bootstrapFabric, checkRequiredPatches, expandPatchStub, flushBindingReports, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig } from './node-loader.ts'
+export { bootstrapFabric, checkRequiredPatches, expandPatchStub, flushBindingReports, installFabricHooks, patchInstrumentation, retransformCommonJs, retransformEsm, type FabricInstrumentationConfig, type InstrumentationConfig } from './node/loader.ts'
 export {
   createBrowserTransform,
   createWatchedBrowserTransform,
@@ -28,10 +28,10 @@ export {
   type ModuleIdentity,
   type TransformOutput,
   type WatchedBrowserTransform,
-} from './browser-transform.ts'
+} from './browser/transform.ts'
 export { runtime, validatePatchId, validatePatchStatic } from './runtime.ts'
-export { serveBrowserTransform, type ServeBrowserTransformOptions } from './serve.ts'
-export { createFabricTransform } from './transform.ts'
+export { serveBrowserTransform, type ServeBrowserTransformOptions } from './browser/serve.ts'
+export { createFabricTransform } from './transform/transform.ts'
 export type {
   FabricAfterHandler,
   FabricAroundHandler,
