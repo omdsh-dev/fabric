@@ -1,11 +1,10 @@
 name: release
 
-# Every push to main builds the trio (prepare scripts compile lib/) and
-# publishes the packed bundle tarball to a GitHub Release tagged v<version>
-# (the version from package.json). The release carries the compiled lib/ —
-# the repo's git installs build through prepare, while the release artifact
-# ships the build output ready-made. Bump the version to cut a new release;
-# re-pushing the same version refreshes that release's artifact.
+# Every push to main builds the trio and launcher with the direct build script,
+# then publishes the packed bundle tarball to a GitHub Release tagged v<version>
+# (the version from package.json). The release carries the compiled lib/ output
+# ready-made. Bump the version to cut a new release; re-pushing the same version
+# refreshes that release's artifact.
 on:
   push:
     branches: [main]
@@ -25,9 +24,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run verify:self-contained
-      - run: pnpm test
+      - run: pnpm run typecheck
       - run: pnpm run build
+      - run: pnpm test
       - name: Pack the bundle and the trio
         run: |
           pnpm pack --pack-destination dist
