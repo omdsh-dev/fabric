@@ -63,7 +63,7 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
 - host 源码安装在 `apps/cli/package.json` 中声明它们;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再播种 profile 的 pnpm 设置、走插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——不建分支、不打补丁、不提交;启动一律走 `scripts/fabric-dsh.mjs`。
-- 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,trio 是 `tsc -b && tsdown`)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
+- 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,trio 是 `tsdown`)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
 
 ### 3.1 pnpm 11 供应链接缝
 

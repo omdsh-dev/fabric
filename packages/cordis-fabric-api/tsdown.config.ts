@@ -6,16 +6,16 @@ import { defineConfig } from 'tsdown'
  */
 export default defineConfig({
   entry: {
-    index: 'lib/types/index.js',
-    'compat/service': 'lib/types/compat/service.js',
-    'compat/instrumentation': 'lib/types/compat/instrumentation.js',
-    'compat/types': 'lib/types/compat/types.js',
+    index: 'src/index.ts',
+    'compat/service': 'src/compat/service.ts',
+    'compat/instrumentation': 'src/compat/instrumentation.ts',
+    'compat/types': 'src/compat/types.ts',
   },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',
   target: 'es2024',
   fixedExtension: false,
-  dts: false,
-  clean: false,
+  dts: true,
+  clean: true,
 })

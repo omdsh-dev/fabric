@@ -1,45 +1,45 @@
 {
   "name": "cordis-fabric-dsh",
   "description": "DSH integrations for the Cordis Fabric layer: DSH-facing facades, the package invariant, and the DSH profile bootstrap that composes the pure fabric hooks",
-  "version": "0.0.1-rc.2",
+  "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
+      "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./host/agent": {
-      "types": "./lib/types/host/agent.d.ts",
+      "types": "./lib/host/agent.d.ts",
       "default": "./lib/host/agent.js"
     },
     "./host/tools": {
-      "types": "./lib/types/host/tools.d.ts",
+      "types": "./lib/host/tools.d.ts",
       "default": "./lib/host/tools.js"
     },
     "./host/prompt": {
-      "types": "./lib/types/host/prompt.d.ts",
+      "types": "./lib/host/prompt.d.ts",
       "default": "./lib/host/prompt.js"
     },
     "./host/commands": {
-      "types": "./lib/types/host/commands.d.ts",
+      "types": "./lib/host/commands.d.ts",
       "default": "./lib/host/commands.js"
     },
     "./bootstrap/profile": {
-      "types": "./lib/types/bootstrap/profile.d.ts",
+      "types": "./lib/bootstrap/profile.d.ts",
       "default": "./lib/bootstrap/profile.js"
     },
     "./invariant": {
-      "types": "./lib/types/invariant.d.ts",
+      "types": "./lib/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
     "./browser/client": {
-      "types": "./lib/types/browser/client/index.d.ts",
+      "types": "./lib/browser/client.d.ts",
       "default": "./lib/browser/client.js"
     },
     "./client": {
-      "types": "./lib/types/browser/client/index.d.ts",
+      "types": "./lib/browser/client.d.ts",
       "default": "./lib/client.js"
     },
     "./package.json": "./package.json"
@@ -49,14 +49,14 @@
     "lib/host/*.js",
     "lib/bootstrap/*.js",
     "lib/browser/*.js",
-    "lib/types/**/*.d.ts",
-    "lib/types/**/*.d.ts.map"
+    "lib/**/*.d.ts",
+    "lib/**/*.d.ts.map"
   ],
   "license": "BSD-3-Clause",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
-    "typecheck": "tsc --pretty false",
-    "prepare": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
+    "build": "tsdown --config-loader unrun --config tsdown.config.ts",
+    "typecheck": "tsc --noEmit --pretty false",
+    "prepare": "tsdown --config-loader unrun --config tsdown.config.ts"
   },
   "dsh": {
     "client": {
@@ -66,7 +66,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1-0",
-    "cordis-fabric": "^0.0.1-rc.2",
+    "cordis-fabric": "^0.1.0",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-commands": "^0.1.0-rc.0",
     "@deepseek-ai/dsh-invariants": "^0.1.0-rc.0",

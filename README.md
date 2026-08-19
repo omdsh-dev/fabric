@@ -111,7 +111,7 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
   `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
   `cordis-fabric-dsh` row. Launches go through `scripts/fabric-dsh.mjs`.
 - Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
-  ex-setting, `tsc -b && tsdown` for the trio) in an isolated environment —
+  ex-setting, and `tsdown` for the trio) in an isolated environment —
   devDependencies install there, so `lightningcss` and friends are available.
 
 ### 3.1 pnpm 11 supply-chain seams

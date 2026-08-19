@@ -1,69 +1,69 @@
 {
   "name": "cordis-fabric",
   "description": "Fabric/Mixin-style extension layer over Orchestrion for trusted Cordis plugins",
-  "version": "0.0.1-rc.2",
+  "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
+      "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./node/loader": {
-      "types": "./lib/types/node/loader.d.ts",
+      "types": "./lib/node/loader.d.ts",
       "default": "./lib/node/loader.js"
     },
     "./node/hook-entry": {
-      "types": "./lib/types/node/hook-entry.d.ts",
+      "types": "./lib/node/hook-entry.d.ts",
       "default": "./lib/node/hook-entry.js"
     },
     "./node/identity": {
-      "types": "./lib/types/node/identity.d.ts",
+      "types": "./lib/node/identity.d.ts",
       "default": "./lib/node/identity.js"
     },
     "./node/wire": {
-      "types": "./lib/types/node/wire.d.ts",
+      "types": "./lib/node/wire.d.ts",
       "default": "./lib/node/wire.js"
     },
     "./browser/client": {
-      "types": "./lib/types/browser/client/index.d.ts",
+      "types": "./lib/browser/client.d.ts",
       "default": "./lib/browser/client.js"
     },
     "./browser/transform": {
-      "types": "./lib/types/browser/transform.d.ts",
+      "types": "./lib/browser/transform.d.ts",
       "default": "./lib/browser/transform.js"
     },
     "./browser/serve": {
-      "types": "./lib/types/browser/serve.d.ts",
+      "types": "./lib/browser/serve.d.ts",
       "default": "./lib/browser/serve.js"
     },
     "./transform/config": {
-      "types": "./lib/types/transform/config.d.ts",
+      "types": "./lib/transform/config.d.ts",
       "default": "./lib/transform/config.js"
     },
     "./transform/transform": {
-      "types": "./lib/types/transform/transform.d.ts",
+      "types": "./lib/transform/transform.d.ts",
       "default": "./lib/transform/transform.js"
     },
     "./hmr/ownership": {
-      "types": "./lib/types/hmr/ownership.d.ts",
+      "types": "./lib/hmr/ownership.d.ts",
       "default": "./lib/hmr/ownership.js"
     },
     "./hmr/reload": {
-      "types": "./lib/types/hmr/reload.d.ts",
+      "types": "./lib/hmr/reload.d.ts",
       "default": "./lib/hmr/reload.js"
     },
     "./testing/testkit": {
-      "types": "./lib/types/testing/testkit.d.ts",
+      "types": "./lib/testing/testkit.d.ts",
       "default": "./lib/testing/testkit.js"
     },
     "./testing/testkit-runner": {
-      "types": "./lib/types/testing/testkit-runner.d.ts",
+      "types": "./lib/testing/testkit-runner.d.ts",
       "default": "./lib/testing/testkit-runner.js"
     },
     "./client": {
-      "types": "./lib/types/browser/client/index.d.ts",
+      "types": "./lib/browser/client.d.ts",
       "default": "./lib/client.js"
     },
     "./package.json": "./package.json"
@@ -75,15 +75,15 @@
     "lib/transform/*.js",
     "lib/hmr/*.js",
     "lib/testing/*.js",
-    "lib/types/**/*.d.ts",
-    "lib/types/**/*.d.ts.map",
+    "lib/**/*.d.ts",
+    "lib/**/*.d.ts.map",
     "preload.mjs"
   ],
   "license": "BSD-3-Clause",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts",
-    "typecheck": "tsc --pretty false",
-    "prepare": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\" && tsc -b && tsdown --config-loader unrun --config tsdown.config.ts"
+    "build": "tsdown --config-loader unrun --config tsdown.config.ts",
+    "typecheck": "tsc --noEmit --pretty false",
+    "prepare": "tsdown --config-loader unrun --config tsdown.config.ts"
   },
   "dsh": {
     "client": {

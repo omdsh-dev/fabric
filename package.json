@@ -1,8 +1,7 @@
 {
   "name": "cordis-fabric-bundle",
   "description": "Fabric/Mixin extension workspace: installable profile bundle carrier over the cordis-fabric package trio",
-  "version": "0.0.3",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {
@@ -25,7 +24,7 @@
   "scripts": {
     "build": "node scripts/prepare.mjs",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.vitest.json --pretty false",
+    "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false",
     "verify:self-contained": "node scripts/verify-self-contained.mjs",
     "extract:patch": "node scripts/extract-patch.mjs",
     "patch:host": "bash scripts/patch.sh",
@@ -50,6 +49,9 @@
     "vitest": "^4.1.8",
     "unrun": "^0.3.1",
     "happy-dom": "^20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bin": {
     "fabric-dsh": "scripts/fabric-dsh.mjs"

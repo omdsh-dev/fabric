@@ -6,8 +6,6 @@
     "declaration": true,
     "sourceMap": true,
     "declarationMap": true,
-    "composite": true,
-    "incremental": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,

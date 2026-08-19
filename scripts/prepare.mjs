@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,18 +25,10 @@ function run(name, entry, args, cwd) {
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 
-const tsc = packageFile('typescript', 'bin/tsc')
 const tsdown = packageFile('tsdown', 'dist/run.mjs')
 
-for (const pkg of packages) {
-  rmSync(join(root, 'packages', pkg, 'lib'), { recursive: true, force: true })
-}
-
-// Build all three packages in dependency order (tsc -b follows the project
-// references): declarations plus JS land in each package's lib/types.
-run('tsc', tsc, ['-b', 'tsconfig.json'], root)
-
-// Bundle each package's node and browser entries from lib/types into lib.
+// tsdown compiles each package directly from src and emits both JavaScript and
+// declaration files. It also cleans the package output before each build.
 for (const pkg of packages) {
   run('tsdown', tsdown, ['--config-loader', 'unrun', '--config', 'tsdown.config.ts'], join(root, 'packages', pkg))
 }

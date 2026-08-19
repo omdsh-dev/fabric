@@ -9,26 +9,26 @@ import { defineConfig } from 'tsdown'
 export default [
   defineConfig({
     entry: {
-      index: 'lib/types/index.js',
-      'host/agent': 'lib/types/host/agent.js',
-      'host/tools': 'lib/types/host/tools.js',
-      'host/prompt': 'lib/types/host/prompt.js',
-      'host/commands': 'lib/types/host/commands.js',
-      'bootstrap/profile': 'lib/types/bootstrap/profile.js',
-      'browser/client': 'lib/types/browser/client/index.js',
-      invariant: 'lib/types/invariant.js',
+      index: 'src/index.ts',
+      'host/agent': 'src/host/agent.ts',
+      'host/tools': 'src/host/tools.ts',
+      'host/prompt': 'src/host/prompt.ts',
+      'host/commands': 'src/host/commands.ts',
+      'bootstrap/profile': 'src/bootstrap/profile.ts',
+      'browser/client': 'src/browser/client/index.ts',
+      invariant: 'src/invariant.ts',
     },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
-    dts: false,
-    clean: false,
+    dts: true,
+    clean: true,
   }),
   defineConfig({
     entry: {
-      client: 'lib/types/browser/client/index.js',
+      client: 'src/browser/client/index.ts',
     },
     outDir: 'lib',
     // Browser half ships in the dsh closure-factory artifact: the web shell
@@ -43,8 +43,10 @@ export default [
     dts: false,
     clean: false,
     sourcemap: true,
-    external: ['@deepseek-ai/cordis'],
-    noExternal: true,
+    deps: {
+      neverBundle: ['@deepseek-ai/cordis'],
+      alwaysBundle: (id) => !id.startsWith('@deepseek-ai/cordis'),
+    },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "cordis-fabric-dsh", factory: (require) => {',
