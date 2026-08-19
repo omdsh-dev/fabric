@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,8 +15,9 @@ import { afterAll, describe, expect, it } from 'vitest'
  * preload delivered, and the stub `@deepseek-ai/dsh-app-boot` records the
  * pre-boot module-fallback heal.
  */
-const launcher = fileURLToPath(new URL('../../../../scripts/fabric-dsh.mjs', import.meta.url))
-const launcherModules = fileURLToPath(new URL('../../../../scripts/fabric-dsh/', import.meta.url))
+const compiledLauncher = fileURLToPath(new URL('../../../../lib/fabric-dsh.js', import.meta.url))
+if (!existsSync(compiledLauncher)) throw new Error('lib/fabric-dsh.js is missing; run pnpm run build before the launcher test')
+const launcher = compiledLauncher
 const fabricPackage = fileURLToPath(new URL('../../', import.meta.url))
 
 const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-installed-'))
@@ -79,14 +80,14 @@ mkdirSync(join(webProfileDir, 'node_modules'), { recursive: true })
 writeFileSync(join(webProfileDir, 'package.json'), '{}\n')
 symlinkSync(stubFabric, join(webProfileDir, 'node_modules', 'cordis-fabric'))
 const installedBundle = join(webProfileDir, 'node_modules', 'cordis-fabric-bundle')
-const installedLauncher = join(installedBundle, 'scripts', 'fabric-dsh.mjs')
-mkdirSync(join(installedBundle, 'scripts'), { recursive: true })
-mkdirSync(join(installedBundle, 'packages'), { recursive: true })
+const installedLauncherFile = 'fabric-dsh.js'
+const installedLauncher = join(installedBundle, 'lib', installedLauncherFile)
+mkdirSync(join(installedBundle, 'lib'), { recursive: true })
 copyFileSync(launcher, installedLauncher)
-cpSync(launcherModules, join(installedBundle, 'scripts', 'fabric-dsh'), { recursive: true })
+mkdirSync(join(installedBundle, 'packages'), { recursive: true })
 symlinkSync(fabricPackage, join(installedBundle, 'packages', 'cordis-fabric'))
 mkdirSync(join(webProfileDir, 'node_modules', '.bin'), { recursive: true })
-symlinkSync('../cordis-fabric-bundle/scripts/fabric-dsh.mjs', join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'))
+symlinkSync(`../cordis-fabric-bundle/lib/${installedLauncherFile}`, join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'))
 
 // PATH shims: a symlink (npm-global style) and a cmd-shim script (pnpm).
 mkdirSync(shimDir, { recursive: true })
@@ -110,7 +111,8 @@ function run(argv: string[], options: { cwd?: string; path?: string; launcher?: 
   delete env.DSH_FABRIC_PROFILE
   if (options.dsh !== undefined) env.DSH_CLI = options.dsh
   if (options.path !== undefined) env.PATH = options.path
-  const result = spawnSync(process.execPath, [options.launcher ?? launcher, ...argv], {
+  const selectedLauncher = options.launcher ?? launcher
+  const result = spawnSync(process.execPath, [selectedLauncher, ...argv], {
     cwd: options.cwd ?? home,
     encoding: 'utf8',
     env,

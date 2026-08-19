@@ -10,6 +10,8 @@
   "license": "BSD-3-Clause",
   "files": [
     "scripts",
+    "lib/fabric-dsh.js",
+    "lib/fabric-dsh.js.map",
     "cordis.patch.yml",
     "patches",
     "packages/cordis-fabric/package.json",
@@ -23,6 +25,7 @@
   ],
   "scripts": {
     "build": "node scripts/prepare.mjs",
+    "prepare": "node scripts/prepare.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false",
     "verify:self-contained": "node scripts/verify-self-contained.mjs",
@@ -54,6 +57,6 @@
     "access": "public"
   },
   "bin": {
-    "fabric-dsh": "scripts/fabric-dsh.mjs"
+    "fabric-dsh": "lib/fabric-dsh.js"
   }
 }

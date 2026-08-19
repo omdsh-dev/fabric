@@ -32,3 +32,7 @@ const tsdown = packageFile('tsdown', 'dist/run.mjs')
 for (const pkg of packages) {
   run('tsdown', tsdown, ['--config-loader', 'unrun', '--config', 'tsdown.config.ts'], join(root, 'packages', pkg))
 }
+
+// The published bundle's launcher is also a tsdown entry. Keep it beside the
+// package outputs so the root bin never points at source modules.
+run('tsdown', tsdown, ['--config-loader', 'unrun', '--config', 'tsdown.config.ts'], root)

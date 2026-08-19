@@ -28,7 +28,7 @@ dsh plugin --profile <p> add github:dsh-external/fabric
 > **实际代码保留,文档不保留,官方插件注册器能处理的不保留。**
 
 当前 checkout 刻意不携带生成后的 host patch;现在生效的 launcher 路径是
-`scripts/fabric-dsh.mjs` 加上 `packages/cordis-fabric/preload.mjs`。`patches/`
+`src/fabric-dsh.ts`（由 tsdown 编译为 `lib/fabric-dsh.js`）加上 `packages/cordis-fabric/preload.mjs`。`patches/`
 下的 extraction metadata 仍作为历史记录保留,未来 host 需要新的接缝时可以重新生成 patch。
 
 官方通道已经覆盖的内容被刻意排除:安装 trio(`dsh plugin add`)、bundle 行名册与依赖、catalog 生成、trio-in-workspace 的 invariant/gate 豁免、以及全部文档(`README*`、`docs/`、`.agents/`)。剩下的是任何通道都提供不了的:launcher bootstrap(`apps/cli/src/profile-boot.ts` 在任何目标导入之前调用 `installFabricBootstrap`、boot 后调用 `checkFabricRequiredPatches`)、`clientBundle` 源码 transform 构建接缝(`packages/client/tsdown.client.ts`)、编译进官方 `tool-cordis` 包的 catalog 条目、它们的测试、以及 pnpm 策略接缝。
@@ -62,8 +62,8 @@ trio 以 git 子目录 spec 被消费:
 github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
-- host 源码安装在 `apps/cli/package.json` 中声明它们;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再播种 profile 的 pnpm 设置、走插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——不建分支、不打补丁、不提交;启动一律走 `scripts/fabric-dsh.mjs`。
-- 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,trio 是 `tsdown`)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
+- host 源码安装在 `apps/cli/package.json` 中声明它们;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再播种 profile 的 pnpm 设置、走插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——不建分支、不打补丁、不提交;启动一律走编译后的 `lib/fabric-dsh.js`。
+- 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,根目录 `scripts/prepare.mjs` 用 tsdown 构建 trio 与 `fabric-dsh` launcher)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
 
 ### 3.1 pnpm 11 供应链接缝
 

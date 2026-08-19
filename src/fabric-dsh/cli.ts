@@ -1,9 +1,24 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join, resolve, dirname, delimiter } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
+import type { LauncherArgs } from './args.ts'
+
+interface ResolveOptions {
+  cwd?: string
+  env?: NodeJS.ProcessEnv
+}
+
+export interface ResolvedHost {
+  source: boolean
+  sourceRoot: string | undefined
+  bin: string
+  realBin: string
+  cliPkgJson: string
+  fromCli: NodeRequire
+}
 
 /** Look up an executable on PATH (first hit), tolerating empty segments. */
-function which(cmd, env = process.env) {
+function which(cmd: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   const pathEnv = env.PATH
   if (pathEnv === undefined || pathEnv === '') return undefined
   const names = process.platform === 'win32' ? [`${cmd}.cmd`, `${cmd}.exe`, cmd] : [cmd]
@@ -22,13 +37,17 @@ function which(cmd, env = process.env) {
  * trailing `# cmd-shim-target=` marker when present, else the script's
  * `$basedir/...` reference resolved against the shim's own directory.
  */
-function shimTarget(shimPath) {
-  let text
-  try { text = readFileSync(shimPath, 'utf8') } catch { return undefined }
+function shimTarget(shimPath: string): string | undefined {
+  let text: string
+  try {
+    text = readFileSync(shimPath, 'utf8')
+  } catch {
+    return undefined
+  }
   const marker = text.match(/^# cmd-shim-target=(.+)$/m)
-  if (marker !== null) return marker[1].trim()
+  if (marker !== null && marker[1] !== undefined) return marker[1].trim()
   const rel = text.match(/\$basedir["']?\/(\.\.[^"']*?@deepseek-ai\/dsh\/[^\s"']*?\.js)/)
-  if (rel !== null) return resolve(dirname(shimPath), rel[1])
+  if (rel !== null && rel[1] !== undefined) return resolve(dirname(shimPath), rel[1])
   return undefined
 }
 
@@ -37,8 +56,8 @@ function shimTarget(shimPath) {
  * realpath straight into the package; script shims stay scripts, so their
  * recorded target is followed instead.
  */
-function chaseShim(p) {
-  const resolved = realpathSync(p)
+function chaseShim(path: string): string {
+  const resolved = realpathSync(path)
   if (resolved.endsWith('.js') || (existsSync(resolved) && statSync(resolved).isDirectory())) return resolved
   const target = shimTarget(resolved)
   return target !== undefined && existsSync(target) ? realpathSync(target) : resolved
@@ -48,8 +67,8 @@ function chaseShim(p) {
  * Normalize a user-supplied or shim-resolved path to the package's lib/bin.js:
  * accepts the bin file, the package root, or anything inside the package.
  */
-function normalizeCli(p) {
-  let dir = existsSync(p) && statSync(p).isDirectory() ? p : dirname(p)
+function normalizeCli(path: string): string | undefined {
+  let dir = existsSync(path) && statSync(path).isDirectory() ? path : dirname(path)
   for (let i = 0; i < 5; i++) {
     const pkgJson = join(dir, 'package.json')
     if (existsSync(pkgJson)) {
@@ -58,7 +77,9 @@ function normalizeCli(p) {
           const candidate = join(dir, 'lib/bin.js')
           if (existsSync(candidate)) return candidate
         }
-      } catch { /* unparsable manifest: keep walking up */ }
+      } catch {
+        // unparsable manifest: keep walking up
+      }
     }
     const parent = dirname(dir)
     if (parent === dir) break
@@ -73,7 +94,7 @@ function normalizeCli(p) {
  * package file: pnpm store layouts resolve a package's declared deps only
  * from its real location.
  */
-function resolveInstalledCli({ cwd = process.cwd(), env = process.env } = {}) {
+function resolveInstalledCli({ cwd = process.cwd(), env = process.env }: ResolveOptions = {}): string {
   const explicit = env.DSH_CLI
   if (explicit !== undefined) {
     const cli = normalizeCli(chaseShim(resolve(explicit)))
@@ -85,13 +106,17 @@ function resolveInstalledCli({ cwd = process.cwd(), env = process.env } = {}) {
     const pkgJson = createRequire(join(cwd, 'package.json')).resolve('@deepseek-ai/dsh/package.json')
     const candidate = join(dirname(pkgJson), 'lib/bin.js')
     if (existsSync(candidate)) return realpathSync(candidate)
-  } catch { /* not a project dependency of the caller's cwd */ }
+  } catch {
+    // not a project dependency of the caller's cwd
+  }
   const onPath = which('dsh', env)
   if (onPath !== undefined) {
     try {
       const cli = normalizeCli(chaseShim(onPath))
       if (cli !== undefined) return cli
-    } catch { /* shim did not lead to the package */ }
+    } catch {
+      // shim did not lead to the package
+    }
   }
   console.error('fabric-dsh: no --source given and no installed @deepseek-ai/dsh found')
   console.error('  run from a project with @deepseek-ai/dsh installed, put dsh on PATH, or set DSH_CLI to its package bin')
@@ -100,11 +125,13 @@ function resolveInstalledCli({ cwd = process.cwd(), env = process.env } = {}) {
 }
 
 /** Resolve either the source checkout entry or the published CLI entry. */
-export function resolveHost(args, { cwd = process.cwd(), env = process.env } = {}) {
-  const source = args.source !== undefined
-  const sourceRoot = source ? resolve(args.source) : undefined
-  const bin = source ? join(sourceRoot, 'apps/cli/src/bin.ts') : resolveInstalledCli({ cwd, env })
-  if (source && !existsSync(bin)) {
+export function resolveHost(args: LauncherArgs, { cwd = process.cwd(), env = process.env }: ResolveOptions = {}): ResolvedHost {
+  const sourceRoot = args.source === undefined ? undefined : resolve(args.source)
+  const source = sourceRoot !== undefined
+  const bin = sourceRoot === undefined
+    ? resolveInstalledCli({ cwd, env })
+    : join(sourceRoot, 'apps/cli/src/bin.ts')
+  if (sourceRoot !== undefined && !existsSync(bin)) {
     console.error(`fabric-dsh: no CLI entry at ${bin} (source: ${args.source})`)
     process.exit(1)
   }

@@ -1,17 +1,25 @@
-export function parseArgs(argv, env = process.env) {
-  const args = {
+export interface LauncherArgs {
+  source: string | undefined
+  profile: string | undefined
+  patchFiles: string[]
+  passthrough: string[]
+}
+
+export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): LauncherArgs {
+  const args: LauncherArgs = {
     source: env.DSH_SOURCE,
     profile: undefined,
     patchFiles: [],
     passthrough: [],
   }
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === '--source') args.source = argv[++i]
-    else if (a === '--profile') args.profile = argv[++i]
-    else if (a === '--patch') args.patchFiles.push(argv[++i])
-    else if (a.startsWith('--patch=')) args.patchFiles.push(a.slice('--patch='.length))
-    else args.passthrough.push(a)
+    const value = argv[i]
+    if (value === undefined) continue
+    if (value === '--source') args.source = argv[++i]
+    else if (value === '--profile') args.profile = argv[++i]
+    else if (value === '--patch') args.patchFiles.push(argv[++i] as string)
+    else if (value.startsWith('--patch=')) args.patchFiles.push(value.slice('--patch='.length))
+    else args.passthrough.push(value)
   }
   // `web` is the CLI's hardcoded alias for --profile web: the layer
   // composition must follow the same profile the CLI will actually boot.
@@ -19,13 +27,18 @@ export function parseArgs(argv, env = process.env) {
   return args
 }
 
-export function buildCliArgs(args, effectiveProfile, enablePath, enableOverlay) {
+export function buildCliArgs(
+  args: LauncherArgs,
+  effectiveProfile: string | undefined,
+  enablePath: string,
+  enableOverlay: readonly unknown[],
+): string[] {
   const [mode] = args.passthrough
   const patchArgs = [
     ...args.patchFiles.flatMap((file) => ['--patch', file]),
     ...(enableOverlay.length > 0 ? ['--patch', enablePath] : []),
   ]
-  let cliArgs
+  let cliArgs: string[]
   if (mode === 'plugin') {
     if (patchArgs.length > 0) {
       console.error('fabric-dsh: --patch overlays only apply when booting a profile, not for plugin')
@@ -39,7 +52,7 @@ export function buildCliArgs(args, effectiveProfile, enablePath, enableOverlay) 
     }
     // web's own --patch must precede the app args (passThroughOptions sends
     // everything after the first unknown token to the app).
-    const [web, ...appArgs] = args.passthrough
+    const [web = 'web', ...appArgs] = args.passthrough
     cliArgs = [web, ...patchArgs, ...appArgs]
   } else {
     // Generic boot takes the launcher flags first; the app args only start at

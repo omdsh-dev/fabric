@@ -20,7 +20,8 @@ This workspace ships exactly three packages: `cordis-fabric`, `cordis-fabric-api
 Host-side seams were historically represented by
 `patches/fabric-host-integration.patch`. The generated patch is intentionally
 absent from the current checkout: every active seam the trio needs is supplied
-by the plug-and-play `fabric-dsh` launcher (`scripts/fabric-dsh.mjs` plus
+by the plug-and-play `fabric-dsh` launcher (`src/fabric-dsh.ts`, compiled to
+`lib/fabric-dsh.js`, plus
 `packages/cordis-fabric/preload.mjs`). Running the official `dsh` leaves the
 host source untouched; `fabric-dsh` supplies the wiring at launch:
 

@@ -43,7 +43,8 @@ host-side wiring. Earlier snapshots carried that wiring in
 > plugin registration system can handle.**
 
 The generated host patch is intentionally absent from the current checkout:
-the active launcher path is now `scripts/fabric-dsh.mjs` plus
+the active launcher path is now `src/fabric-dsh.ts` compiled to
+`lib/fabric-dsh.js`, plus
 `packages/cordis-fabric/preload.mjs`. The extraction metadata in `patches/`
 remains as the historical record and can regenerate a seam patch when a future
 host change requires one.
@@ -109,9 +110,10 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
   seeds the profile's pnpm settings, installs the bundle through the plugin
   channel (`dsh plugin --profile web add github:dsh-external/fabric`, joining
   `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
-  `cordis-fabric-dsh` row. Launches go through `scripts/fabric-dsh.mjs`.
+  `cordis-fabric-dsh` row. Launches go through the compiled `lib/fabric-dsh.js`.
 - Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
-  ex-setting, and `tsdown` for the trio) in an isolated environment —
+  ex-setting, and the root `scripts/prepare.mjs` runs tsdown for the trio and
+  the `fabric-dsh` launcher) in an isolated environment —
   devDependencies install there, so `lightningcss` and friends are available.
 
 ### 3.1 pnpm 11 supply-chain seams

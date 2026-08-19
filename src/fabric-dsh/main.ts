@@ -4,8 +4,8 @@
  * source stays untouched; the hooks only exist when this command is used.
  *
  * Usage:
- *   node scripts/fabric-dsh.mjs [dsh args...]                 (installed dsh)
- *   node scripts/fabric-dsh.mjs --source <checkout> [...]  (source checkout)
+ *   node lib/fabric-dsh.js [dsh args...]                  (installed bundle)
+ *   node --import tsx/esm src/fabric-dsh.ts --source <checkout> [...]
  *
  * Installed mode (default) runs a registry-installed @deepseek-ai/dsh: the
  * published lib/bin.js is plain ESM, so no tsx and no checkout are needed.
@@ -37,16 +37,27 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { buildCliArgs, parseArgs } from './args.mjs'
-import { resolveHost } from './cli.mjs'
-import { composeFabricConfig, resolveProfile, resolveYaml } from './profile.mjs'
+import { buildCliArgs, parseArgs } from './args.ts'
+import { resolveHost, type ResolvedHost } from './cli.ts'
+import { composeFabricConfig, resolveProfile, resolveYaml, type FabricConfig } from './profile.ts'
+import type { LauncherArgs } from './args.ts'
+
+export interface LauncherOptions {
+  argv?: string[]
+  env?: NodeJS.ProcessEnv
+  launcherUrl?: string | URL
+}
 
 /**
  * Run the Fabric launcher. The entry module passes its own URL so installed
  * bundle invocations can derive DSH_HOME/profile from the bin's real path.
  */
-export function main({ argv = process.argv.slice(2), env = process.env, launcherUrl = import.meta.url } = {}) {
-  const args = parseArgs(argv, env)
+export function main({
+  argv = process.argv.slice(2),
+  env = process.env,
+  launcherUrl = import.meta.url,
+}: LauncherOptions = {}): never {
+  const args: LauncherArgs = parseArgs(argv, env)
 
   // A bare spawnSync parent never returns once its child dies of SIGINT: the
   // sync wait loop swallows the signal and the shell hangs until a second ^C.
@@ -55,10 +66,10 @@ export function main({ argv = process.argv.slice(2), env = process.env, launcher
   process.on('SIGINT', () => {})
   process.on('SIGTERM', () => {})
 
-  const host = resolveHost(args, { cwd: process.cwd(), env })
+  const host: ResolvedHost = resolveHost(args, { cwd: process.cwd(), env })
   const profile = resolveProfile({ args, source: host.source, launcherUrl, env })
   const { requireFromProfile, yaml } = resolveYaml(profile.profileDir, host.fromCli)
-  const config = composeFabricConfig({
+  const config: FabricConfig = composeFabricConfig({
     args,
     dshHome: profile.dshHome,
     profileDir: profile.profileDir,
@@ -103,6 +114,6 @@ export function main({ argv = process.argv.slice(2), env = process.env, launcher
   process.exit(result.status ?? 0)
 }
 
-function bundledPreloadPath(launcherUrl) {
+function bundledPreloadPath(launcherUrl: string | URL): string {
   return join(fileURLToPath(new URL('../packages/cordis-fabric', launcherUrl)), 'preload.mjs')
 }
