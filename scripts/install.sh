@@ -3,10 +3,9 @@
 #
 #   1. harness — pnpm install --no-frozen-lockfile (plus the tsdown unrun
 #      loader some Ubuntu hosts lack) and the CLI/client bundle build;
-#   2. profile ($DSH_HOME, default ~/.dsh) — seed the pnpm settings the
-#      git-resolved trio needs (pnpm >=10 blocks exotic subdeps and builds
-#      by default), then install the bundle through the official plugin
-#      channel (`dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`),
+#   2. profile ($DSH_HOME, default ~/.dsh) — ensure the hoisted pnpm settings
+#      used by out-of-tree plugins, then install the release bundle through the
+#      official plugin channel (`dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`),
 #      which also joins cordis-fabric-bundle to dsh.profile.bundles;
 #   3. enable the cordis-fabric-dsh row in the profile's cordis.patch.yml
 #      (idempotent). The cordis-fabric row stays disabled — the pure package
@@ -52,14 +51,11 @@ pnpm run build
 PROFILE_DIR="$DSH_HOME_DIR/profiles/web"
 mkdir -p "$PROFILE_DIR"
 
-# Seed the pnpm settings the git-resolved trio needs. initProfile never
-# touches existing files, so writing this before the plugin add sticks.
+# Seed the hoisted pnpm settings used by out-of-tree plugins. initProfile never
+# touches existing files, so writing this before the plugin add is idempotent.
 WS="$PROFILE_DIR/pnpm-workspace.yaml"
 if [ ! -f "$WS" ]; then
-  printf 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\nblockExoticSubdeps: false\ndangerouslyAllowAllBuilds: true\n' > "$WS"
-else
-  grep -q '^blockExoticSubdeps:' "$WS" || printf 'blockExoticSubdeps: false\n' >> "$WS"
-  grep -q '^dangerouslyAllowAllBuilds:' "$WS" || printf 'dangerouslyAllowAllBuilds: true\n' >> "$WS"
+  printf 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n' > "$WS"
 fi
 
 echo "== dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz"

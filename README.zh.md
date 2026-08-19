@@ -15,7 +15,7 @@
 deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个扩展包存在,但消费者无法从 registry 安装它们。本仓库把这**恰好三个包**外部化,使其能通过官方插件通道安装:
 
 ```
-dsh plugin --profile <p> add github:dsh-external/fabric
+dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
 **边界(硬规则):** 工作区只发布恰好三个完整包——`cordis-fabric`(纯转换服务)、`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、profile bootstrap)。官方 `@deepseek-ai/dsh-tool-cordis` 保持为上游依赖，不在此重新发布，也绝不作为第四个包加入。
@@ -36,24 +36,33 @@ web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disab
 
 `dsh` 的 source 启动(`node --import tsx/esm apps/cli/src/bin.ts`)一度看起来需要 `TSX_TSCONFIG_PATH` 或 register preload:`FiberState`(const enum,只在 `vendor/cordis/src` 存在)解析失败。两个 workaround 都曾发布,后来**全部撤销**——真正原因是 shell 里一个指向旧 staging checkout 的过期 `TSX_TSCONFIG_PATH`。干净环境下 tsx 自动发现入口的 tsconfig(继承 base)并把别名解析到 `src`。官方脚本原样运行;patch 中不存在相关接缝。
 
-## 3. 安装模型:git 子目录 spec + prepare
+## 3. 安装模型:自包含 release bundle
 
-trio 以 git 子目录 spec 被消费:
+根 bundle 记录已发布的 trio tarball,并通过 `bundledDependencies` 携带预构建的 trio:
 
 ```
-github:dsh-external/fabric#main&path:/packages/cordis-fabric
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric.tgz
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-api.tgz
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.tgz
 ```
 
-- host 源码安装在 `apps/cli/package.json` 中声明它们;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再播种 profile 的 pnpm 设置、走插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——不建分支、不打补丁、不提交;启动一律走编译后的 `lib/fabric-dsh.js`。
-- 消费侧构建在隔离环境中运行 `build`（ex-setting 是 `tsdown.prepare.config.ts`，根目录 `build` 脚本直接用 tsdown 构建 trio 与 `fabric-dsh` launcher）——devDependencies 在那里安装,因此 `lightningcss` 等可用。
+这样 release 安装只需一个包:
+
+```sh
+dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+```
+
+pnpm 不需要解析嵌套的 Git 或 URL 包。启动时 `fabric-dsh` 调用 DSH 的 module-fallback healer,把 bundle 自己的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 bundled preload 使用同一套 trio 副本。
+
+- host 源码安装在 `apps/cli/package.json` 中声明 bundle;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再通过插件通道装 bundle(把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
+- 消费侧构建使用根目录显式的 `build` 脚本;trio 与 launcher 在打包前由 tsdown 构建,不需要安装期 `prepare`。
 
 ### 3.1 pnpm 11 供应链接缝
 
-pnpm 11 默认阻止 git 解析的安装;三道接缝使其工作:
+自包含 bundle 不需要在 Profile 中设置 `blockExoticSubdeps: false`,也不需要 Git prepare allowlist 或 `dangerouslyAllowAllBuilds`。workspace 仍允许原生 `esbuild` 构建,并排除快速发布的 DSH rc 序列的 minimum-release-age 检查:
 
-- profile 模板中的 `blockExoticSubdeps: false`(git 解析的子依赖);
-- host 工作区与 profile 模板中的 `dangerouslyAllowAllBuilds: true`(`allowBuilds` 只接受精确的 `git+url#commit` 键,而它每次推送都变);
-- 本工作区的 `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']`——dsh-* rc 序列总在 24h 窗口内发布,仅写包名豁免所有版本。
+- 本 workspace 的 `allowBuilds: esbuild`;
+- `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']`——dsh-* rc 序列总在 24h 窗口内发布,仅写包名豁免所有版本。
 
 ## 4. Registry 依赖策略
 

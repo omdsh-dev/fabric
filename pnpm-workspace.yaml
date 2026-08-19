@@ -2,10 +2,12 @@ packages:
   - packages/*
 
 autoInstallPeers: false
+nodeLinker: hoisted
 
-# Consumers resolve the trio from the GitHub repository via the git
-# subdirectory specs in the root manifest; inside this workspace, installs
-# resolve them to the local packages instead of re-cloning the repository.
+# Consumers receive the prebuilt trio through the root package's
+# bundledDependencies; the manifest URLs document the corresponding GitHub
+# Release artifacts. Inside this workspace, overrides resolve the trio to local
+# packages instead of downloading or unpacking those artifacts.
 overrides:
   cordis-fabric: workspace:*
   cordis-fabric-api: workspace:*

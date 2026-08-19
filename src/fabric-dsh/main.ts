@@ -15,8 +15,8 @@
  * DSH_HOME/profiles/<name>.
  *
  * Installed bundle form — no bundle checkout required: the bundle ships this
- * launcher (bin `fabric-dsh`), so after `dsh plugin --profile web add
- * github:dsh-external/fabric` (or scripts/install.sh):
+ * launcher (bin `fabric-dsh`), so after installing the release bundle through
+ * the plugin channel (or running `scripts/install.sh`):
  *
  *   $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh --port 8000
  *
@@ -78,16 +78,14 @@ export function main({
   })
   const cliArgs = buildCliArgs(args, profile.effectiveProfile, config.enablePath, config.enableOverlay)
 
-  // Heal the profile's module fallback BEFORE the preload imports the
-  // profile's trio: the preload runs before the CLI's own prepareProfile
-  // heals it, and the trio's peer (@deepseek-ai/cordis) must already resolve
-  // from the profile for the profile-authoritative copy to load. The heal is
-  // the CLI's own API (idempotent re-link), not a host source change. Source
-  // mode resolves dsh-app-boot from the source checkout; installed mode resolves
-  // it from the CLI's real location, cwd-independent.
+  // Heal both dependency closures before the preload imports the profile's
+  // trio: the DSH installation provides host packages, while the bundle's
+  // bundledDependencies provide the Fabric packages. The healer creates the
+  // profile-level names from the bundle's real nested package locations.
+  const bundlePackageJson = fileURLToPath(new URL('../package.json', launcherUrl))
   const healEval = host.source
-    ? `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
-    : `const { createRequire } = await import('node:module'); const { healProfilesModuleFallback } = await import(createRequire(${JSON.stringify(pathToFileURL(host.realBin).href)}).resolve('@deepseek-ai/dsh-app-boot')); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
+    ? `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(bundlePackageJson)}); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
+    : `const { createRequire } = await import('node:module'); const { healProfilesModuleFallback } = await import(createRequire(${JSON.stringify(pathToFileURL(host.realBin).href)}).resolve('@deepseek-ai/dsh-app-boot')); healProfilesModuleFallback(${JSON.stringify(bundlePackageJson)}); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`
   const heal = spawnSync(
     process.execPath,
     [...(host.source ? ['--import', 'tsx/esm'] : []), '--input-type=module', '--eval', healEval],

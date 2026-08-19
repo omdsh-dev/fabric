@@ -13,12 +13,13 @@ import { afterAll, describe, expect, it } from 'vitest'
  * cmd-shim script form alike). These offline fixtures stand in for each
  * resolution path; the stub `cordis-fabric` in the profile records what the
  * preload delivered, and the stub `@deepseek-ai/dsh-app-boot` records the
- * pre-boot module-fallback heal.
+ * pre-boot module-fallback heals.
  */
 const compiledLauncher = fileURLToPath(new URL('../../../../lib/fabric-dsh.js', import.meta.url))
 if (!existsSync(compiledLauncher)) throw new Error('lib/fabric-dsh.js is missing; run pnpm run build before the launcher test')
 const launcher = compiledLauncher
 const fabricPackage = fileURLToPath(new URL('../../', import.meta.url))
+const sourceBundlePackageJson = fileURLToPath(new URL('../../../../package.json', import.meta.url))
 
 const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-installed-'))
 const home = join(tempDir, 'home')
@@ -82,7 +83,12 @@ symlinkSync(stubFabric, join(webProfileDir, 'node_modules', 'cordis-fabric'))
 const installedBundle = join(webProfileDir, 'node_modules', 'cordis-fabric-bundle')
 const installedLauncherFile = 'fabric-dsh.js'
 const installedLauncher = join(installedBundle, 'lib', installedLauncherFile)
+const installedBundlePackageJson = join(installedBundle, 'package.json')
 mkdirSync(join(installedBundle, 'lib'), { recursive: true })
+writeFileSync(installedBundlePackageJson, JSON.stringify({
+  name: 'cordis-fabric-bundle',
+  dependencies: { 'cordis-fabric': 'file:packages/cordis-fabric' },
+}, null, 2))
 copyFileSync(launcher, installedLauncher)
 mkdirSync(join(installedBundle, 'packages'), { recursive: true })
 symlinkSync(fabricPackage, join(installedBundle, 'packages', 'cordis-fabric'))
@@ -124,6 +130,8 @@ function expectBoot(out: { status: number; stdout: string; stderr: string }): vo
   expect(out.status, `${out.stdout}\n${out.stderr}`).toBe(0)
   // The pre-boot heal ran against the CLI package's own manifest...
   expect(out.stdout).toContain(`HEAL-MARK ${join(dshPkg, 'package.json')}`)
+  // ...and the bundle's own dependency closure is added to the same fallback.
+  expect(out.stdout).toContain(`HEAL-MARK ${sourceBundlePackageJson}`)
   // ...the CLI received the profile's argv untouched...
   expect(out.stdout).toContain('FAKE-DSH argv=["--profile","t1","--dump-config"]')
   expect(out.stdout).toContain('FAKE-DSH config=true')
@@ -136,6 +144,7 @@ function expectBoot(out: { status: number; stdout: string; stderr: string }): vo
 function expectInstalledWeb(out: { status: number; stdout: string; stderr: string }): void {
   expect(out.status, `${out.stdout}\n${out.stderr}`).toBe(0)
   expect(out.stdout).toContain(`HEAL-MARK ${join(dshPkg, 'package.json')}`)
+  expect(out.stdout).toContain(`HEAL-MARK ${installedBundlePackageJson}`)
   expect(out.stdout).toContain('FAKE-DSH argv=["--profile","web","--port","8000"]')
   expect(out.stdout).toContain('FAKE-DSH config=true')
   expect(out.stdout).toContain(`profile=${webProfileDir}`)

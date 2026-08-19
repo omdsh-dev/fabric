@@ -90,7 +90,7 @@ export function resolveProfile({
     console.error(`fabric-dsh: profile ${profileName} not found at ${profileDir} (DSH_HOME=${dshHome})`)
     if (source) {
       console.error(`  install the Fabric bundle first: scripts/install.sh <deepseek-harness-checkout> --dsh-home ${dshHome}`)
-      console.error(`  or: DSH_HOME=${dshHome} pnpm -C <deepseek-harness-checkout> dsh plugin --profile ${profileName} add github:dsh-external/fabric`)
+      console.error(`  or: DSH_HOME=${dshHome} pnpm -C <deepseek-harness-checkout> dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
     } else {
       console.error(`  install the Fabric bundle first: dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
     }
@@ -201,20 +201,6 @@ export function composeFabricConfig({
   applyLayer(rows, loadPatchLayer(join(profileDir, 'cordis.patch.yml')))
   applyLayer(rows, loadPatchLayer(join(dshHome, 'cordis.patch.yml')))
   for (const patchFile of args.patchFiles) applyLayer(rows, loadPatchLayer(resolve(patchFile)))
-
-  // Ensure the profile's pnpm settings allow the git-hosted trio to build on
-  // install (the patch used to bake these into the profile template; this
-  // command owns them now, appending only the missing keys).
-  const wsYamlPath = join(profileDir, 'pnpm-workspace.yaml')
-  let wsContent = existsSync(wsYamlPath) ? readFileSync(wsYamlPath, 'utf8') : 'packages:\n  - .\n'
-  let wsChanged = false
-  for (const [key, value] of [['blockExoticSubdeps', 'false'], ['dangerouslyAllowAllBuilds', 'true']] as const) {
-    if (!new RegExp(`^${key}:`, 'm').test(wsContent)) {
-      wsContent += `${wsContent.endsWith('\n') ? '' : '\n'}${key}: ${value}\n`
-      wsChanged = true
-    }
-  }
-  if (wsChanged) writeFileSync(wsYamlPath, wsContent)
 
   // A row whose config declares config.fabric.patches (the cordis-fabric
   // carrier row aside) hard-depends on Fabric. Such rows ship disabled; the

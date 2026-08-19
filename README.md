@@ -22,7 +22,7 @@ registry. This repository externalizes exactly those three packages so they can
 be installed through the official plugin channel:
 
 ```
-dsh plugin --profile <p> add github:dsh-external/fabric
+dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
 **Boundary (hard rule):** the workspace ships exactly three complete packages —
@@ -67,36 +67,45 @@ clean environment tsx auto-discovers the entry's tsconfig (extending the base)
 and resolves the aliases to `src`. The official script runs unchanged; no
 host-specific workaround is required.
 
-## 3. Install model: git subdirectory specs + prepare
+## 3. Install model: self-contained release bundle
 
-The trio is consumed as git subdirectory specs:
+The root bundle records the published trio tarballs and ships the prebuilt trio
+inside `bundledDependencies`:
 
 ```
-github:dsh-external/fabric#main&path:/packages/cordis-fabric
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric.tgz
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-api.tgz
+https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.tgz
 ```
 
-- Host source installs declare them in `apps/cli/package.json`; with launcher-provided host wiring, `scripts/install.sh` installs and builds the harness, then
-  seeds the profile's pnpm settings, installs the bundle through the plugin
-  channel (`dsh plugin --profile web add github:dsh-external/fabric`, joining
-  `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
-  `cordis-fabric-dsh` row. Launches go through the compiled `lib/fabric-dsh.js`.
-- Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
-  ex-setting, and the root `build` script runs tsdown directly for the trio and
-  the `fabric-dsh` launcher) in an isolated environment —
-  devDependencies install there, so `lightningcss` and friends are available.
+This keeps the release installation to one package:
+
+```sh
+dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+```
+
+pnpm does not need to resolve nested Git or URL packages. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's own dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the bundled preload resolve the same trio copies.
+
+- Host source installs declare the bundle in `apps/cli/package.json`; with
+  launcher-provided host wiring, `scripts/install.sh` installs and builds the
+  harness, then installs the bundle through the plugin channel (joining
+  `cordis-fabric-bundle` to `dsh.profile.bundles`) and enables the
+  `cordis-fabric-dsh` row. Launches go through the compiled
+  `lib/fabric-dsh.js`.
+- Consumer-side builds use the explicit root `build` script. The trio and the
+  launcher are built with tsdown before packing; no install-time prepare build
+  is required.
 
 ### 3.1 pnpm 11 supply-chain seams
 
-pnpm 11 blocks git-resolved installs by default; three seams make them work:
+The self-contained bundle does not require `blockExoticSubdeps: false`, a Git
+prepare allowlist, or `dangerouslyAllowAllBuilds` in the Profile. The workspace
+still allows the native `esbuild` build and excludes the fast-moving DSH rc
+train from minimum-release-age checks:
 
-- `blockExoticSubdeps: false` in the profile template (git-resolved
-  subdependencies);
-- `dangerouslyAllowAllBuilds: true` in the host workspace and profile template
-  (`allowBuilds` only accepts exact `git+url#commit` keys, which change every
-  push);
-- `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']` in this workspace — the
-  dsh-* rc train ships inside the 24h window and a name-only entry exempts all
-  versions.
+- `allowBuilds: esbuild` in this workspace;
+- `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']` — the dsh-* rc train ships
+  inside the 24h window and a name-only entry exempts all versions.
 
 ## 4. Registry dependency policy
 

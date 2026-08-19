@@ -8,7 +8,7 @@ This repository is a standalone DeepSeek Harness Fabric/Mixin extension workspac
 - Keep all registrations scoped to the plugin fiber and test disposal.
 - The DSH host packages (`@deepseek-ai/dsh-*`) are installable from the npm registry; import their types directly and declare them as peer + dev dependencies. Never add a package import or a path that resolves outside this repository.
 - Keep host-provided runtime APIs as peer dependencies only when they are installable from the registry; document host-only services as runtime contracts instead.
-- Cross-package dependencies use the `workspace:^` protocol; every other dependency spec is registry-only. Do not add source, configuration, documentation, project-reference, `link:`, or `file:` paths that leave this repository.
+- Cross-package dependencies inside this workspace use the `workspace:^` protocol; the published root bundle records the three runtime packages as GitHub Release tarballs and carries their prebuilt copies through `bundledDependencies`. Do not add source, configuration, documentation, project-reference, `link:`, or `file:` paths that leave this repository.
 - Describe repository files with project-root paths such as `packages/cordis-fabric/README.md`; never use parent-directory navigation in documentation.
 - Update `README.md`, configuration JSDoc, tests, and `cordis.patch.yml` together when behavior changes.
 - Run `pnpm run typecheck`, `pnpm test`, and `pnpm run build` before publishing changes.
