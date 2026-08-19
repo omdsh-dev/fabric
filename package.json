@@ -13,7 +13,6 @@
     "lib/fabric-dsh.js",
     "lib/fabric-dsh.js.map",
     "cordis.patch.yml",
-    "patches",
     "packages/cordis-fabric/package.json",
     "packages/cordis-fabric/preload.mjs",
     "packages/cordis-fabric/lib",
@@ -24,13 +23,9 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node scripts/prepare.mjs",
-    "prepare": "node scripts/prepare.mjs",
+    "build": "pnpm --filter cordis-fabric run build && pnpm --filter cordis-fabric-api run build && pnpm --filter cordis-fabric-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false",
-    "verify:self-contained": "node scripts/verify-self-contained.mjs",
-    "extract:patch": "node scripts/extract-patch.mjs",
-    "patch:host": "bash scripts/patch.sh",
     "install:host": "bash scripts/install.sh"
   },
   "dsh": {

@@ -33,8 +33,7 @@
   "license": "BSD-3-Clause",
   "scripts": {
     "build": "tsdown --config-loader unrun --config tsdown.config.ts",
-    "typecheck": "tsc --noEmit --pretty false",
-    "prepare": "tsdown --config-loader unrun --config tsdown.config.ts"
+    "typecheck": "tsc --noEmit --pretty false"
   },
   "peerDependencies": {
     "cordis-fabric": "^0.1.0",

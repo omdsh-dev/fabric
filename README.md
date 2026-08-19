@@ -29,25 +29,14 @@ dsh plugin --profile <p> add github:dsh-external/fabric
 `cordis-fabric` (pure transformation service), `cordis-fabric-api` (pure compat
 facade), `cordis-fabric-dsh` (DSH-facing facades, invariant, profile
 bootstrap). Anything else — the official `@deepseek-ai/dsh-tool-cordis`
-toolset included — is never added as a fourth package; official packages are
-corrected through pnpm dependency patches in `patches/`.
+toolset included — is never added as a fourth package; official packages remain upstream dependencies and are not republished here.
 
-## 2. Host integration: a historical seam-only patch
+## 2. Host integration: launcher-provided wiring
 
-The three packages only know how to install hooks and mount facades. A DSH host
-at the pre-split snapshot never called them, so the bundle was inert without
-host-side wiring. Earlier snapshots carried that wiring in
-`patches/fabric-host-integration.patch` (17 files) and followed one rule:
-
-> **Keep the actual code, drop the documentation, drop anything the official
-> plugin registration system can handle.**
-
-The generated host patch is intentionally absent from the current checkout:
-the active launcher path is now `src/fabric-dsh.ts` compiled to
-`lib/fabric-dsh.js`, plus
-`packages/cordis-fabric/preload.mjs`. The extraction metadata in `patches/`
-remains as the historical record and can regenerate a seam patch when a future
-host change requires one.
+The three packages install hooks and mount facades through the compiled launcher.
+`src/fabric-dsh.ts` compiles to `lib/fabric-dsh.js`, and the launcher injects
+`packages/cordis-fabric/preload.mjs` before the official CLI loads. No host patch
+checkout is required.
 
 Everything the official channels already cover is deliberately excluded:
 installing the trio (`dsh plugin add`), bundle roster rows and dependencies,
@@ -59,27 +48,7 @@ can provide: launcher bootstrap (`apps/cli/src/profile-boot.ts` calls
 build seam (`packages/client/tsdown.client.ts`), catalog entries compiled into
 the official `tool-cordis` package, their tests, and the pnpm-policy seams.
 
-### 2.1 Mechanical reproduction
-
-`scripts/extract-patch.mjs` regenerates the patch from `patches/host-patch.config.json`
-(baseline / upstream / revert / seams / exclude). It checks out the upstream
-commit, reverts registry-handled files to the baseline, re-applies seam edits
-(and `add` seams for files that exist in neither snapshot), diffs, and verifies
-forward apply on the baseline and reverse apply on the trimmed tree. A seam
-anchor that has drifted upstream fails loud.
-
-### 2.2 Baseline history
-
-The fork rebases onto newer official snapshots. The patch baseline must follow,
-or the diff would drag an entire snapshot's mainline churn (CI files, docs,
-assets — hundreds of files) into the patch:
-
-| Baseline | Upstream | Era |
-|---|---|---|
-| `7b9644f2` (0812) | `1de04707` | initial externalization |
-| `9f9e2782a4` (0813) | `65bcaf9902` | after the fork's 0813 rebase |
-
-### 2.3 The disabled opt-in rows
+### 2.1 The disabled opt-in rows
 
 The web-app bundle layer inserts `cordis-fabric` / `cordis-fabric-dsh` rows as
 **disabled opt-ins**: the pure `cordis-fabric` package is a library with no
@@ -87,7 +56,7 @@ plugin `apply`, so an enabled row fails every boot ("invalid plugin"). A
 profile opts in by enabling the rows; the bundle layer applies on every boot,
 so pre-existing profiles are covered without edits.
 
-### 2.4 The TSX dead end (recorded and reverted)
+### 2.2 The TSX dead end (recorded and reverted)
 
 The `dsh` source launch (`node --import tsx/esm apps/cli/src/bin.ts`) once
 appeared to need `TSX_TSCONFIG_PATH` or a register preload: `FiberState` (a
@@ -96,7 +65,7 @@ shipped and were then **reverted** — the real cause was a stale
 `TSX_TSCONFIG_PATH` in the shell pointing at an old staging checkout. With a
 clean environment tsx auto-discovers the entry's tsconfig (extending the base)
 and resolves the aliases to `src`. The official script runs unchanged; no
-host-patch seam exists for it.
+host-specific workaround is required.
 
 ## 3. Install model: git subdirectory specs + prepare
 
@@ -112,7 +81,7 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
   `cordis-fabric-bundle` to `dsh.profile.bundles`), and enables the
   `cordis-fabric-dsh` row. Launches go through the compiled `lib/fabric-dsh.js`.
 - Consumer-side builds run `prepare` (`tsdown.prepare.config.ts` for
-  ex-setting, and the root `scripts/prepare.mjs` runs tsdown for the trio and
+  ex-setting, and the root `build` script runs tsdown directly for the trio and
   the `fabric-dsh` launcher) in an isolated environment —
   devDependencies install there, so `lightningcss` and friends are available.
 

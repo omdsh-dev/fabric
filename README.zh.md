@@ -18,39 +18,21 @@ deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个�
 dsh plugin --profile <p> add github:dsh-external/fabric
 ```
 
-**边界(硬规则):** 工作区只发布恰好三个完整包——`cordis-fabric`(纯转换服务)、`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、profile bootstrap)。任何其他代码——包括官方 `@deepseek-ai/dsh-tool-cordis` 工具集——绝不作为第四个包加入;官方包通过 `patches/` 下的 pnpm 依赖补丁修正。
+**边界(硬规则):** 工作区只发布恰好三个完整包——`cordis-fabric`(纯转换服务)、`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、profile bootstrap)。官方 `@deepseek-ai/dsh-tool-cordis` 保持为上游依赖，不在此重新发布，也绝不作为第四个包加入。
 
-## 2. Host 集成:历史上的接缝 patch
+## 2. Host 集成:由 launcher 提供接线
 
-三个包只会安装钩子与挂载 facade。拆分快照之前的 DSH host 从不调用它们,没有 host 侧接线整个 bundle 就是死的。早期快照把这段接线放在
-`patches/fabric-host-integration.patch`(17 文件)中,并遵循一条规则:
-
-> **实际代码保留,文档不保留,官方插件注册器能处理的不保留。**
-
-当前 checkout 刻意不携带生成后的 host patch;现在生效的 launcher 路径是
-`src/fabric-dsh.ts`（由 tsdown 编译为 `lib/fabric-dsh.js`）加上 `packages/cordis-fabric/preload.mjs`。`patches/`
-下的 extraction metadata 仍作为历史记录保留,未来 host 需要新的接缝时可以重新生成 patch。
+三个包通过编译后的 launcher 安装 hooks 并挂载 facade。`src/fabric-dsh.ts`
+由 tsdown 编译为 `lib/fabric-dsh.js`，launcher 在官方 CLI 加载前注入
+`packages/cordis-fabric/preload.mjs`，不需要 host patch checkout。
 
 官方通道已经覆盖的内容被刻意排除:安装 trio(`dsh plugin add`)、bundle 行名册与依赖、catalog 生成、trio-in-workspace 的 invariant/gate 豁免、以及全部文档(`README*`、`docs/`、`.agents/`)。剩下的是任何通道都提供不了的:launcher bootstrap(`apps/cli/src/profile-boot.ts` 在任何目标导入之前调用 `installFabricBootstrap`、boot 后调用 `checkFabricRequiredPatches`)、`clientBundle` 源码 transform 构建接缝(`packages/client/tsdown.client.ts`)、编译进官方 `tool-cordis` 包的 catalog 条目、它们的测试、以及 pnpm 策略接缝。
 
-### 2.1 机械复现
-
-`scripts/extract-patch.mjs` 根据 `patches/host-patch.config.json`(baseline / upstream / revert / seams / exclude)重新生成 patch:checkout upstream 提交、把 registry 处理的文件 revert 到 baseline、重放 seam 编辑(以及 `add` seam——两个快照都不存在的文件)、diff、并在 baseline 上验证正向 apply、在裁剪树上验证反向 apply。上游漂移的 seam 锚点会大声失败。
-
-### 2.2 baseline 历史
-
-fork 会 rebase 到更新的官方快照。patch 的 baseline 必须跟进,否则 diff 会把整整一个快照的主线噪声(CI 文件、文档、资源——数百文件)拖进 patch:
-
-| Baseline | Upstream | 时期 |
-|---|---|---|
-| `7b9644f2`(0812) | `1de04707` | 初始外部化 |
-| `9f9e2782a4`(0813) | `65bcaf9902` | fork rebase 0813 之后 |
-
-### 2.3 disabled opt-in 行
+### 2.1 disabled opt-in 行
 
 web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disabled opt-in**:纯 `cordis-fabric` 包是没有插件 `apply` 的库,enabled 的行每次 boot 都失败("invalid plugin")。profile 通过启用这些行 opt-in;bundle 层每次 boot 都应用,因此既有的 profile 无需编辑即被覆盖。
 
-### 2.4 TSX 死胡同(已记录并撤销)
+### 2.2 TSX 死胡同(已记录并撤销)
 
 `dsh` 的 source 启动(`node --import tsx/esm apps/cli/src/bin.ts`)一度看起来需要 `TSX_TSCONFIG_PATH` 或 register preload:`FiberState`(const enum,只在 `vendor/cordis/src` 存在)解析失败。两个 workaround 都曾发布,后来**全部撤销**——真正原因是 shell 里一个指向旧 staging checkout 的过期 `TSX_TSCONFIG_PATH`。干净环境下 tsx 自动发现入口的 tsconfig(继承 base)并把别名解析到 `src`。官方脚本原样运行;patch 中不存在相关接缝。
 
@@ -63,7 +45,7 @@ github:dsh-external/fabric#main&path:/packages/cordis-fabric
 ```
 
 - host 源码安装在 `apps/cli/package.json` 中声明它们;launcher 提供 host 接线,`scripts/install.sh` 安装并构建宿主,再播种 profile 的 pnpm 设置、走插件通道装 bundle(`dsh plugin --profile web add github:dsh-external/fabric`,并把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——不建分支、不打补丁、不提交;启动一律走编译后的 `lib/fabric-dsh.js`。
-- 消费侧构建在隔离环境中运行 `prepare`(ex-setting 是 `tsdown.prepare.config.ts`,根目录 `scripts/prepare.mjs` 用 tsdown 构建 trio 与 `fabric-dsh` launcher)——devDependencies 在那里安装,因此 `lightningcss` 等可用。
+- 消费侧构建在隔离环境中运行 `build`（ex-setting 是 `tsdown.prepare.config.ts`，根目录 `build` 脚本直接用 tsdown 构建 trio 与 `fabric-dsh` launcher）——devDependencies 在那里安装,因此 `lightningcss` 等可用。
 
 ### 3.1 pnpm 11 供应链接缝
 
