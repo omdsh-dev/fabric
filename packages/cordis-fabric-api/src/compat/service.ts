@@ -11,23 +11,23 @@
  * Target version drift leaves the adapter unavailable rather than pretending
  * compatibility: the installed instrumentation simply never matches, and the
  * service's diagnostics surface the declared target.
- * @module cordis-fabric-api/compat/service
+ * @module @oh-my-dsh/cordis-fabric-api/compat/service
  */
 
 import { Service } from '@deepseek-ai/cordis'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
-import { getFabric, isFabricInstalled, serveBrowserTransform } from 'cordis-fabric'
-import type { FabricService } from 'cordis-fabric'
+import { getFabric, isFabricInstalled, serveBrowserTransform } from '@oh-my-dsh/cordis-fabric'
+import type { FabricService } from '@oh-my-dsh/cordis-fabric'
 import type {
   FabricCall, FabricHandler, FabricPatch, PatchId, ServeBrowserTransformOptions,
-} from 'cordis-fabric'
+} from '@oh-my-dsh/cordis-fabric'
 import type { FabricCompatConfig, FabricCompatTarget } from './types.ts'
 
 export type { FabricCompatConfig, FabricCompatPatch, FabricCompatTarget } from './types.ts'
 
 export type {
   FabricCall, FabricHandler, FabricInvoke, FabricOperation, FabricPatch, FabricTarget, PatchId, ServeBrowserTransformOptions,
-} from 'cordis-fabric'
+} from '@oh-my-dsh/cordis-fabric'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

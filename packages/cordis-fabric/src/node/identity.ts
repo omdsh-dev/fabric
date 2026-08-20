@@ -2,7 +2,7 @@
  * Module-identity helpers shared by the Node loader and the browser build
  * transform: package-version lookup, workspace-package identity, and
  * module-type detection.
- * @module cordis-fabric/node/identity
+ * @module @oh-my-dsh/cordis-fabric/node/identity
  */
 
 import { existsSync, readFileSync } from 'node:fs'

@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { FabricPatchStub } from 'cordis-fabric'
+import type { FabricPatchStub } from '@oh-my-dsh/cordis-fabric'
 
 type BootstrapFabric = (descriptors: FabricPatchStub[]) => unknown
 
@@ -34,9 +34,9 @@ if (configPath !== undefined && configPath !== '') {
   const profileDir = process.env.DSH_FABRIC_PROFILE
   if (profileDir !== undefined && profileDir !== '') {
     const resolveFrom = createRequire(pathToFileURL(join(profileDir, 'package.json')))
-    ;({ bootstrapFabric } = await import(pathToFileURL(resolveFrom.resolve('cordis-fabric')).href))
+    ;({ bootstrapFabric } = await import(pathToFileURL(resolveFrom.resolve('@oh-my-dsh/cordis-fabric')).href))
   } else {
-    ;({ bootstrapFabric } = await import('cordis-fabric'))
+    ;({ bootstrapFabric } = await import('@oh-my-dsh/cordis-fabric'))
   }
   const descriptors = JSON.parse(readFileSync(configPath, 'utf8')) as FabricPatchStub[]
   bootstrapFabric(descriptors)

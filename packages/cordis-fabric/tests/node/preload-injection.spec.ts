@@ -76,11 +76,11 @@ describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
     // (the profile's installed copy is authoritative at runtime) rather
     // than the one beside the preload.
     const profileDir = join(tempDir, 'profile')
-    const stubDir = join(profileDir, 'node_modules', 'cordis-fabric')
+    const stubDir = join(profileDir, 'node_modules', '@oh-my-dsh', 'cordis-fabric')
     mkdirSync(stubDir, { recursive: true })
     writeFileSync(join(profileDir, 'package.json'), '{}\n')
     writeFileSync(join(stubDir, 'package.json'), JSON.stringify({
-      name: 'cordis-fabric', version: '1.0.0', type: 'module', exports: { '.': './index.js' },
+      name: '@oh-my-dsh/cordis-fabric', version: '1.0.0', type: 'module', exports: { '.': './index.js' },
     }))
     writeFileSync(join(stubDir, 'index.js'), [
       'export function bootstrapFabric(descriptors) {',

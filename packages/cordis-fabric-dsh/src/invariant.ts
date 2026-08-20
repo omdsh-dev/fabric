@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `cordis-fabric-dsh`.
- * @module cordis-fabric-dsh/invariant
+ * Package-owned invariant companion for `@oh-my-dsh/cordis-fabric-dsh`.
+ * @module @oh-my-dsh/cordis-fabric-dsh/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = 'cordis-fabric-dsh'
+const PACKAGE_NAME = '@oh-my-dsh/cordis-fabric-dsh'
 
 /** Cordis companion plugin name. */
 export const name = 'cordis-fabric-dsh-invariant'

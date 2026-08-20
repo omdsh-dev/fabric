@@ -72,7 +72,7 @@ export function resolveProfile({
   env?: NodeJS.ProcessEnv
 }): ResolvedProfile {
   const installedMatch = fileURLToPath(launcherUrl)
-    .match(/^(.*)\/profiles\/([^/]+)\/node_modules\/cordis-fabric-bundle\/lib\/fabric-dsh\.(?:js|mjs)$/)
+    .match(/^(.*)\/profiles\/([^/]+)\/node_modules\/@oh-my-dsh\/cordis-fabric-pack\/lib\/fabric-dsh\.(?:js|mjs)$/)
   const installedHome = installedMatch?.[1]
   const installedProfile = installedMatch?.[2]
   const installed = installedHome !== undefined && installedProfile !== undefined

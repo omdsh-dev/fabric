@@ -5,21 +5,21 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  cordis-fabric: workspace:*
-  cordis-fabric-api: workspace:*
-  cordis-fabric-dsh: workspace:*
+  '@oh-my-dsh/cordis-fabric': workspace:*
+  '@oh-my-dsh/cordis-fabric-api': workspace:*
+  '@oh-my-dsh/cordis-fabric-dsh': workspace:*
 
 importers:
 
   .:
     dependencies:
-      cordis-fabric:
+      '@oh-my-dsh/cordis-fabric':
         specifier: workspace:*
         version: link:packages/cordis-fabric
-      cordis-fabric-api:
+      '@oh-my-dsh/cordis-fabric-api':
         specifier: workspace:*
         version: link:packages/cordis-fabric-api
-      cordis-fabric-dsh:
+      '@oh-my-dsh/cordis-fabric-dsh':
         specifier: workspace:*
         version: link:packages/cordis-fabric-dsh
     devDependencies:
@@ -99,12 +99,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1-0
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
+      '@oh-my-dsh/cordis-fabric':
+        specifier: workspace:*
+        version: link:../cordis-fabric
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
-      cordis-fabric:
-        specifier: workspace:*
-        version: link:../cordis-fabric
       tsdown:
         specifier: ^0.22.2
         version: 0.22.14(tsx@4.23.12)(typescript@6.0.3)(unrun@0.3.1)
@@ -171,7 +171,7 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: ^0.1.0-rc.0
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
-      cordis-fabric:
+      '@oh-my-dsh/cordis-fabric':
         specifier: workspace:*
         version: link:../cordis-fabric
       react:

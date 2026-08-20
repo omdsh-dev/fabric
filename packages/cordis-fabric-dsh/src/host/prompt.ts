@@ -8,7 +8,7 @@
  * model-visible text or assembles provider requests directly: everything
  * this module contributes reaches the model only through the owning
  * registry's assembly and rendering contract.
- * @module cordis-fabric-dsh/host/prompt
+ * @module @oh-my-dsh/cordis-fabric-dsh/host/prompt
  */
 
 import { Service } from '@deepseek-ai/cordis'

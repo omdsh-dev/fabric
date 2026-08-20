@@ -4,7 +4,7 @@
  * This module knows how to evict CommonJS and ESM module instances; the loader
  * supplies the callback that clears its per-installation transform marks. It
  * deliberately does not own patch state or hook registration.
- * @module cordis-fabric/hmr/reload
+ * @module @oh-my-dsh/cordis-fabric/hmr/reload
  */
 
 import { createRequire } from 'node:module'

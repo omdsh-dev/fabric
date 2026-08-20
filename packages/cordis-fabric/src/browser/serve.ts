@@ -11,7 +11,7 @@
  * bundle is 404; a transform that matches nothing or fails is loud by
  * default (500 naming the patch id) and serves the raw bundle only with
  * `fallback: 'raw'`.
- * @module cordis-fabric/browser/serve
+ * @module @oh-my-dsh/cordis-fabric/browser/serve
  */
 
 import { readFileSync } from 'node:fs'

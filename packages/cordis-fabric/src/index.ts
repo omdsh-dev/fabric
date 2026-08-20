@@ -7,7 +7,7 @@
  *
  * The service is opt-in: nothing in the default DSH composition mounts it,
  * and a plugin only receives `ctx.fabric` when it declares the service.
- * @module cordis-fabric
+ * @module @oh-my-dsh/cordis-fabric
  */
 
 export {

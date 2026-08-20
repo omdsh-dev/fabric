@@ -6,7 +6,7 @@
  * model turns unless the owning command contract explicitly starts one, and
  * registration conflicts, availability, and disposal use the domain
  * registry's rules.
- * @module cordis-fabric-dsh/host/commands
+ * @module @oh-my-dsh/cordis-fabric-dsh/host/commands
  */
 
 import { Service } from '@deepseek-ai/cordis'

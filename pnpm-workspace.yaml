@@ -4,14 +4,13 @@ packages:
 autoInstallPeers: false
 nodeLinker: hoisted
 
-# Consumers receive the prebuilt trio through the root package's
-# bundledDependencies; the manifest URLs document the corresponding GitHub
-# Release artifacts. Inside this workspace, overrides resolve the trio to local
-# packages instead of downloading or unpacking those artifacts.
+# Consumers resolve the root package's three npm semver dependencies. Inside
+# this workspace, overrides resolve the trio to local packages instead of
+# downloading or unpacking them.
 overrides:
-  cordis-fabric: workspace:*
-  cordis-fabric-api: workspace:*
-  cordis-fabric-dsh: workspace:*
+  '@oh-my-dsh/cordis-fabric': workspace:*
+  '@oh-my-dsh/cordis-fabric-api': workspace:*
+  '@oh-my-dsh/cordis-fabric-dsh': workspace:*
 
 allowBuilds:
   esbuild: true

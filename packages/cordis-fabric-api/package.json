@@ -1,5 +1,5 @@
 {
-  "name": "cordis-fabric-api",
+  "name": "@oh-my-dsh/cordis-fabric-api",
   "description": "Cooperative Fabric API: the pure-Cordis compat facade over the cordis-fabric registry",
   "version": "0.1.0",
   "type": "module",
@@ -31,17 +31,21 @@
     "lib/**/*.d.ts.map"
   ],
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omdsh-dev/fabric.git"
+  },
   "scripts": {
     "build": "tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "tsc --noEmit --pretty false"
   },
   "peerDependencies": {
-    "cordis-fabric": "^0.1.0",
+    "@oh-my-dsh/cordis-fabric": "^0.1.0",
     "@deepseek-ai/cordis": "^4.0.1-0"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "cordis-fabric": "workspace:^",
+    "@oh-my-dsh/cordis-fabric": "workspace:^",
     "tsdown": "^0.22.2",
     "tsx": "^4.23.11",
     "typescript": "^6.0.3",

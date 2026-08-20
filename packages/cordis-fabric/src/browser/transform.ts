@@ -11,7 +11,7 @@
  *
  * Like the Node path, the transform parses emitted JavaScript: TypeScript
  * sources must be compiled before transformation, or the parse fails loudly.
- * @module cordis-fabric/browser/transform
+ * @module @oh-my-dsh/cordis-fabric/browser/transform
  */
 
 import { create, type InstrumentationConfig } from '@apm-js-collab/code-transformer'

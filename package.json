@@ -1,5 +1,5 @@
 {
-  "name": "cordis-fabric-bundle",
+  "name": "@oh-my-dsh/cordis-fabric-pack",
   "description": "Fabric/Mixin extension workspace: installable profile bundle carrier over the cordis-fabric package trio",
   "version": "0.1.0",
   "type": "module",
@@ -8,6 +8,13 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omdsh-dev/fabric.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "lib/fabric-dsh.js",
     "lib/fabric-dsh.js.map",
@@ -17,7 +24,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "pnpm --filter cordis-fabric run build && pnpm --filter cordis-fabric-api run build && pnpm --filter cordis-fabric-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
+    "build": "pnpm --filter @oh-my-dsh/cordis-fabric run build && pnpm --filter @oh-my-dsh/cordis-fabric-api run build && pnpm --filter @oh-my-dsh/cordis-fabric-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false"
   },
@@ -27,9 +34,9 @@
     }
   },
   "dependencies": {
-    "cordis-fabric": "https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric.tgz",
-    "cordis-fabric-api": "https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-api.tgz",
-    "cordis-fabric-dsh": "https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.tgz"
+    "@oh-my-dsh/cordis-fabric": "^0.1.0",
+    "@oh-my-dsh/cordis-fabric-api": "^0.1.0",
+    "@oh-my-dsh/cordis-fabric-dsh": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
@@ -40,9 +47,6 @@
     "vitest": "^4.1.8",
     "unrun": "^0.3.1",
     "happy-dom": "^20.0.0"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "bin": {
     "fabric-dsh": "lib/fabric-dsh.js"

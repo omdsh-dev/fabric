@@ -5,11 +5,11 @@
  * module imports, plus the post-boot binding verification. This is the DSH
  * assembly half of `cordis-fabric` — the pure package only knows how to
  * install hooks from descriptors, not where a deployment composes them.
- * @module cordis-fabric-dsh/bootstrap/profile
+ * @module @oh-my-dsh/cordis-fabric-dsh/bootstrap/profile
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { FabricPatchStub } from 'cordis-fabric'
+import type { FabricPatchStub } from '@oh-my-dsh/cordis-fabric'
 
 /** One composed profile row's config surface (the loader row shape). */
 export interface FabricProfileRow {
@@ -66,7 +66,7 @@ export async function installFabricBootstrap(rows: FabricProfileRows, warn: (mes
   const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
   const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, warn)
   if (!Array.isArray(descriptors) || descriptors.length === 0) return
-  const { bootstrapFabric } = await import('cordis-fabric')
+  const { bootstrapFabric } = await import('@oh-my-dsh/cordis-fabric')
   bootstrapFabric(descriptors as FabricPatchStub[])
 }
 
@@ -83,7 +83,7 @@ export async function checkFabricRequiredPatches(rows: FabricProfileRows): Promi
   const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
   const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, () => {})
   if (!Array.isArray(descriptors) || descriptors.length === 0) return
-  const { checkRequiredPatches } = await import('cordis-fabric')
+  const { checkRequiredPatches } = await import('@oh-my-dsh/cordis-fabric')
   checkRequiredPatches(descriptors as FabricPatchStub[])
 }
 
@@ -182,7 +182,7 @@ export function scheduleRequiredPatchCheck(ctx: Context): void {
           // fabric ON: the exact file the preload installed from is the
           // truth of what was bound.
           const { readFileSync } = await import('node:fs')
-          const { checkRequiredPatches, flushBindingReports, runtime } = await import('cordis-fabric')
+          const { checkRequiredPatches, flushBindingReports, runtime } = await import('@oh-my-dsh/cordis-fabric')
           const descriptors = JSON.parse(readFileSync(configPath, 'utf8')) as FabricPatchStub[]
           // The async hook path delivers binding reports over a port; wait
           // for them before judging (no-op on the synchronous path).

@@ -2,7 +2,7 @@
  * Platform-neutral conversion from public Fabric patch descriptors to the
  * Orchestrion instrumentation wire shape. Node and browser adapters consume
  * this module; it deliberately contains no loader or filesystem code.
- * @module cordis-fabric/transform/config
+ * @module @oh-my-dsh/cordis-fabric/transform/config
  */
 
 import type { InstrumentationConfig } from '@apm-js-collab/code-transformer'

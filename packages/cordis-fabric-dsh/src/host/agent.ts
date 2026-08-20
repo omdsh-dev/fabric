@@ -8,7 +8,7 @@
  * callbacks receive the live Agent only where the owning event already does,
  * and every registration returns the exact disposer of the underlying
  * `ctx.on()` effect, so disposal and scope semantics are inherited unchanged.
- * @module cordis-fabric-dsh/host/agent
+ * @module @oh-my-dsh/cordis-fabric-dsh/host/agent
  */
 
 import { Service } from '@deepseek-ai/cordis'

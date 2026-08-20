@@ -7,7 +7,7 @@
  * serve bundles) plus the load-time instrumentation builder. Everything
  * DSH-specific lives in `cordis-fabric-dsh`; this package depends only on
  * Cordis and `cordis-fabric`.
- * @module cordis-fabric-api
+ * @module @oh-my-dsh/cordis-fabric-api
  */
 
 export {

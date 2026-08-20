@@ -9,7 +9,7 @@
  * serves the Node host and the browser Cordis tree. It is opt-in: nothing in
  * the default DSH composition mounts it, and a plugin only receives
  * `ctx.fabric` when it declares the service.
- * @module cordis-fabric/service
+ * @module @oh-my-dsh/cordis-fabric/service
  */
 
 import { Service } from '@deepseek-ai/cordis'

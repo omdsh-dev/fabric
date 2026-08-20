@@ -8,7 +8,7 @@
  * bootstrap (`installFabricBootstrap`) that composes the pure
  * `cordis-fabric` transformation hooks from profile rows. Mount this entry
  * to provide all Host modules; mount a subpath to provide one module.
- * @module cordis-fabric-dsh
+ * @module @oh-my-dsh/cordis-fabric-dsh
  */
 
 import type { Context } from '@deepseek-ai/cordis'

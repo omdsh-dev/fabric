@@ -20,9 +20,9 @@
     "noUnusedParameters": true,
     "types": ["node"],
     "paths": {
-      "cordis-fabric": ["./packages/cordis-fabric/src"],
-      "cordis-fabric-api": ["./packages/cordis-fabric-api/src"],
-      "cordis-fabric-dsh": ["./packages/cordis-fabric-dsh/src"]
+      "@oh-my-dsh/cordis-fabric": ["./packages/cordis-fabric/src"],
+      "@oh-my-dsh/cordis-fabric-api": ["./packages/cordis-fabric-api/src"],
+      "@oh-my-dsh/cordis-fabric-dsh": ["./packages/cordis-fabric-dsh/src"]
     }
   },
   "files": []

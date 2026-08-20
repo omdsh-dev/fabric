@@ -49,7 +49,7 @@ export default [
     },
     outputOptions: {
       entryFileNames: 'client.js',
-      banner: 'window.__ModuleLoader__.load({ id: "cordis-fabric-dsh", factory: (require) => {',
+      banner: 'window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric-dsh", factory: (require) => {',
       footer: 'return module.exports; } });',
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },

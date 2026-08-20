@@ -1,5 +1,5 @@
 {
-  "name": "cordis-fabric",
+  "name": "@oh-my-dsh/cordis-fabric",
   "description": "Fabric/Mixin-style extension layer over Orchestrion for trusted Cordis plugins",
   "version": "0.1.0",
   "type": "module",
@@ -79,6 +79,10 @@
     "lib/**/*.d.ts.map"
   ],
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omdsh-dev/fabric.git"
+  },
   "scripts": {
     "build": "tsdown --config-loader unrun --config tsdown.config.ts",
     "typecheck": "tsc --noEmit --pretty false"

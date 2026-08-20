@@ -7,7 +7,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
-import { installFabricHooks, FabricService, getFabric } from 'cordis-fabric'
+import { installFabricHooks, FabricService, getFabric } from '@oh-my-dsh/cordis-fabric'
 import { FabricCompatService } from '../../src/compat/service.ts'
 import { buildCompatInstrumentations } from '../../src/compat/instrumentation.ts'
 

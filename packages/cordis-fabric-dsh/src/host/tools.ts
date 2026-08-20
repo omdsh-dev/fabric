@@ -9,7 +9,7 @@
  * schema and result obligations as a native DSH tool, and a waterfall
  * listener must call `next()` unless it intentionally vetoes — returning
  * without delegation is the documented veto.
- * @module cordis-fabric-dsh/host/tools
+ * @module @oh-my-dsh/cordis-fabric-dsh/host/tools
  */
 
 import { Service } from '@deepseek-ai/cordis'

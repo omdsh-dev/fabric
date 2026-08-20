@@ -1,7 +1,7 @@
 /**
  * The catalog adapter belongs to the DSH integration layer: the pure Fabric
  * package has no dependency on the host's tool-cordis catalog.
- * @module cordis-fabric-dsh/catalog
+ * @module @oh-my-dsh/cordis-fabric-dsh/catalog
  */
 
 /** The fabric catalog entries (verbatim from the host patch). */

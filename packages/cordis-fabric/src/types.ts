@@ -1,7 +1,7 @@
 /**
  * Fabric descriptor, operation, and handler contracts shared by the Cordis
  * service, the runtime bridge, and the Node transformation hooks.
- * @module cordis-fabric/types
+ * @module @oh-my-dsh/cordis-fabric/types
  */
 
 import type { FunctionQuery } from '@apm-js-collab/code-transformer'

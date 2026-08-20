@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { serveBrowserTransform, type ServeBrowserTransformOptions } from 'cordis-fabric'
+import { serveBrowserTransform, type ServeBrowserTransformOptions } from '@oh-my-dsh/cordis-fabric'
 
 type TestRoute = {
   kind: 'exact' | 'prefix'
@@ -124,7 +124,7 @@ const ROUTE = '/plugins/@deepseek-ai/dsh-client-ui-conversation/client.js'
 const neutralizer = {
   id: 'serve-test/neutralize-sample',
   target: {
-    module: 'cordis-fabric',
+    module: '@oh-my-dsh/cordis-fabric',
     versionRange: '>=0.0.1-0',
     filePath: 'tests/fixtures/serve-target/browser.js',
     astQuery: 'VariableDeclarator[id.name="bashToolviewSample"] > ObjectExpression > Property[key.name="apply"] > FunctionExpression',
@@ -136,7 +136,7 @@ const neutralizer = {
 const missing = {
   id: 'serve-test/missing',
   target: {
-    module: 'cordis-fabric',
+    module: '@oh-my-dsh/cordis-fabric',
     versionRange: '>=0.0.1-0',
     filePath: 'tests/fixtures/serve-target/browser.js',
     functionQuery: { functionName: 'noSuchFunction', kind: 'Sync' },
@@ -148,7 +148,7 @@ const missing = {
 const planNeutralizer = {
   id: 'serve-test/neutralize-plan',
   target: {
-    module: 'cordis-fabric',
+    module: '@oh-my-dsh/cordis-fabric',
     versionRange: '>=0.0.1-0',
     filePath: 'tests/fixtures/serve-target/browser.js',
     astQuery: 'VariableDeclarator[id.name="planToolviewSample"] > ObjectExpression > Property[key.name="apply"] > FunctionExpression',

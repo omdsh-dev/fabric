@@ -9,7 +9,7 @@
  * platform-free: dispatch runs through an in-memory listener set with no
  * `node:*` imports, so the same bridge serves the Node host and the browser
  * build (the runtime subscribes through {@link subscribeBridge}).
- * @module cordis-fabric/bridge
+ * @module @oh-my-dsh/cordis-fabric/bridge
  */
 
 import type { FabricOperation, PatchId } from './types.ts'

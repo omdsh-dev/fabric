@@ -76,7 +76,7 @@ describe('FabricCompatService (unit)', () => {
     // The conflict check runs before the bridge check, so a claimed id fails
     // loud in any process; the bridge check only guards actual registration.
     const { Context } = await import('@deepseek-ai/cordis')
-    const { FabricService } = await import('cordis-fabric')
+    const { FabricService } = await import('@oh-my-dsh/cordis-fabric')
     const { FabricCompatService } = await import('../../src/compat/service.ts')
     const ctx = new Context()
     await ctx.plugin(FabricService)
@@ -99,7 +99,7 @@ describe('FabricCompatService (unit)', () => {
 
   it('unregisterPatch removes the entry so a re-registration starts a fresh ownership cycle', async () => {
     const { Context } = await import('@deepseek-ai/cordis')
-    const { FabricService } = await import('cordis-fabric')
+    const { FabricService } = await import('@oh-my-dsh/cordis-fabric')
     const { FabricCompatService } = await import('../../src/compat/service.ts')
     const ctx = new Context()
     await ctx.plugin(FabricService)

@@ -66,11 +66,11 @@ writeFileSync(join(proj, 'node_modules', 'js-yaml', 'index.js'), [
 
 // The profile's installed trio copy (the preload resolves it through
 // DSH_FABRIC_PROFILE): a stub cordis-fabric recording the descriptor count.
-const stubFabric = join(profileDir, 'node_modules', 'cordis-fabric')
+const stubFabric = join(profileDir, 'node_modules', '@oh-my-dsh', 'cordis-fabric')
 mkdirSync(stubFabric, { recursive: true })
 writeFileSync(join(profileDir, 'package.json'), '{}\n')
 writeFileSync(join(stubFabric, 'package.json'), JSON.stringify({
-  name: 'cordis-fabric', version: '1.0.0', type: 'module', exports: { '.': './index.js' },
+  name: '@oh-my-dsh/cordis-fabric', version: '1.0.0', type: 'module', exports: { '.': './index.js' },
 }))
 writeFileSync(join(stubFabric, 'index.js'),
   'export function bootstrapFabric(descriptors) { console.log(`PROFILE-BOOT count=${descriptors.length}`) }\n')
@@ -78,22 +78,22 @@ writeFileSync(join(stubFabric, 'index.js'),
 // An installed bundle bin derives `web` from this exact profile path. Keep
 // this profile real (not a symlink), so the launcher exercises that path
 // inference rather than only the generic installed mode.
-mkdirSync(join(webProfileDir, 'node_modules'), { recursive: true })
+mkdirSync(join(webProfileDir, 'node_modules', '@oh-my-dsh'), { recursive: true })
 writeFileSync(join(webProfileDir, 'package.json'), '{}\n')
-symlinkSync(stubFabric, join(webProfileDir, 'node_modules', 'cordis-fabric'))
-const installedBundle = join(webProfileDir, 'node_modules', 'cordis-fabric-bundle')
+symlinkSync(stubFabric, join(webProfileDir, 'node_modules', '@oh-my-dsh', 'cordis-fabric'))
+const installedBundle = join(webProfileDir, 'node_modules', '@oh-my-dsh/cordis-fabric-pack')
 const installedLauncherFile = 'fabric-dsh.js'
 const installedLauncher = join(installedBundle, 'lib', installedLauncherFile)
 const installedBundlePackageJson = join(installedBundle, 'package.json')
 mkdirSync(join(installedBundle, 'lib'), { recursive: true })
 writeFileSync(installedBundlePackageJson, JSON.stringify({
-  name: 'cordis-fabric-bundle',
-  dependencies: { 'cordis-fabric': 'file:packages/cordis-fabric' },
+  name: '@oh-my-dsh/cordis-fabric-pack',
+  dependencies: { '@oh-my-dsh/cordis-fabric': 'file:packages/cordis-fabric' },
 }, null, 2))
 copyFileSync(launcher, installedLauncher)
 copyFileSync(compiledPreload, join(installedBundle, 'lib', 'fabric-dsh-preload.js'))
 mkdirSync(join(webProfileDir, 'node_modules', '.bin'), { recursive: true })
-symlinkSync(`../cordis-fabric-bundle/lib/${installedLauncherFile}`, join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'))
+symlinkSync(`../@oh-my-dsh/cordis-fabric-pack/lib/${installedLauncherFile}`, join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'))
 
 // PATH shims: a symlink (npm-global style) and a cmd-shim script (pnpm).
 mkdirSync(shimDir, { recursive: true })

@@ -2,7 +2,7 @@ import type {
   FabricOperation,
   FabricTarget,
   PatchId,
-} from 'cordis-fabric'
+} from '@oh-my-dsh/cordis-fabric'
 
 /** Static patch descriptor of one compat target (the handler is bound at runtime). */
 export interface FabricCompatPatch {

@@ -1,5 +1,5 @@
-import { patchInstrumentation } from 'cordis-fabric'
-import type { FabricInstrumentationConfig } from 'cordis-fabric'
+import { patchInstrumentation } from '@oh-my-dsh/cordis-fabric'
+import type { FabricInstrumentationConfig } from '@oh-my-dsh/cordis-fabric'
 import type { FabricCompatConfig } from './types.ts'
 
 /**

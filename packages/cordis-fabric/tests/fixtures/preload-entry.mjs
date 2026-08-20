@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { add } from './node_modules/fabric-target-fixture/index.mjs'
-import { checkRequiredPatches, flushBindingReports, runtime } from 'cordis-fabric'
+import { checkRequiredPatches, flushBindingReports, runtime } from '@oh-my-dsh/cordis-fabric'
 
 const configPath = process.env.DSH_FABRIC_CONFIG
 

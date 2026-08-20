@@ -9,7 +9,7 @@
  * existing contracts owned by those services. The complete slot type
  * machinery (SlotMap declaration merging, composed props) lives in
  * `dsh-client-ui-slots`; this facade only narrows the registration face.
- * @module cordis-fabric-dsh/browser/client
+ * @module @oh-my-dsh/cordis-fabric-dsh/browser/client
  */
 
 import { Service } from '@deepseek-ai/cordis'

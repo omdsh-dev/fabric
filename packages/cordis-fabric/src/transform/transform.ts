@@ -22,7 +22,7 @@
  * object is preserved by capturing it first. Generator functions transform
  * through delegation (`yield*` over the traced generator), so iteration
  * semantics survive the no-handler and delegated paths.
- * @module cordis-fabric/transform/transform
+ * @module @oh-my-dsh/cordis-fabric/transform/transform
  */
 
 import type { CustomTransform } from '@apm-js-collab/code-transformer'

@@ -16,7 +16,7 @@
  * so installation order (not a globally merged priority sort) decides the
  * nesting across installations on every path. The chain is rebuilt only
  * when the configuration content changes.
- * @module cordis-fabric/node/hook-entry
+ * @module @oh-my-dsh/cordis-fabric/node/hook-entry
  */
 
 import { readFileSync } from 'node:fs'

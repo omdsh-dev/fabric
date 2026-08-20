@@ -15,7 +15,7 @@
  * the process lifetime. The returned disposer therefore deactivates the
  * loader's state (hooks become pass-through, cached transformers are freed)
  * rather than removing the hook functions themselves.
- * @module cordis-fabric/node/loader
+ * @module @oh-my-dsh/cordis-fabric/node/loader
  */
 
 import { Module, register, registerHooks } from 'node:module'

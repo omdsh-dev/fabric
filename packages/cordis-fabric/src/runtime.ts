@@ -13,7 +13,7 @@
  * strand them with a dead slot across fiber reloads. Disabling a patch
  * removes its handler, so transformed code then delegates to the original
  * body through the no-listener path in the bridge.
- * @module cordis-fabric/runtime
+ * @module @oh-my-dsh/cordis-fabric/runtime
  */
 
 import { subscribeBridge, type FabricBridgeCall } from './bridge.ts'

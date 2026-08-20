@@ -11,9 +11,9 @@
 # version selected by the profile.
 - insert:
     - id: cordis-fabric
-      name: 'cordis-fabric'
+      name: '@oh-my-dsh/cordis-fabric'
       disabled: true
 
     - id: cordis-fabric-dsh
-      name: 'cordis-fabric-dsh'
+      name: '@oh-my-dsh/cordis-fabric-dsh'
       disabled: true
