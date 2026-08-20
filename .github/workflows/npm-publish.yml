@@ -1,0 +1,97 @@
+name: npm-publish
+
+# Publish the three Fabric implementation packages and the root bundle through
+# npm Trusted Publishing (GitHub Actions OIDC). Configure this exact workflow
+# filename as the trusted publisher for each of the four npm packages on
+# npmjs.com. The Trusted Publisher owner and repository must be the GitHub
+# repository that runs this workflow.
+"on":
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag and package versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          manifests=(
+            package.json
+            packages/cordis-fabric/package.json
+            packages/cordis-fabric-api/package.json
+            packages/cordis-fabric-dsh/package.json
+          )
+
+          for manifest in "${manifests[@]}"; do
+            name="$(node -p "require('./${manifest}').name")"
+            package_version="$(node -p "require('./${manifest}').version")"
+            if [[ "${package_version}" != "${version}" ]]; then
+              echo "::error::${name}@${package_version} does not match ${RELEASE_TAG}"
+              exit 1
+            fi
+            echo "verified ${name}@${package_version}"
+          done
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Publish Fabric packages and root bundle with OIDC
+        run: |
+          set -euo pipefail
+          # No registry secret is configured. pnpm exchanges the GitHub
+          # Actions OIDC identity for a short-lived npm publish credential.
+          # Publish the implementation packages first so the root bundle's
+          # semver dependencies already exist when its package is published.
+          for dir in \
+            packages/cordis-fabric \
+            packages/cordis-fabric-api \
+            packages/cordis-fabric-dsh \
+            .
+          do
+            echo "publishing ${dir}"
+            pnpm -C "${dir}" publish \
+              --access public \
+              --provenance \
+              --no-git-checks \
+              --registry https://registry.npmjs.org/
+          done
