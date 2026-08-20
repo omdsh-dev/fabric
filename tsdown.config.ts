@@ -1,13 +1,14 @@
 import { defineConfig } from 'tsdown'
 
 /**
- * The published bundle exposes one Node launcher. Keep the launcher source in
- * `src` with the rest of the build inputs, then emit a self-contained ESM bin
- * under `lib` alongside its source map.
+ * The published bundle exposes a Node launcher and its native Node preload.
+ * Keep both sources in `src` with the rest of the build inputs, then emit
+ * self-contained ESM files under `lib` alongside their source maps.
  */
 export default defineConfig({
   entry: {
     'fabric-dsh': 'src/fabric-dsh.ts',
+    'fabric-dsh-preload': 'src/fabric-dsh-preload.ts',
   },
   outDir: 'lib',
   format: 'esm',

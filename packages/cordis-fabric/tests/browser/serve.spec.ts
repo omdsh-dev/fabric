@@ -1,34 +1,116 @@
-// The serveBrowserTransform primitive: boots the REAL webserver and proves
+// The serveBrowserTransform primitive: boots a test HTTP server and proves
 // the exact route outranks the module host's prefix table, serves the
 // transformed fixture bundle (bridge marker present), leaves every other
 // path to the fallback or a prefix route, rejects non-GET methods, and is
 // loud by default when the selector rewrites nothing.
 
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import HttpServerService from '@deepseek-ai/dsh-host-webserver'
 import { serveBrowserTransform, type ServeBrowserTransformOptions } from 'cordis-fabric'
 
+type TestRoute = {
+  kind: 'exact' | 'prefix'
+  path: string
+  handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+}
+
+interface TestWebServer {
+  port: number
+  register(route: TestRoute): () => void
+  close: () => Promise<void>
+}
+
 const contexts: Context[] = []
+const servers: TestWebServer[] = []
 const worlds: string[] = []
 
-/** Boot a real webserver plus one served transform. */
+/** Boot the minimal HTTP server contract consumed by serveBrowserTransform. */
+async function createTestWebServer(): Promise<TestWebServer> {
+  const exact = new Map<string, TestRoute>()
+  const prefixes = new Map<string, TestRoute>()
+  const match = (pathname: string): TestRoute | undefined => {
+    const exactRoute = exact.get(pathname)
+    if (exactRoute !== undefined) return exactRoute
+    let best: TestRoute | undefined
+    for (const [prefix, route] of prefixes) {
+      if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) continue
+      if (best === undefined || prefix.length > best.path.length) best = route
+    }
+    return best
+  }
+  const dispatch = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const route = match(new URL(req.url ?? '/', 'http://test').pathname)
+    if (route === undefined) {
+      res.writeHead(404)
+      res.end()
+      return
+    }
+    await route.handler(req, res)
+  }
+  const httpServer: Server = createServer((req, res) => {
+    dispatch(req, res).catch((error: unknown) => {
+      if (res.headersSent) {
+        res.destroy()
+        return
+      }
+      res.writeHead(500)
+      res.end(String(error instanceof Error ? error.message : error))
+    })
+  })
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once('error', reject)
+    httpServer.listen(0, '127.0.0.1', () => {
+      httpServer.off('error', reject)
+      resolve()
+    })
+  })
+  const address = httpServer.address()
+  if (address === null || typeof address === 'string') throw new Error('test webserver did not expose a TCP address')
+  return {
+    port: (address as AddressInfo).port,
+    register(route) {
+      const routes = route.kind === 'exact' ? exact : prefixes
+      if (routes.has(route.path)) throw new Error(`test webserver: duplicate ${route.kind} route "${route.path}"`)
+      routes.set(route.path, route)
+      return () => {
+        if (routes.get(route.path) === route) routes.delete(route.path)
+      }
+    },
+    close: () => new Promise<void>((resolve, reject) => {
+      httpServer.close(error => error === undefined ? resolve() : reject(error))
+    }),
+  }
+}
+
+async function provideTestWebServer(ctx: Context): Promise<TestWebServer> {
+  const server = await createTestWebServer()
+  servers.push(server)
+  ctx.provide('webServer', server as never)
+  return server
+}
+
+/** Boot a test HTTP server plus one served transform. */
 async function boot(options: ServeBrowserTransformOptions, baseUrl = import.meta.url) {
   const ctx = new Context()
   ctx.baseUrl = baseUrl
   contexts.push(ctx)
-  await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+  const server = await provideTestWebServer(ctx)
   serveBrowserTransform(ctx, options)
-  return { ctx, port: ctx.webServer.port }
+  return { ctx, server, port: server.port }
 }
 
 afterEach(async () => {
   for (const ctx of contexts.splice(0)) {
     await ctx.fiber.dispose()
+  }
+  for (const server of servers.splice(0)) {
+    await server.close()
   }
   for (const world of worlds.splice(0)) {
     await rm(world, { recursive: true, force: true })
@@ -78,7 +160,7 @@ describe('serveBrowserTransform', () => {
   it('requires the composition base URL at registration', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    await provideTestWebServer(ctx)
     expect(() => { serveBrowserTransform(ctx, { route: ROUTE, patch: neutralizer }) })
       .toThrow(/requires ctx\.baseUrl/)
   })
@@ -142,9 +224,9 @@ describe('serveBrowserTransform', () => {
   })
 
   it('the exact route outranks a later prefix route on the same path space', async () => {
-    const { ctx, port } = await boot({ route: ROUTE, patch: neutralizer })
+    const { server, port } = await boot({ route: ROUTE, patch: neutralizer })
     // A prefix route registered AFTER the exact one (the module host's shape).
-    ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: async (_req, res) => {
+    server.register({ kind: 'prefix', path: '/plugins', handler: async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' })
       res.end('prefix-owner')
     } })
@@ -219,7 +301,7 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    await provideTestWebServer(ctx)
     expect(() => {
       serveBrowserTransform(ctx, {
         route: ROUTE,
@@ -232,13 +314,13 @@ describe('serveBrowserTransform', () => {
     const ctx = new Context()
     ctx.baseUrl = import.meta.url
     contexts.push(ctx)
-    await ctx.plugin(HttpServerService, { host: '127.0.0.1', port: 0 })
+    const server = await provideTestWebServer(ctx)
     // The route owner lives on its own plugin fiber, so disposing it removes
     // the route while the webserver keeps serving.
     const routeFiber = await ctx.plugin((c) => {
       serveBrowserTransform(c, { route: ROUTE, patch: neutralizer })
     })
-    const port = ctx.webServer.port
+    const port = server.port
     expect((await fetch(`http://127.0.0.1:${port}${ROUTE}`)).status).toBe(200)
     await routeFiber.dispose()
     expect((await fetch(`http://127.0.0.1:${port}${ROUTE}`)).status).toBe(404)

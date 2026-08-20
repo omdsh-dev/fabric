@@ -9,24 +9,17 @@
   },
   "license": "BSD-3-Clause",
   "files": [
-    "scripts",
     "lib/fabric-dsh.js",
     "lib/fabric-dsh.js.map",
+    "lib/fabric-dsh-preload.js",
+    "lib/fabric-dsh-preload.js.map",
     "cordis.patch.yml",
-    "packages/cordis-fabric/package.json",
-    "packages/cordis-fabric/preload.mjs",
-    "packages/cordis-fabric/lib",
-    "packages/cordis-fabric-api/package.json",
-    "packages/cordis-fabric-api/lib",
-    "packages/cordis-fabric-dsh/package.json",
-    "packages/cordis-fabric-dsh/lib",
     "README.md"
   ],
   "scripts": {
     "build": "pnpm --filter cordis-fabric run build && pnpm --filter cordis-fabric-api run build && pnpm --filter cordis-fabric-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false",
-    "install:host": "bash scripts/install.sh"
+    "typecheck": "tsc --noEmit -p tsconfig.vitest.json --pretty false"
   },
   "dsh": {
     "bundle": {

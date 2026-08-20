@@ -72,7 +72,7 @@ export function resolveProfile({
   env?: NodeJS.ProcessEnv
 }): ResolvedProfile {
   const installedMatch = fileURLToPath(launcherUrl)
-    .match(/^(.*)\/profiles\/([^/]+)\/node_modules\/cordis-fabric-bundle\/(?:lib\/fabric-dsh|scripts\/fabric-dsh)\.(?:js|mjs)$/)
+    .match(/^(.*)\/profiles\/([^/]+)\/node_modules\/cordis-fabric-bundle\/lib\/fabric-dsh\.(?:js|mjs)$/)
   const installedHome = installedMatch?.[1]
   const installedProfile = installedMatch?.[2]
   const installed = installedHome !== undefined && installedProfile !== undefined
@@ -89,8 +89,7 @@ export function resolveProfile({
   if (!existsSync(profileDir)) {
     console.error(`fabric-dsh: profile ${profileName} not found at ${profileDir} (DSH_HOME=${dshHome})`)
     if (source) {
-      console.error(`  install the Fabric bundle first: scripts/install.sh <deepseek-harness-checkout> --dsh-home ${dshHome}`)
-      console.error(`  or: DSH_HOME=${dshHome} pnpm -C <deepseek-harness-checkout> dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
+      console.error(`  install the Fabric release bundle first: dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
     } else {
       console.error(`  install the Fabric bundle first: dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
     }

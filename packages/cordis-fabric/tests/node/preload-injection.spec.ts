@@ -7,13 +7,13 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 /**
  * Preload injection equivalence: the fabric-dsh launcher runs the host CLI as
- * `node --import tsx/esm --import <cordis-fabric/preload.mjs> bin.ts` with
+ * `node --import tsx/esm --import <fabric-dsh-preload.ts> bin.ts` with
  * DSH_FABRIC_CONFIG pointing at the composed descriptors. These cases spawn
  * that exact launcher shape and verify the preload bootstraps the Fabric
  * hooks before the entry module imports its targets — the same guarantee the
  * removed host patch (profile-boot installFabricBootstrap) used to provide.
  */
-const preload = fileURLToPath(new URL('../../preload.mjs', import.meta.url))
+const preload = fileURLToPath(new URL('../../../../src/fabric-dsh-preload.ts', import.meta.url))
 const entry = fileURLToPath(new URL('../fixtures/preload-entry.mjs', import.meta.url))
 
 const patch = {

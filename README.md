@@ -34,8 +34,9 @@ toolset included — is never added as a fourth package; official packages remai
 ## 2. Host integration: launcher-provided wiring
 
 The three packages install hooks and mount facades through the compiled launcher.
-`src/fabric-dsh.ts` compiles to `lib/fabric-dsh.js`, and the launcher injects
-`packages/cordis-fabric/preload.mjs` before the official CLI loads. No host patch
+`src/fabric-dsh.ts` compiles to `lib/fabric-dsh.js`, while
+`src/fabric-dsh-preload.ts` compiles to `lib/fabric-dsh-preload.js`; the launcher
+injects that compiled preload before the official CLI loads. No host patch
 checkout is required.
 
 Everything the official channels already cover is deliberately excluded:
@@ -86,12 +87,11 @@ dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest
 
 pnpm does not need to resolve nested Git or URL packages. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's own dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the bundled preload resolve the same trio copies.
 
-- Host source installs declare the bundle in `apps/cli/package.json`; with
-  launcher-provided host wiring, `scripts/install.sh` installs and builds the
-  harness, then installs the bundle through the plugin channel (joining
-  `cordis-fabric-bundle` to `dsh.profile.bundles`) and enables the
-  `cordis-fabric-dsh` row. Launches go through the compiled
-  `lib/fabric-dsh.js`.
+- Host source installs declare the bundle in `apps/cli/package.json`; run the
+  harness workspace's `pnpm install` and `pnpm run build`, then install the
+  release bundle through the plugin channel (joining `cordis-fabric-bundle` to
+  `dsh.profile.bundles`) and enable the `cordis-fabric-dsh` row. Launches go
+  through the compiled `lib/fabric-dsh.js`.
 - Consumer-side builds use the explicit root `build` script. The trio and the
   launcher are built with tsdown before packing; no install-time prepare build
   is required.
@@ -178,9 +178,9 @@ The sibling `omdsh-dev/ex-setting` bundle hit the same contract three times:
 The upstream suite resolves `src` through tsconfig paths; this repository only
 has registry `lib` artifacts, which drove the evolution below.
 
-- **serve.spec** mounts the real `@deepseek-ai/dsh-host-webserver`
-  (`^0.1.0-rc.0` — rc.1 still registers `httpServer`; `webServer` landed in
-  rc.3, matching the serve primitive).
+- **serve.spec** uses a test-local `node:http` adapter for the host `webServer`
+  service, so exact/prefix routing and real HTTP responses stay covered without
+  a DSH host-webserver test dependency.
 - **hmr-e2e-runner** drives config HMR by toggling the row's `disabled` flag
   in `cordis.yml`: the vendored fork's `hmr.registerConfig` and include
   `internal/update` are fork-private and exist in **no** registry version

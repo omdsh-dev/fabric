@@ -8,15 +8,16 @@
  *   node --import tsx/esm src/fabric-dsh.ts --source <checkout> [...]
  *
  * Installed mode (default) runs a registry-installed @deepseek-ai/dsh: the
- * published lib/bin.js is plain ESM, so no tsx and no checkout are needed.
+ * published lib/bin.js and bundled preload are plain ESM, so no tsx or
+ * checkout is needed.
  * The CLI resolves from DSH_CLI, the caller's project dependencies, or a
  * `dsh` on PATH. Source mode (DSH_SOURCE) runs the checkout's
  * apps/cli/src/bin.ts through tsx instead. Profile resolution follows dsh:
  * DSH_HOME/profiles/<name>.
  *
  * Installed bundle form — no bundle checkout required: the bundle ships this
- * launcher (bin `fabric-dsh`), so after installing the release bundle through
- * the plugin channel (or running `scripts/install.sh`):
+ * launcher (bin `fabric-dsh`) after installation through the release plugin
+ * channel:
  *
  *   $DSH_HOME/profiles/web/node_modules/.bin/fabric-dsh --port 8000
  *
@@ -35,7 +36,6 @@
  * them with the hooks already installed.
  */
 import { spawnSync } from 'node:child_process'
-import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildCliArgs, parseArgs } from './args.ts'
 import { resolveHost, type ResolvedHost } from './cli.ts'
@@ -113,5 +113,5 @@ export function main({
 }
 
 function bundledPreloadPath(launcherUrl: string | URL): string {
-  return join(fileURLToPath(new URL('../packages/cordis-fabric', launcherUrl)), 'preload.mjs')
+  return fileURLToPath(new URL('../lib/fabric-dsh-preload.js', launcherUrl))
 }

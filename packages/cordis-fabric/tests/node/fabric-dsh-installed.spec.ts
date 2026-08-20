@@ -7,8 +7,9 @@ import { afterAll, describe, expect, it } from 'vitest'
 
 /**
  * Installed-mode launcher resolution: without --source, fabric-dsh runs a
- * registry-installed @deepseek-ai/dsh — the published lib/bin.js is plain
- * ESM, so no tsx and no checkout. The CLI resolves from DSH_CLI, the
+ * registry-installed @deepseek-ai/dsh — the published lib/bin.js and bundled
+ * preload are plain ESM, so the installed path needs neither tsx nor a
+ * checkout. The CLI resolves from DSH_CLI, the
  * caller's project dependencies, or a PATH shim (symlink shims and pnpm's
  * cmd-shim script form alike). These offline fixtures stand in for each
  * resolution path; the stub `cordis-fabric` in the profile records what the
@@ -16,9 +17,9 @@ import { afterAll, describe, expect, it } from 'vitest'
  * pre-boot module-fallback heals.
  */
 const compiledLauncher = fileURLToPath(new URL('../../../../lib/fabric-dsh.js', import.meta.url))
-if (!existsSync(compiledLauncher)) throw new Error('lib/fabric-dsh.js is missing; run pnpm run build before the launcher test')
+const compiledPreload = fileURLToPath(new URL('../../../../lib/fabric-dsh-preload.js', import.meta.url))
+if (!existsSync(compiledLauncher) || !existsSync(compiledPreload)) throw new Error('compiled launcher artifacts are missing; run pnpm run build before the launcher test')
 const launcher = compiledLauncher
-const fabricPackage = fileURLToPath(new URL('../../', import.meta.url))
 const sourceBundlePackageJson = fileURLToPath(new URL('../../../../package.json', import.meta.url))
 
 const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-installed-'))
@@ -90,8 +91,7 @@ writeFileSync(installedBundlePackageJson, JSON.stringify({
   dependencies: { 'cordis-fabric': 'file:packages/cordis-fabric' },
 }, null, 2))
 copyFileSync(launcher, installedLauncher)
-mkdirSync(join(installedBundle, 'packages'), { recursive: true })
-symlinkSync(fabricPackage, join(installedBundle, 'packages', 'cordis-fabric'))
+copyFileSync(compiledPreload, join(installedBundle, 'lib', 'fabric-dsh-preload.js'))
 mkdirSync(join(webProfileDir, 'node_modules', '.bin'), { recursive: true })
 symlinkSync(`../cordis-fabric-bundle/lib/${installedLauncherFile}`, join(webProfileDir, 'node_modules', '.bin', 'fabric-dsh'))
 

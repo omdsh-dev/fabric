@@ -1,6 +1,6 @@
 /**
  * Entry module for the preload-injection spec. The fabric-dsh launcher runs
- * the real CLI as `node --import tsx/esm --import <cordis-fabric/preload.mjs>`
+ * the real CLI as `node --import tsx/esm --import <fabric-dsh-preload.ts>`
  * with DSH_FABRIC_CONFIG set, so by the time this file's imports evaluate,
  * bootstrapFabric must already have installed the transformation hooks.
  *
