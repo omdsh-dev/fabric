@@ -21,7 +21,7 @@ The source is layered inside the three packages rather than adding another packa
 ## Installation and bootstrap
 
 ```ts
-import { bootstrapFabric, FabricService } from 'cordis-fabric'
+import { bootstrapFabric, FabricService } from '@oh-my-dsh/cordis-fabric'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -66,7 +66,7 @@ The hooks must be installed before the target module's first evaluation; a patch
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricCall, FabricService } from 'cordis-fabric'
+import type { FabricCall, FabricService } from '@oh-my-dsh/cordis-fabric'
 
 export const inject = ['fabric']
 
@@ -107,7 +107,7 @@ The registration is a fiber effect owned by the registering plugin: disposing th
 The host build seam (`clientBundle`) is owned by the DSH version selected by the profile; this package only provides the transform. A host integration wires the transform into its bundle step:
 
 ```ts ignore-check
-import { createWatchedBrowserTransform, repoSourceResolver } from 'cordis-fabric'
+import { createWatchedBrowserTransform, repoSourceResolver } from '@oh-my-dsh/cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,

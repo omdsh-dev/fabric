@@ -79,9 +79,9 @@ export function main({
   const cliArgs = buildCliArgs(args, profile.effectiveProfile, config.enablePath, config.enableOverlay)
 
   // Heal both dependency closures before the preload imports the profile's
-  // trio: the DSH installation provides host packages, while the bundle's
-  // bundledDependencies provide the Fabric packages. The healer creates the
-  // profile-level names from the bundle's real nested package locations.
+  // trio: the DSH installation provides host packages, while the root
+  // bundle's declared npm dependencies provide the Fabric packages. The healer
+  // creates the profile-level names from the installed package locations.
   const bundlePackageJson = fileURLToPath(new URL('../package.json', launcherUrl))
   const healEval = host.source
     ? `const { healProfilesModuleFallback } = await import('@deepseek-ai/dsh-app-boot'); healProfilesModuleFallback(${JSON.stringify(bundlePackageJson)}); healProfilesModuleFallback(${JSON.stringify(host.cliPkgJson)})`

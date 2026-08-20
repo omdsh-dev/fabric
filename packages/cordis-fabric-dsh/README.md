@@ -32,7 +32,7 @@ approval, cancellation, or execution semantics.
 The root entry is a named-export Cordis plugin; it has no default export:
 
 ```ts
-import * as FabricDsh from 'cordis-fabric-dsh'
+import * as FabricDsh from '@oh-my-dsh/cordis-fabric-dsh'
 import type { Context } from '@deepseek-ai/cordis'
 
 declare const ctx: Context

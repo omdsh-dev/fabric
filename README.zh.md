@@ -12,13 +12,18 @@
 
 ## 1. 目的:外部化的 Fabric 扩展,而非 fork
 
-deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个扩展包存在,但消费者无法从 registry 安装它们。本仓库把这**恰好三个包**外部化,使其能通过官方插件通道安装:
+deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个实现包
+存在,但消费者无法从 registry 安装它们。本仓库外部化这三个包,并发布
+`@oh-my-dsh/cordis-fabric-pack` carrier,使消费者能通过官方插件通道安装完整 bundle:
 
 ```
 dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
-**边界(硬规则):** 工作区只发布恰好三个完整包——`cordis-fabric`(纯转换服务)、`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、profile bootstrap)。官方 `@deepseek-ai/dsh-tool-cordis` 保持为上游依赖，不在此重新发布，也绝不作为第四个包加入。
+**边界(硬规则):** 工作区包含恰好三个完整实现包——`cordis-fabric`(纯转换服务)、
+`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、
+profile bootstrap)。根包 `@oh-my-dsh/cordis-fabric-pack` 是单独发布的 carrier,不是第四个实现包。
+官方 `@deepseek-ai/dsh-tool-cordis` 保持为上游依赖,不在此重新发布。
 
 ## 2. Host 集成:由 launcher 提供接线
 
@@ -37,15 +42,17 @@ web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disab
 
 `dsh` 的 source 启动(`node --import tsx/esm apps/cli/src/bin.ts`)一度看起来需要 `TSX_TSCONFIG_PATH` 或 register preload:`FiberState`(const enum,只在 `vendor/cordis/src` 存在)解析失败。两个 workaround 都曾发布,后来**全部撤销**——真正原因是 shell 里一个指向旧 staging checkout 的过期 `TSX_TSCONFIG_PATH`。干净环境下 tsx 自动发现入口的 tsconfig(继承 base)并把别名解析到 `src`。官方脚本原样运行;patch 中不存在相关接缝。
 
-## 3. 安装模型:自包含 release bundle
+## 3. 安装模型:release bundle
 
-根 bundle 记录已发布的 trio tarball,并通过 `bundledDependencies` 携带预构建的 trio:
+可发布的根 bundle `@oh-my-dsh/cordis-fabric-pack` 声明三个已发布的 npm 实现包：
 
 ```
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric.tgz
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-api.tgz
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.tgz
+@oh-my-dsh/cordis-fabric@^0.1.0
+@oh-my-dsh/cordis-fabric-api@^0.1.0
+@oh-my-dsh/cordis-fabric-dsh@^0.1.0
 ```
+
+同一个 tag workflow 会在这三个包之后发布根 carrier,确保它的 semver 依赖已经存在于 npm。
 
 这样 release 安装只需一个包:
 
@@ -53,14 +60,14 @@ https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.t
 dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
-pnpm 不需要解析嵌套的 Git 或 URL 包。启动时 `fabric-dsh` 调用 DSH 的 module-fallback healer,把 bundle 自己的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 bundled preload 使用同一套 trio 副本。
+安装时由 pnpm 解析这些 npm semver 依赖;启动时 `fabric-dsh` 调用 DSH 的 module-fallback healer,把 bundle 的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 preload 解析到同一套 trio 副本。
 
-- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装 release bundle(把 `cordis-fabric-bundle` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
+- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装 release bundle(把 `@oh-my-dsh/cordis-fabric-pack` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
 - 消费侧构建使用根目录显式的 `build` 脚本;trio 与 launcher 在打包前由 tsdown 构建,不需要安装期 `prepare`。
 
 ### 3.1 pnpm 11 供应链接缝
 
-自包含 bundle 不需要在 Profile 中设置 `blockExoticSubdeps: false`,也不需要 Git prepare allowlist 或 `dangerouslyAllowAllBuilds`。workspace 仍允许原生 `esbuild` 构建,并排除快速发布的 DSH rc 序列的 minimum-release-age 检查:
+release bundle 不需要在 Profile 中设置 `blockExoticSubdeps: false`,也不需要 Git prepare allowlist 或 `dangerouslyAllowAllBuilds`。workspace 仍允许原生 `esbuild` 构建,并排除快速发布的 DSH rc 序列的 minimum-release-age 检查:
 
 - 本 workspace 的 `allowBuilds: esbuild`;
 - `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']`——dsh-* rc 序列总在 24h 窗口内发布,仅写包名豁免所有版本。
@@ -90,7 +97,7 @@ trio 一度声明 `host-contracts.ts` facade 加一个全局 `@deepseek-ai/cordi
 web shell 以 classic script 加载 `/plugins/<id>/client.js`,值导入通过 loader 模块表(factory 内的同步 `require`)解析。纯 ESM 产物在那里完全加载不起来。因此 trio 的两个浏览器半边都发布为 closure factory:
 
 ```js
-window.__ModuleLoader__.load({ id: "cordis-fabric", factory: (require) => { ...; return module.exports; } })
+window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require) => { ...; return module.exports; } })
 ```
 
 `@deepseek-ai/cordis` 保持 external(平台 seed),其余全部内联。先改的是 `cordis-fabric`;随后 `cordis-fabric-dsh`(同样的缺口,在 ex-setting 安装暴露第一个之后修复)。上游从不察觉——其 monorepo 通过共享的 `clientBundle()` 预设构建两者。

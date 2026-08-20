@@ -17,19 +17,22 @@ than its file layout.
 ## 1. Purpose: an external Fabric extension, not a fork
 
 deepseek-harness is a private monorepo. The Fabric/Mixin extension layer lives
-there as three extension packages, but a consumer cannot install them from the
-registry. This repository externalizes exactly those three packages so they can
-be installed through the official plugin channel:
+there as three implementation packages, but a consumer cannot install them from
+the registry. This repository externalizes those three packages and publishes
+the `@oh-my-dsh/cordis-fabric-pack` carrier so consumers can install the complete bundle
+through the official plugin channel:
 
 ```
 dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
-**Boundary (hard rule):** the workspace ships exactly three complete packages —
-`cordis-fabric` (pure transformation service), `cordis-fabric-api` (pure compat
-facade), `cordis-fabric-dsh` (DSH-facing facades, invariant, profile
-bootstrap). Anything else — the official `@deepseek-ai/dsh-tool-cordis`
-toolset included — is never added as a fourth package; official packages remain upstream dependencies and are not republished here.
+**Boundary (hard rule):** the workspace contains exactly three complete
+implementation packages — `cordis-fabric` (pure transformation service),
+`cordis-fabric-api` (pure compat facade), and `cordis-fabric-dsh` (DSH-facing
+facades, invariant, profile bootstrap). The root `@oh-my-dsh/cordis-fabric-pack` is a
+separately publishable carrier, not a fourth implementation package. Anything
+else — including the official `@deepseek-ai/dsh-tool-cordis` toolset — remains
+an upstream dependency and is not republished here.
 
 ## 2. Host integration: launcher-provided wiring
 
@@ -68,16 +71,19 @@ clean environment tsx auto-discovers the entry's tsconfig (extending the base)
 and resolves the aliases to `src`. The official script runs unchanged; no
 host-specific workaround is required.
 
-## 3. Install model: self-contained release bundle
+## 3. Install model: release bundle
 
-The root bundle records the published trio tarballs and ships the prebuilt trio
-inside `bundledDependencies`:
+The publishable root bundle `@oh-my-dsh/cordis-fabric-pack` declares the three published
+npm implementation packages:
 
 ```
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric.tgz
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-api.tgz
-https://github.com/omdsh-dev/fabric/releases/latest/download/cordis-fabric-dsh.tgz
+@oh-my-dsh/cordis-fabric@^0.1.0
+@oh-my-dsh/cordis-fabric-api@^0.1.0
+@oh-my-dsh/cordis-fabric-dsh@^0.1.0
 ```
+
+The same tag workflow publishes the root carrier after those three packages,
+so its semver dependencies already exist on npm.
 
 This keeps the release installation to one package:
 
@@ -85,11 +91,11 @@ This keeps the release installation to one package:
 dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
 ```
 
-pnpm does not need to resolve nested Git or URL packages. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's own dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the bundled preload resolve the same trio copies.
+At installation, pnpm resolves those npm semver dependencies. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the preload resolve the same trio copies.
 
 - Host source installs declare the bundle in `apps/cli/package.json`; run the
   harness workspace's `pnpm install` and `pnpm run build`, then install the
-  release bundle through the plugin channel (joining `cordis-fabric-bundle` to
+  release bundle through the plugin channel (joining `@oh-my-dsh/cordis-fabric-pack` to
   `dsh.profile.bundles`) and enable the `cordis-fabric-dsh` row. Launches go
   through the compiled `lib/fabric-dsh.js`.
 - Consumer-side builds use the explicit root `build` script. The trio and the
@@ -98,7 +104,7 @@ pnpm does not need to resolve nested Git or URL packages. At launch, `fabric-dsh
 
 ### 3.1 pnpm 11 supply-chain seams
 
-The self-contained bundle does not require `blockExoticSubdeps: false`, a Git
+The release bundle does not require `blockExoticSubdeps: false`, a Git
 prepare allowlist, or `dangerouslyAllowAllBuilds` in the Profile. The workspace
 still allows the native `esbuild` build and excludes the fast-moving DSH rc
 train from minimum-release-age checks:
@@ -150,7 +156,7 @@ the factory). Plain ESM bundles cannot load there at all. Consequently both
 trio browser halves ship as closure factories:
 
 ```js
-window.__ModuleLoader__.load({ id: "cordis-fabric", factory: (require) => { ...; return module.exports; } })
+window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require) => { ...; return module.exports; } })
 ```
 
 with `@deepseek-ai/cordis` external (a platform seed) and everything else

@@ -21,7 +21,7 @@
 ## 安装和 bootstrap
 
 ```ts
-import { bootstrapFabric, FabricService } from 'cordis-fabric'
+import { bootstrapFabric, FabricService } from '@oh-my-dsh/cordis-fabric'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -63,7 +63,7 @@ hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对�
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricCall, FabricService } from 'cordis-fabric'
+import type { FabricCall, FabricService } from '@oh-my-dsh/cordis-fabric'
 
 export const inject = ['fabric']
 
@@ -104,7 +104,7 @@ export function apply(ctx: Context & { fabric: FabricService }): void {
 宿主构建接缝（`clientBundle`）由 profile 选择的 DSH 版本提供；本包只提供 transform。宿主集成把 transform 接入自己的 bundle 步骤：
 
 ```ts ignore-check
-import { createWatchedBrowserTransform, repoSourceResolver } from 'cordis-fabric'
+import { createWatchedBrowserTransform, repoSourceResolver } from '@oh-my-dsh/cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,

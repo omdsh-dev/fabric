@@ -44,7 +44,7 @@ The root entry of `cordis-fabric-dsh` is the standard Host bundle; each new laye
 Mount the Host bundle (or one subpath) where the authoritative services are present:
 
 ```ts
-import * as fabricDsh from 'cordis-fabric-dsh'
+import * as fabricDsh from '@oh-my-dsh/cordis-fabric-dsh'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -60,14 +60,14 @@ await ctx.plugin(fabricDsh)
 The compat facade is a peer library a Mod mounts itself (the bundle patch does not add a `cordis-fabric-api` row):
 
 ```ts
-import { FabricCompatService } from 'cordis-fabric-api/compat/service'
+import { FabricCompatService } from '@oh-my-dsh/cordis-fabric-api/compat/service'
 ```
 
 A Mod declares only the modules it consumes:
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricAgentService, FabricPromptService } from 'cordis-fabric-dsh'
+import type { FabricAgentService, FabricPromptService } from '@oh-my-dsh/cordis-fabric-dsh'
 
 export const name = 'my-mod'
 export const inject = ['fabricAgent', 'fabricPrompt']

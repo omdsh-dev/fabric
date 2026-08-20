@@ -23,7 +23,7 @@
 根入口是 named-export Cordis plugin,没有 default export:
 
 ```ts
-import * as FabricDsh from 'cordis-fabric-dsh'
+import * as FabricDsh from '@oh-my-dsh/cordis-fabric-dsh'
 import type { Context } from '@deepseek-ai/cordis'
 
 declare const ctx: Context

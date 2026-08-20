@@ -44,7 +44,7 @@ Mod 仍然是普通 Cordis 插件,只声明它所消费的 Fabric 模块 service
 在权威 service 存在的位置挂载 Host bundle(或某个 subpath):
 
 ```ts
-import * as fabricDsh from 'cordis-fabric-dsh'
+import * as fabricDsh from '@oh-my-dsh/cordis-fabric-dsh'
 import type { Context } from 'cordis'
 
 declare const ctx: Context
@@ -60,14 +60,14 @@ await ctx.plugin(fabricDsh)
 Compat facade 是 peer 库,由 Mod 自行挂载(bundle patch 不添加 `cordis-fabric-api` 行):
 
 ```ts
-import { FabricCompatService } from 'cordis-fabric-api/compat/service'
+import { FabricCompatService } from '@oh-my-dsh/cordis-fabric-api/compat/service'
 ```
 
 Mod 只声明它消费的模块:
 
 ```ts
 import type { Context } from 'cordis'
-import type { FabricAgentService, FabricPromptService } from 'cordis-fabric-dsh'
+import type { FabricAgentService, FabricPromptService } from '@oh-my-dsh/cordis-fabric-dsh'
 
 export const name = 'my-mod'
 export const inject = ['fabricAgent', 'fabricPrompt']
