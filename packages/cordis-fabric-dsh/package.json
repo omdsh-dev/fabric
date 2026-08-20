@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-dsh/cordis-fabric-dsh",
   "description": "DSH integrations for the Cordis Fabric layer: DSH-facing facades, the package invariant, and the DSH profile bootstrap that composes the pure fabric hooks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

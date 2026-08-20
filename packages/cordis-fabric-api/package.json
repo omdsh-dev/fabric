@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-dsh/cordis-fabric-api",
   "description": "Cooperative Fabric API: the pure-Cordis compat facade over the cordis-fabric registry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

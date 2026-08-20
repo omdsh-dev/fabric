@@ -1,7 +1,7 @@
 {
   "name": "@oh-my-dsh/cordis-fabric-pack",
   "description": "Fabric/Mixin extension workspace: installable profile bundle carrier over the cordis-fabric package trio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {
@@ -34,9 +34,9 @@
     }
   },
   "dependencies": {
-    "@oh-my-dsh/cordis-fabric": "^0.1.0",
-    "@oh-my-dsh/cordis-fabric-api": "^0.1.0",
-    "@oh-my-dsh/cordis-fabric-dsh": "^0.1.0"
+    "@oh-my-dsh/cordis-fabric": "^0.1.1",
+    "@oh-my-dsh/cordis-fabric-api": "^0.1.1",
+    "@oh-my-dsh/cordis-fabric-dsh": "^0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
