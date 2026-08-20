@@ -23,7 +23,7 @@ the `@oh-my-dsh/cordis-fabric-pack` carrier so consumers can install the complet
 through the official plugin channel:
 
 ```
-dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+dsh plugin --profile <p> add @oh-my-dsh/cordis-fabric-pack
 ```
 
 **Boundary (hard rule):** the workspace contains exactly three complete
@@ -71,31 +71,31 @@ clean environment tsx auto-discovers the entry's tsconfig (extending the base)
 and resolves the aliases to `src`. The official script runs unchanged; no
 host-specific workaround is required.
 
-## 3. Install model: release bundle
+## 3. Install model: npm bundle
 
 The publishable root bundle `@oh-my-dsh/cordis-fabric-pack` declares the three published
 npm implementation packages:
 
 ```
-@oh-my-dsh/cordis-fabric@^0.1.0
-@oh-my-dsh/cordis-fabric-api@^0.1.0
-@oh-my-dsh/cordis-fabric-dsh@^0.1.0
+@oh-my-dsh/cordis-fabric@^0.1.1
+@oh-my-dsh/cordis-fabric-api@^0.1.1
+@oh-my-dsh/cordis-fabric-dsh@^0.1.1
 ```
 
 The same tag workflow publishes the root carrier after those three packages,
 so its semver dependencies already exist on npm.
 
-This keeps the release installation to one package:
+This keeps installation to one npm package:
 
 ```sh
-dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+dsh plugin --profile web add @oh-my-dsh/cordis-fabric-pack
 ```
 
 At installation, pnpm resolves those npm semver dependencies. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the preload resolve the same trio copies.
 
 - Host source installs declare the bundle in `apps/cli/package.json`; run the
   harness workspace's `pnpm install` and `pnpm run build`, then install the
-  release bundle through the plugin channel (joining `@oh-my-dsh/cordis-fabric-pack` to
+  published npm bundle through the plugin channel (joining `@oh-my-dsh/cordis-fabric-pack` to
   `dsh.profile.bundles`) and enable the `cordis-fabric-dsh` row. Launches go
   through the compiled `lib/fabric-dsh.js`.
 - Consumer-side builds use the explicit root `build` script. The trio and the
@@ -104,7 +104,7 @@ At installation, pnpm resolves those npm semver dependencies. At launch, `fabric
 
 ### 3.1 pnpm 11 supply-chain seams
 
-The release bundle does not require `blockExoticSubdeps: false`, a Git
+The npm bundle does not require `blockExoticSubdeps: false`, a Git
 prepare allowlist, or `dangerouslyAllowAllBuilds` in the Profile. The workspace
 still allows the native `esbuild` build and excludes the fast-moving DSH rc
 train from minimum-release-age checks:

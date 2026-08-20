@@ -89,9 +89,9 @@ export function resolveProfile({
   if (!existsSync(profileDir)) {
     console.error(`fabric-dsh: profile ${profileName} not found at ${profileDir} (DSH_HOME=${dshHome})`)
     if (source) {
-      console.error(`  install the Fabric release bundle first: dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
+      console.error(`  install the Fabric npm bundle first: dsh plugin --profile ${profileName} add @oh-my-dsh/cordis-fabric-pack`)
     } else {
-      console.error(`  install the Fabric bundle first: dsh plugin --profile ${profileName} add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz`)
+      console.error(`  install the Fabric npm bundle first: dsh plugin --profile ${profileName} add @oh-my-dsh/cordis-fabric-pack`)
     }
     process.exit(1)
   }

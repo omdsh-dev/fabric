@@ -17,7 +17,7 @@ deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个�
 `@oh-my-dsh/cordis-fabric-pack` carrier,使消费者能通过官方插件通道安装完整 bundle:
 
 ```
-dsh plugin --profile <p> add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+dsh plugin --profile <p> add @oh-my-dsh/cordis-fabric-pack
 ```
 
 **边界(硬规则):** 工作区包含恰好三个完整实现包——`cordis-fabric`(纯转换服务)、
@@ -42,32 +42,32 @@ web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disab
 
 `dsh` 的 source 启动(`node --import tsx/esm apps/cli/src/bin.ts`)一度看起来需要 `TSX_TSCONFIG_PATH` 或 register preload:`FiberState`(const enum,只在 `vendor/cordis/src` 存在)解析失败。两个 workaround 都曾发布,后来**全部撤销**——真正原因是 shell 里一个指向旧 staging checkout 的过期 `TSX_TSCONFIG_PATH`。干净环境下 tsx 自动发现入口的 tsconfig(继承 base)并把别名解析到 `src`。官方脚本原样运行;patch 中不存在相关接缝。
 
-## 3. 安装模型:release bundle
+## 3. 安装模型:npm bundle
 
 可发布的根 bundle `@oh-my-dsh/cordis-fabric-pack` 声明三个已发布的 npm 实现包：
 
 ```
-@oh-my-dsh/cordis-fabric@^0.1.0
-@oh-my-dsh/cordis-fabric-api@^0.1.0
-@oh-my-dsh/cordis-fabric-dsh@^0.1.0
+@oh-my-dsh/cordis-fabric@^0.1.1
+@oh-my-dsh/cordis-fabric-api@^0.1.1
+@oh-my-dsh/cordis-fabric-dsh@^0.1.1
 ```
 
 同一个 tag workflow 会在这三个包之后发布根 carrier,确保它的 semver 依赖已经存在于 npm。
 
-这样 release 安装只需一个包:
+这样安装只需一个 npm 包:
 
 ```sh
-dsh plugin --profile web add https://github.com/omdsh-dev/fabric/releases/latest/download/pkg.tgz
+dsh plugin --profile web add @oh-my-dsh/cordis-fabric-pack
 ```
 
 安装时由 pnpm 解析这些 npm semver 依赖;启动时 `fabric-dsh` 调用 DSH 的 module-fallback healer,把 bundle 的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 preload 解析到同一套 trio 副本。
 
-- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装 release bundle(把 `@oh-my-dsh/cordis-fabric-pack` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
+- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装已发布的 npm bundle(把 `@oh-my-dsh/cordis-fabric-pack` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
 - 消费侧构建使用根目录显式的 `build` 脚本;trio 与 launcher 在打包前由 tsdown 构建,不需要安装期 `prepare`。
 
 ### 3.1 pnpm 11 供应链接缝
 
-release bundle 不需要在 Profile 中设置 `blockExoticSubdeps: false`,也不需要 Git prepare allowlist 或 `dangerouslyAllowAllBuilds`。workspace 仍允许原生 `esbuild` 构建,并排除快速发布的 DSH rc 序列的 minimum-release-age 检查:
+npm bundle 不需要在 Profile 中设置 `blockExoticSubdeps: false`,也不需要 Git prepare allowlist 或 `dangerouslyAllowAllBuilds`。workspace 仍允许原生 `esbuild` 构建,并排除快速发布的 DSH rc 序列的 minimum-release-age 检查:
 
 - 本 workspace 的 `allowBuilds: esbuild`;
 - `minimumReleaseAgeExclude: ['@deepseek-ai/dsh-*']`——dsh-* rc 序列总在 24h 窗口内发布,仅写包名豁免所有版本。
