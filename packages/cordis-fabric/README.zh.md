@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-基于 Orchestrion-JS 的 Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认 DSH composition 不会挂载它，patch 通过受信任代码注册。
+基于 Orchestrion-JS 的 Fabric/Mixin 风格扩展层，服务于受信任的 Cordis 插件。service 是 opt-in：默认宿主 composition 不会挂载它，patch 通过受信任代码注册。
 
 ## 它能做什么
 
@@ -15,7 +15,7 @@
 | `around` | 决定原函数体是否执行，并可替换其结果（调用 `invoke()` 委托）。 |
 | `replace` | 完全接管调用；只有 handler 调用 `invoke()` 时才执行原函数体。 |
 
-源码分层在三个既有包内部完成，不新增第四个包：`cordis-fabric/src/transform` 负责平台无关的 instrumentation 配置和 AST 重写；`src/node` 负责 Node hooks、模块身份和 loader-thread wire 传输；`src/browser` 负责浏览器变换和运行时 bundle serving；`src/hmr` 负责 HMR generation ownership 与 Node cache 重新变换；`src/testing` 负责子进程测试夹具。`cordis-fabric-api/src/compat` 分开合作式 contract、instrumentation builder 与 service。`cordis-fabric-dsh/src/host`、`src/browser`、`src/bootstrap` 分开 DSH facade、浏览器服务和 profile 组装。DSH catalog adapter 由 `cordis-fabric-dsh` 挂载，纯 Fabric service 不再依赖 catalog。
+源码分层在三个既有包内部完成，不新增第四个包：`cordis-fabric/src/transform` 负责平台无关的 instrumentation 配置和 AST 重写；`src/node` 负责 Node hooks、模块身份和 loader-thread wire 传输；`src/browser` 负责浏览器变换和运行时 bundle serving；`src/hmr` 负责 HMR generation ownership 与 Node cache 重新变换；`src/testing` 负责子进程测试夹具。`cordis-fabric-api/src/compat` 分开合作式 contract、instrumentation builder 与 service。伴随的宿主集成包提供 `src/host`、`src/browser`、`src/bootstrap` 入口，分别负责宿主 facade、浏览器服务和 profile 组装；其 catalog adapter 由该集成包挂载，因此纯 Fabric service 不依赖 catalog。
 
 
 ## 安装和 bootstrap
@@ -30,13 +30,13 @@ await ctx.plugin(FabricService)
 disposeHooks()
 ```
 
-`bootstrapFabric` 校验 patches、构建它们的 Orchestrion instrumentation 并安装变换 hooks。在 `dsh` 宿主中，`cordis-fabric` composition 行在 `config.fabric.patches` 下携带静态描述（id/target/operation——handler 是注册时绑定的受信任代码）时，会在 `boot()` 准备阶段自动 bootstrap，早于任何 config-tree entry 挂载；已弃用的 `config.patches` 键仍被兼容并记录警告。当 instrumentation 已经构建好时，`installFabricHooks` 是更底层的形态。
+`bootstrapFabric` 校验 patches、构建它们的 Orchestrion instrumentation 并安装变换 hooks。在宿主中，`cordis-fabric` composition 行在 `config.fabric.patches` 下携带静态描述（id/target/operation——handler 是注册时绑定的受信任代码）时，会在 `boot()` 准备阶段自动 bootstrap，早于任何 config-tree entry 挂载。当 instrumentation 已经构建好时，`installFabricHooks` 是更底层的形态。
 
-patch 可以设置 `required: true`：一旦应用启动完成、所有目标模块都已导入，`checkRequiredPatches(patches)` 会在某个 required patch 的变换从未重写过任何东西时 loud 失败，并点名该 patch id 与其目标——`filePath` 可能是错误的启动形态（`src/index.ts` 对 `lib/index.js`），或函数已移动。`dsh` 宿主在 `boot()` 完成后自动运行此检查。一个 patch id 覆盖多种启动形态，既可用 RegExp `filePath`（如 `/^(src\/index\.ts|lib\/index\.js)$/`），也可用 `filePaths` 数组便捷项（每项展开为同 id 下的一份 instrumentation，每个命中的文件一条绑定记录）。检查所依赖的加载期绑定按被变换的文件逐条记录，可通过 `ctx.fabric.bindings(id?)` 和每条 `list()` 条目查看。
+patch 可以设置 `required: true`：一旦应用启动完成、所有目标模块都已导入，`checkRequiredPatches(patches)` 会在某个 required patch 的变换从未重写过任何东西时 loud 失败，并点名该 patch id 与其目标——`filePath` 可能是错误的启动形态（`src/index.ts` 对 `lib/index.js`），或函数已移动。宿主会在 `boot()` 完成后自动运行此检查。一个 patch id 覆盖多种启动形态，既可用 RegExp `filePath`（如 `/^(src\/index\.ts|lib\/index\.js)$/`），也可用 `filePaths` 数组便捷项（每项展开为同 id 下的一份 instrumentation，每个命中的文件一条绑定记录）。检查所依赖的加载期绑定按被变换的文件逐条记录，可通过 `ctx.fabric.bindings(id?)` 和每条 `list()` 条目查看。
 
 ```yaml
 # User overlay:纯 service row 作为 descriptor carrier 保持 disabled。
-# 它的 package root 没有 Loader `apply`;DSH integration row 单独启用。
+# 它的 package root 没有 Loader `apply`;单独启用宿主 integration row。
 - id: cordis-fabric
   disabled: true
   config:
@@ -54,7 +54,7 @@ patch 可以设置 `required: true`：一旦应用启动完成、所有目标模
   disabled: false
 ```
 
-DSH integration row 负责挂载 Host facade。核心包的 browser half（`./client`，实现位于 `src/browser/client`）是独立的 dshClient artifact,在 browser entry 物化时安装 `ctx.fabric`;它不会把 package root 变成 Loader plugin。
+宿主 integration row 负责挂载 Host facade。核心包的 browser half（`./client`，实现位于 `src/browser/client`）是独立的 client artifact,在 browser entry 物化时安装 `ctx.fabric`;它不会把 package root 变成 Loader plugin。
 
 hooks 必须在目标模块首次求值前安装；之后注册的 patch 只对后续才被变换的模块生效。`registerHooks` API 没有 unregister，因此返回的 disposer 只是停用该安装的状态，而不是移除 hook 函数本身。
 
@@ -101,18 +101,18 @@ export function apply(ctx: Context & { fabric: FabricService }): void {
 
 ## Browser 构建用法
 
-宿主构建接缝（`clientBundle`）由 profile 选择的 DSH 版本提供；本包只提供 transform。宿主集成把 transform 接入自己的 bundle 步骤：
+宿主构建接缝（`clientBundle`）由 profile 选择的宿主版本提供；本包只提供 transform。宿主集成把 transform 接入自己的 bundle 步骤：
 
 ```ts ignore-check
 import { createWatchedBrowserTransform, repoSourceResolver } from '@oh-my-dsh/cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
-  repoSourceResolver('@deepseek-ai/dsh-client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
+  repoSourceResolver('@example/client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
 )
 ```
 
-patches 文件是一个静态 patch stub 的 JSON 数组（与 launcher 的 `config.patches` 行同形；JSON 无法表达 `RegExp` `filePath`，因此文件路径是字符串），文件畸形会在构建期失败即显式。变换在每个模块上把该文件注册进打包器的 watch 图，因此在 `tsdown --watch`（`pnpm run dev:web`）下编辑它会用新 patch 集合重建 bundle——这就是构建触发器——重建产物经 client-hmr 链（stat 轮询、`rebuilt` 帧、invalidate/prefetch/换纤）送达浏览器。静态内存 patch 集合仍可直接使用 `createBrowserTransform`。
+patches 文件是一个静态 patch stub 的 JSON 数组（与 profile 行的 `config.fabric.patches` 形状相同；JSON 无法表达 `RegExp` `filePath`，因此文件路径是字符串），文件畸形会在构建期失败即显式。变换在每个模块上把该文件注册进打包器的 watch 图，因此在 `tsdown --watch`（`pnpm run dev:web`）下编辑它会用新 patch 集合重建 bundle——这就是构建触发器——重建产物经 client-hmr 链（stat 轮询、`rebuilt` 帧、invalidate/prefetch/换纤）送达浏览器。静态内存 patch 集合仍可直接使用 `createBrowserTransform`。
 
 resolver 把包自身的源码树映射到包身份；不使用上游 adapter，因为它要求 `node_modules` 边界，而仓库源码构建没有该边界。TypeScript 源码会在变换前剥离类型注解（transformer 解析编译后的 JavaScript）。
 

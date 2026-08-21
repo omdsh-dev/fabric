@@ -21,29 +21,21 @@ export interface FabricProfileRow {
 /** The composed profile rows this bootstrap reads (id → row). */
 export type FabricProfileRows = ReadonlyMap<string, FabricProfileRow>
 
-/** One Fabric row's config surface: the namespaced patch stubs and the deprecated legacy key. */
+/** One Fabric row's config surface: the namespaced patch stubs. */
 interface FabricRowConfig {
   fabric?: { patches?: unknown }
-  patches?: unknown
 }
 
 /**
  * Read the composed `cordis-fabric` row's patch stubs from the dedicated
- * `config.fabric.patches` section, falling back to the deprecated
- * `config.patches` key with a warning. The row's `disabled` flag governs
+ * `config.fabric.patches` section. The row's `disabled` flag governs
  * mounting the plugin only; the bootstrap reads this section whenever it is
  * present.
  * @param rowConfig - the row's config, when the row exists.
- * @param warn - deprecation sink.
  * @returns the patch descriptors, or undefined when none are declared.
  */
-function fabricDescriptors(rowConfig: FabricRowConfig | undefined, warn: (message: string) => void): unknown {
-  if (rowConfig?.fabric?.patches !== undefined) return rowConfig.fabric.patches
-  if (rowConfig?.patches !== undefined) {
-    warn('cordis-fabric: config.patches is deprecated; move the patch stubs under config.fabric.patches')
-    return rowConfig.patches
-  }
-  return undefined
+function fabricDescriptors(rowConfig: FabricRowConfig | undefined): unknown {
+  return rowConfig?.fabric?.patches
 }
 
 /**
@@ -51,20 +43,18 @@ function fabricDescriptors(rowConfig: FabricRowConfig | undefined, warn: (messag
  *
  * The optional `cordis-fabric` row may carry static patch descriptors under
  * `config.fabric.patches` (id/target/operation — handlers are trusted code
- * bound at registration); the deprecated `config.patches` key is still
- * honored with a warning. The hooks must exist before any target plugin
- * module is imported, so this runs in the boot `prepare` phase, before the
- * config tree mounts. The row's `disabled` flag governs mounting the plugin
- * (the browser roster keeps the row disabled by default); it does not
- * suppress the load-time bootstrap — patches from the composed row apply
- * whenever the row carries them. When the row is absent or carries no
- * patches, nothing is installed.
+ * bound at registration). The hooks must exist before any target plugin is
+ * imported, so this runs in the boot `prepare` phase, before the config tree
+ * mounts. The row's `disabled` flag governs mounting the plugin (the browser
+ * roster keeps the row disabled by default); it does not suppress the
+ * load-time bootstrap — patches from the composed row apply whenever the row
+ * carries them. When the row is absent or carries no patches, nothing is
+ * installed.
  * @param rows - the fully composed profile rows for this invocation.
- * @param warn - deprecation sink for the legacy config key.
  */
-export async function installFabricBootstrap(rows: FabricProfileRows, warn: (message: string) => void = () => {}): Promise<void> {
+export async function installFabricBootstrap(rows: FabricProfileRows): Promise<void> {
   const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
-  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, warn)
+  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined)
   if (!Array.isArray(descriptors) || descriptors.length === 0) return
   const { bootstrapFabric } = await import('@oh-my-dsh/cordis-fabric')
   bootstrapFabric(descriptors as FabricPatchStub[])
@@ -81,7 +71,7 @@ export async function installFabricBootstrap(rows: FabricProfileRows, warn: (mes
  */
 export async function checkFabricRequiredPatches(rows: FabricProfileRows): Promise<void> {
   const fabricRow = [...rows].find(([id]) => id === 'cordis-fabric')?.[1]
-  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined, () => {})
+  const descriptors = fabricDescriptors(fabricRow?.config as FabricRowConfig | undefined)
   if (!Array.isArray(descriptors) || descriptors.length === 0) return
   const { checkRequiredPatches } = await import('@oh-my-dsh/cordis-fabric')
   checkRequiredPatches(descriptors as FabricPatchStub[])
@@ -116,7 +106,7 @@ function fabricRequiredRows(rows: FabricProfileRows): Array<{ id: string; disabl
   const out: Array<{ id: string; disabled?: boolean }> = []
   for (const [id, row] of rows) {
     if (id === 'cordis-fabric') continue
-    const raw = fabricDescriptors(row?.config as FabricRowConfig | undefined, () => {})
+    const raw = fabricDescriptors(row?.config as FabricRowConfig | undefined)
     if (Array.isArray(raw) && raw.length > 0) {
       const entry: { id: string; disabled?: boolean } = { id }
       if (typeof row?.disabled === 'boolean') entry.disabled = row.disabled
@@ -159,12 +149,12 @@ function logHookSummary(descriptors: readonly FabricPatchStub[], runtime: { bind
 /**
  * Boot-completion patch check for both launch modes — the Fabric gate.
  * The launcher (fabric-dsh) writes the composed descriptors to
- * $DSH_FABRIC_CONFIG, injects the loader hooks through a preload, and
+ * $FABRIC_CONFIG, injects the loader hooks through a preload, and
  * enables the Fabric-required rows through a generated overlay; this plugin
  * schedules the check one tick after mount (all tree entries have applied
  * by then).
  *
- * - fabric ON ($DSH_FABRIC_CONFIG present): a `required` patch that bound
+ * - fabric ON ($FABRIC_CONFIG present): a `required` patch that bound
  *   nothing fails the launch loud, like the patched profile-boot used to;
  *   on success the hook summary is logged;
  * - fabric OFF (plain `dsh`): Fabric-required rows stay disabled by default
@@ -174,7 +164,7 @@ function logHookSummary(descriptors: readonly FabricPatchStub[], runtime: { bind
  * @param ctx - the owning context (effects ride its fiber).
  */
 export function scheduleRequiredPatchCheck(ctx: Context): void {
-  const configPath = process.env.DSH_FABRIC_CONFIG
+  const configPath = process.env.FABRIC_CONFIG
   ctx.effect(() => {
     const timer = setTimeout(() => {
       void (async () => {

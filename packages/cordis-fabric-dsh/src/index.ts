@@ -46,6 +46,6 @@ export async function apply(ctx: Context): Promise<void> {
   await ctx.plugin(FabricCommandsService)
   // Post-boot patch verification under the fabric-dsh launcher (no-op for
   // plain dsh): the launcher injects the hooks and writes the composed
-  // descriptors to $DSH_FABRIC_CONFIG; the Host plugin owns the loud check.
+  // descriptors to $FABRIC_CONFIG; the Host plugin owns the loud check.
   scheduleRequiredPatchCheck(ctx)
 }

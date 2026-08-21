@@ -11,7 +11,7 @@ const hookEntry = fileURLToPath(new URL('../../lib/node/hook-entry.js', import.m
 describe.skipIf(!existsSync(hookEntry))('cordis-fabric async module.register fallback (built lib)', () => {
   it('transforms ESM and CommonJS targets on the async hook path', () => {
     // tsconfig; the child must resolve against this repo's own tsconfig.
-    const childEnv: NodeJS.ProcessEnv = { ...process.env, DSH_FABRIC_FORCE_ASYNC_HOOKS: '1' }
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, FABRIC_FORCE_ASYNC_HOOKS: '1' }
     const result = spawnSync(process.execPath, [runner], {
       cwd: fileURLToPath(new URL('../../..', import.meta.url)),
       encoding: 'utf8',

@@ -54,7 +54,7 @@ await ctx.plugin(FabricDsh)
   disabled: false
 ```
 
-`installFabricBootstrap(rows)` 是面向同一组组合 descriptors 的 profile-bootstrap API;在当前 launcher 路径中,preload 会在目标 CLI 导入模块前完成安装。Handler 仍然是 plugin 在 runtime 注册的受信任代码。旧的 `config.patches` key 仍被接受,并会发出 warning。
+`installFabricBootstrap(rows)` 是面向同一组组合 descriptors 的 profile-bootstrap API;在当前 launcher 路径中,preload 会在目标 CLI 导入模块前完成安装。Handler 仍然是 plugin 在 runtime 注册的受信任代码。Patch descriptor 必须声明在 `config.fabric.patches` 下。
 
 `checkFabricRequiredPatches(rows)` 在 boot 后运行;当 `required: true` 的 patch 没有绑定时会 loud failure。Launcher 会为组合后的 profile 调度该检查;普通 `dsh` 启动不会自动启用 Fabric launch path。
 

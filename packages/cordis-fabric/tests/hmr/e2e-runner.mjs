@@ -156,7 +156,7 @@ async function bootTree(dir, hmrRoot, configPath) {
 installFabricHooks([patchInstrumentation(PATCH)])
 
 async function main() {
-  const dir = mkdtempSync(join(tmpdir(), `dsh-fabric-hmr-${mode}-`))
+  const dir = mkdtempSync(join(tmpdir(), `fabric-hmr-${mode}-`))
   try {
     writeFileSync(join(dir, 'fabric-consumer.mjs'), consumerSource(mode))
     writeFileSync(join(dir, 'cordis.yml'), [

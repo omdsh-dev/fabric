@@ -4,9 +4,9 @@
  *
  * The package exposes the patch-backed gap adapter for target domains with
  * no cooperative extension point: `FabricCompatService` (register, observe,
- * serve bundles) plus the load-time instrumentation builder. Everything
- * DSH-specific lives in `cordis-fabric-dsh`; this package depends only on
- * Cordis and `cordis-fabric`.
+ * serve bundles) plus the load-time instrumentation builder. Host-specific
+ * integrations live in the companion integration package; this package
+ * depends only on Cordis and `cordis-fabric`.
  * @module @oh-my-dsh/cordis-fabric-api
  */
 

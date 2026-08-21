@@ -15,7 +15,7 @@
 import type { FabricOperation, PatchId } from './types.ts'
 
 /** Global handle under which the bootstrap installs the bridge. */
-export const GLOBAL_BRIDGE_KEY = '__dshFabricBridge'
+export const GLOBAL_BRIDGE_KEY = '__fabricBridge'
 
 /** Call record published by transformed code and consumed by the runtime. */
 export interface FabricBridgeCall {

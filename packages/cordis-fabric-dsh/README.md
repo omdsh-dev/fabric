@@ -71,8 +71,8 @@ Enable the DSH integration row separately:
 `installFabricBootstrap(rows)` is the profile-bootstrap API for the same
 composed descriptors; in the current launcher path, the preload performs the
 installation before the target CLI imports modules. Handlers remain trusted
-runtime code registered by plugins. The deprecated `config.patches` key is
-still accepted with a warning.
+runtime code registered by plugins. Patch descriptors must be declared under
+`config.fabric.patches`.
 
 `checkFabricRequiredPatches(rows)` runs after boot and fails loudly when a
 `required: true` patch did not bind. The launcher schedules this check for the

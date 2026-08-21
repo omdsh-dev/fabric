@@ -34,10 +34,10 @@ import type {
 import { GLOBAL_BRIDGE_KEY } from '../bridge.ts'
 
 /** Identifier prefixes injected by this transform. */
-const ARGS = 'dshFabricArguments'
-const TRACED = 'dshFabricTraced'
-const CALL = 'dshFabricCall'
-const OUTER_ARGUMENTS = 'dshFabricOuterArguments'
+const ARGS = 'fabricArguments'
+const TRACED = 'fabricTraced'
+const CALL = 'fabricCall'
+const OUTER_ARGUMENTS = 'fabricOuterArguments'
 
 /**
  * Register the Fabric custom transform on an Orchestrion matcher. Both the
@@ -139,7 +139,7 @@ export function createFabricTransform(
       : undefined
     if (outerArgsName) mapOuterArguments(matched.body, outerArgsName)
 
-    // const dshFabricOuterArguments = arguments
+    // const fabricOuterArguments = arguments
     // Only arrows: the arrow's own lexical resolution makes `arguments` here
     // refer to the enclosing scope, preserving the body's outer reference.
     const capture: Statement | undefined = outerArgsName === undefined ? undefined : {
@@ -152,7 +152,7 @@ export function createFabricTransform(
       }],
     }
 
-    // const dshFabricArguments = <args>
+    // const fabricArguments = <args>
     // Regular functions rebuild from their own `arguments` object; arrows have
     // no own binding, so the array is assembled from the parameter patterns —
     // handler mutations then flow through apply() to the replayed body.
@@ -202,7 +202,7 @@ export function createFabricTransform(
         }],
       }
 
-    // const dshFabricTraced = () => (function () { <original body> }).apply(this, dshFabricArguments)
+    // const fabricTraced = () => (function () { <original body> }).apply(this, fabricArguments)
     const traced: Statement = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -247,7 +247,7 @@ export function createFabricTransform(
       }],
     }
 
-    // const dshFabricCall = { id, operation, arguments: dshFabricArguments, self, traced }
+    // const fabricCall = { id, operation, arguments: fabricArguments, self, traced }
     const call: Statement = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -267,7 +267,7 @@ export function createFabricTransform(
       }],
     }
 
-    // globalThis["__dshFabricBridge"]
+    // globalThis["__fabricBridge"]
     const bridge = (): Expression => ({
       type: 'MemberExpression',
       computed: true,
@@ -276,7 +276,7 @@ export function createFabricTransform(
       property: { type: 'Literal', value: GLOBAL_BRIDGE_KEY },
     })
 
-    // globalThis["__dshFabricBridge"] ? publish(dshFabricCall) : dshFabricTraced()
+    // globalThis["__fabricBridge"] ? publish(fabricCall) : fabricTraced()
     const publishCall = (): Expression => ({
       type: 'ConditionalExpression',
       test: bridge(),
@@ -308,7 +308,7 @@ export function createFabricTransform(
     // Async generators also accept async iterables.
     let publish: Statement
     if (matched.generator) {
-      const resultName = refs.unique('dshFabricResult')
+      const resultName = refs.unique('fabricResult')
       const isIterable = (symbol: 'iterator' | 'asyncIterator'): Expression => ({
         type: 'BinaryExpression',
         operator: '===',

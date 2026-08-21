@@ -22,7 +22,7 @@ if (!existsSync(compiledLauncher) || !existsSync(compiledPreload)) throw new Err
 const launcher = compiledLauncher
 const sourceBundlePackageJson = fileURLToPath(new URL('../../../../package.json', import.meta.url))
 
-const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-installed-'))
+const tempDir = mkdtempSync(join(tmpdir(), 'fabric-installed-'))
 const home = join(tempDir, 'home')
 const profileDir = join(home, 'profiles', 't1')
 const webProfileDir = join(home, 'profiles', 'web')
@@ -38,7 +38,7 @@ writeFileSync(join(dshPkg, 'package.json'), JSON.stringify({
 }, null, 2))
 writeFileSync(binFile, [
   "console.log(`FAKE-DSH argv=${JSON.stringify(process.argv.slice(2))}`)",
-  "console.log(`FAKE-DSH config=${process.env.DSH_FABRIC_CONFIG !== undefined} profile=${process.env.DSH_FABRIC_PROFILE}`)",
+  "console.log(`FAKE-DSH config=${process.env.FABRIC_CONFIG !== undefined} profile=${process.env.FABRIC_PROFILE}`)",
   '',
 ].join('\n'))
 
@@ -65,7 +65,7 @@ writeFileSync(join(proj, 'node_modules', 'js-yaml', 'index.js'), [
 ].join('\n'))
 
 // The profile's installed trio copy (the preload resolves it through
-// DSH_FABRIC_PROFILE): a stub cordis-fabric recording the descriptor count.
+// FABRIC_PROFILE): a stub cordis-fabric recording the descriptor count.
 const stubFabric = join(profileDir, 'node_modules', '@oh-my-dsh', 'cordis-fabric')
 mkdirSync(stubFabric, { recursive: true })
 writeFileSync(join(profileDir, 'package.json'), '{}\n')
@@ -113,8 +113,8 @@ function run(argv: string[], options: { cwd?: string; path?: string; launcher?: 
   const env: NodeJS.ProcessEnv = { ...process.env, DSH_HOME: home }
   delete env.DSH_SOURCE
   delete env.DSH_CLI
-  delete env.DSH_FABRIC_CONFIG
-  delete env.DSH_FABRIC_PROFILE
+  delete env.FABRIC_CONFIG
+  delete env.FABRIC_PROFILE
   if (options.dsh !== undefined) env.DSH_CLI = options.dsh
   if (options.path !== undefined) env.PATH = options.path
   const selectedLauncher = options.launcher ?? launcher
@@ -138,7 +138,7 @@ function expectBoot(out: { status: number; stdout: string; stderr: string }): vo
   expect(out.stdout).toContain(`profile=${profileDir}`)
   // ...and the preload installed the hooks from the profile's trio copy.
   expect(out.stdout).toContain('PROFILE-BOOT count=0')
-  expect(out.stderr).toContain('fabric-dsh: Fabric hooks installed (0 descriptor(s))')
+  expect(out.stderr).toContain('fabric: Fabric hooks installed (0 descriptor(s))')
 }
 
 function expectInstalledWeb(out: { status: number; stdout: string; stderr: string }): void {
@@ -149,7 +149,7 @@ function expectInstalledWeb(out: { status: number; stdout: string; stderr: strin
   expect(out.stdout).toContain('FAKE-DSH config=true')
   expect(out.stdout).toContain(`profile=${webProfileDir}`)
   expect(out.stdout).toContain('PROFILE-BOOT count=0')
-  expect(out.stderr).toContain('fabric-dsh: Fabric hooks installed (0 descriptor(s))')
+  expect(out.stderr).toContain('fabric: Fabric hooks installed (0 descriptor(s))')
 }
 
 describe('fabric-dsh installed mode (registry-installed dsh)', () => {

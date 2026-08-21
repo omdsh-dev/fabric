@@ -105,7 +105,7 @@ export function main({
     ],
     // Source mode runs from the source checkout: tsx resolves its tsconfig
     // there. Installed mode needs no pinned cwd: the published bin is plain ESM.
-    { stdio: 'inherit', ...(host.source ? { cwd: host.sourceRoot } : {}), env: { ...env, DSH_FABRIC_CONFIG: config.configPath, DSH_FABRIC_PROFILE: profile.profileDir, DSH_HOME: profile.dshHome } },
+    { stdio: 'inherit', ...(host.source ? { cwd: host.sourceRoot } : {}), env: { ...env, FABRIC_CONFIG: config.configPath, FABRIC_PROFILE: profile.profileDir, DSH_HOME: profile.dshHome } },
   )
   config.cleanup()
   if (result.error !== undefined) throw result.error

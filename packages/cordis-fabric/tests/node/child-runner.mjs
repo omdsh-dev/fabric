@@ -468,7 +468,7 @@ switch (caseName) {
       const rollbackUrl = new URL('../fixtures/node_modules/fabric-target-fixture/rollback.mjs', import.meta.url).href
       const m1 = await import(rollbackUrl)
       check('retransformEsmRollback initial value', m1.value, 1)
-      process.env.DSH_FABRIC_ROLLBACK_BOOM = '1'
+      process.env.FABRIC_ROLLBACK_BOOM = '1'
       let failed = false
       try {
         await retransformEsm(rollbackUrl)
@@ -476,7 +476,7 @@ switch (caseName) {
         failed = true
       }
       check('retransformEsmRollback re-import fails', failed, true)
-      delete process.env.DSH_FABRIC_ROLLBACK_BOOM
+      delete process.env.FABRIC_ROLLBACK_BOOM
       // The evicted entry was restored: import() serves the previous instance
       // from the cache instead of re-evaluating (which would have thrown again).
       const m2 = await import(rollbackUrl)

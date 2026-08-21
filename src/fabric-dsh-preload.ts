@@ -1,7 +1,7 @@
 /**
  * fabric-dsh preload: installs the Fabric transformation hooks before the
  * CLI entry module loads. The composed descriptors are passed through
- * DSH_FABRIC_CONFIG (a JSON file written by the fabric-dsh command), so this
+ * FABRIC_CONFIG (a JSON file written by the Fabric launcher), so this
  * file stays host-source-agnostic.
  *
  * Source launches run `node --import tsx/esm --import <this file> apps/cli/src/bin.ts`;
@@ -11,7 +11,7 @@
  * patched profile-boot used to call installFabricBootstrap (boot prepare,
  * before any target import) — except no host source change is involved.
  *
- * The trio resolves from the profile when DSH_FABRIC_PROFILE is set: the
+ * The trio resolves from the profile when FABRIC_PROFILE is set: the
  * profile's installed copy is authoritative at runtime — the Host plugin and
  * every consumer plugin import that same copy, so hooks, binding reports,
  * and handlers share one module instance. (A static import cannot express
@@ -28,10 +28,10 @@ import type { FabricPatchStub } from '@oh-my-dsh/cordis-fabric'
 
 type BootstrapFabric = (descriptors: FabricPatchStub[]) => unknown
 
-const configPath = process.env.DSH_FABRIC_CONFIG
+const configPath = process.env.FABRIC_CONFIG
 if (configPath !== undefined && configPath !== '') {
   let bootstrapFabric: BootstrapFabric
-  const profileDir = process.env.DSH_FABRIC_PROFILE
+  const profileDir = process.env.FABRIC_PROFILE
   if (profileDir !== undefined && profileDir !== '') {
     const resolveFrom = createRequire(pathToFileURL(join(profileDir, 'package.json')))
     ;({ bootstrapFabric } = await import(pathToFileURL(resolveFrom.resolve('@oh-my-dsh/cordis-fabric')).href))
@@ -40,8 +40,8 @@ if (configPath !== undefined && configPath !== '') {
   }
   const descriptors = JSON.parse(readFileSync(configPath, 'utf8')) as FabricPatchStub[]
   bootstrapFabric(descriptors)
-  // The launch marker: only a fabric-dsh launch reaches this line, so the
-  // boot output always tells the user whether this is a fabric-enabled
-  // launch or a plain dsh one.
-  process.stderr.write(`fabric-dsh: Fabric hooks installed (${descriptors.length} descriptor(s)) — this launch is fabric-enabled\n`)
+  // The launch marker: only a Fabric launcher reaches this line, so the
+  // boot output always tells the user whether this is a Fabric-enabled launch
+  // or a plain host one.
+  process.stderr.write(`fabric: Fabric hooks installed (${descriptors.length} descriptor(s)) — this launch is fabric-enabled\n`)
 }

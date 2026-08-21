@@ -1,7 +1,7 @@
 /**
- * Entry module for the preload-injection spec. The fabric-dsh launcher runs
- * the real CLI as `node --import tsx/esm --import <fabric-dsh-preload.ts>`
- * with DSH_FABRIC_CONFIG set, so by the time this file's imports evaluate,
+ * Entry module for the Fabric launcher. It runs the host CLI as
+ * `node --import tsx/esm --import <Fabric preload> bin.ts`
+ * with FABRIC_CONFIG set, so by the time this file's imports evaluate,
  * bootstrapFabric must already have installed the transformation hooks.
  *
  * The static import below proves that ordering: it goes through the hook,
@@ -13,9 +13,9 @@ import { readFileSync } from 'node:fs'
 import { add } from './node_modules/fabric-target-fixture/index.mjs'
 import { checkRequiredPatches, flushBindingReports, runtime } from '@oh-my-dsh/cordis-fabric'
 
-const configPath = process.env.DSH_FABRIC_CONFIG
+const configPath = process.env.FABRIC_CONFIG
 
-if (process.env.DSH_FABRIC_PROFILE !== undefined && process.env.DSH_FABRIC_PROFILE !== '') {
+if (process.env.FABRIC_PROFILE !== undefined && process.env.FABRIC_PROFILE !== '') {
   // Profile-authoritative resolution case: the stub package installed under
   // the profile dir records how many descriptors its bootstrapFabric
   // received. The real hooks never install, so the fixture import above ran

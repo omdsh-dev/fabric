@@ -1,5 +1,5 @@
 /**
- * Browser half of `cordis-fabric`: a dshClient plugin entry
+ * Browser half of `cordis-fabric`: a client plugin entry
  * that installs the bridge handle and mounts the platform-free
  * `FabricService` in the browser Cordis tree.
  *

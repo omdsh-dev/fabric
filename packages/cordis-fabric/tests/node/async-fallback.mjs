@@ -1,6 +1,6 @@
 /**
  * Child-process harness for the async `module.register` fallback: forces the
- * async hook path (DSH_FABRIC_FORCE_ASYNC_HOOKS=1) and runs the fixture
+ * async hook path (FABRIC_FORCE_ASYNC_HOOKS=1) and runs the fixture
  * through the loader-thread hook entry. Runs against the BUILT lib (plain
  * Node, no tsx) because the hook entry is a build artifact the loader thread
  * resolves next to the built loader.

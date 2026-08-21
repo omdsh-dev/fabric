@@ -28,7 +28,7 @@ import type { FabricPatchStub } from '../types.ts'
 export interface ServeBrowserTransformOptions {
   /**
    * Exact webserver path serving the transformed bundle (e.g.
-   * `/plugins/@deepseek-ai/dsh-client-ui-conversation/client.js`).
+   * `/plugins/@example/client-ui-conversation/client.js`).
    */
   route: string
   /**

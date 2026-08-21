@@ -118,7 +118,7 @@ afterEach(async () => {
 })
 
 /** The exact route the fixture bundle is served under. */
-const ROUTE = '/plugins/@deepseek-ai/dsh-client-ui-conversation/client.js'
+const ROUTE = '/plugins/@example/client-ui-conversation/client.js'
 
 /** The neutralizer patch: rewrites the fixture's bashToolviewSample.apply. */
 const neutralizer = {
@@ -194,7 +194,7 @@ describe('serveBrowserTransform', () => {
     const { port } = await boot({ route: ROUTE, patch }, pathToFileURL(configPath).href)
     const res = await fetch(`http://127.0.0.1:${port}${ROUTE}`)
     expect(res.status).toBe(200)
-    expect(await res.text()).toContain('__dshFabricBridge')
+    expect(await res.text()).toContain('__fabricBridge')
   })
 
   it('serves the transformed bundle at the exact path', async () => {
@@ -205,7 +205,7 @@ describe('serveBrowserTransform', () => {
     const body = await res.text()
     // The sample's apply was rewritten into a bridge call: the served bytes
     // carry the fabric bridge handle, and the sample name is preserved.
-    expect(body).toContain('__dshFabricBridge')
+    expect(body).toContain('__fabricBridge')
     expect(body).toContain('bashToolviewSample')
   })
 
@@ -219,7 +219,7 @@ describe('serveBrowserTransform', () => {
 
   it('leaves every other /plugins path to the fallback', async () => {
     const { port } = await boot({ route: ROUTE, patch: neutralizer })
-    const res = await fetch(`http://127.0.0.1:${port}/plugins/@deepseek-ai/dsh-client-connection/client.js`)
+    const res = await fetch(`http://127.0.0.1:${port}/plugins/@example/client-connection/client.js`)
     expect(res.status).toBe(404)
   })
 
@@ -231,8 +231,8 @@ describe('serveBrowserTransform', () => {
       res.end('prefix-owner')
     } })
     const exact = await fetch(`http://127.0.0.1:${port}${ROUTE}`)
-    expect(await exact.text()).toContain('__dshFabricBridge')
-    const other = await fetch(`http://127.0.0.1:${port}/plugins/@deepseek-ai/dsh-client-connection/client.js`)
+    expect(await exact.text()).toContain('__fabricBridge')
+    const other = await fetch(`http://127.0.0.1:${port}/plugins/@example/client-connection/client.js`)
     expect(await other.text()).toBe('prefix-owner')
   })
 
@@ -255,7 +255,7 @@ describe('serveBrowserTransform', () => {
     expect(res.status).toBe(200)
     const body = await res.text()
     // Untouched: no bridge marker, no rewritten apply.
-    expect(body).not.toContain('__dshFabricBridge')
+    expect(body).not.toContain('__fabricBridge')
     expect(body).toContain('bashToolviewSample')
   })
 
@@ -276,7 +276,7 @@ describe('serveBrowserTransform', () => {
     // Both rewrites landed: each patch id names its emitted bridge channel.
     expect(body).toContain('serve-test/neutralize-sample')
     expect(body).toContain('serve-test/neutralize-plan')
-    expect(body).toContain('__dshFabricBridge')
+    expect(body).toContain('__fabricBridge')
   })
 
   it('fails loud naming every unbound patch when only some stack', async () => {
@@ -294,7 +294,7 @@ describe('serveBrowserTransform', () => {
     expect(res.status).toBe(200)
     const body = await res.text()
     // Untouched: no bridge marker, no rewritten apply.
-    expect(body).not.toContain('__dshFabricBridge')
+    expect(body).not.toContain('__fabricBridge')
   })
 
   it('rejects patches targeting different files at registration', async () => {

@@ -185,7 +185,7 @@ export type WatchedBrowserTransform = (
 
 /**
  * Parse the watched patches file: a JSON array of static patch stubs (the
- * same shape the profile row's `config.patches` carries — JSON cannot
+ * same shape the profile row's `config.fabric.patches` carries — JSON cannot
  * express a `RegExp` `filePath`, so file paths are strings here). Every
  * malformed entry fails loud at build time rather than installing a
  * never-matching transform.

@@ -7,7 +7,7 @@
  *
  * The service is platform-free (no `node:*` imports) so the same class
  * serves the Node host and the browser Cordis tree. It is opt-in: nothing in
- * the default DSH composition mounts it, and a plugin only receives
+ * the default host composition mounts it, and a plugin only receives
  * `ctx.fabric` when it declares the service.
  * @module @oh-my-dsh/cordis-fabric/service
  */

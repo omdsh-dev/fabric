@@ -5,7 +5,7 @@
  * {@link installFabricHooks} rewrite the target functions, and this service
  * attaches and detaches the handlers in the shared runtime.
  *
- * The service is opt-in: nothing in the default DSH composition mounts it,
+ * The service is opt-in: nothing in the default host composition mounts it,
  * and a plugin only receives `ctx.fabric` when it declares the service.
  * @module @oh-my-dsh/cordis-fabric
  */

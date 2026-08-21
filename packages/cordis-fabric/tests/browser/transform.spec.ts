@@ -54,7 +54,7 @@ describe('createBrowserTransform', () => {
     const source = readFileSync(id, 'utf8')
     const output = transform(source, id)
     expect(output).not.toBeNull()
-    expect(output!.code).toContain('globalThis["__dshFabricBridge"]')
+    expect(output!.code).toContain('globalThis["__fabricBridge"]')
     expect(output!.code).toContain('id: "web/before-add"')
     // The original body must be preserved inside the traced closure.
     expect(output!.code).toContain('return a + b')
@@ -68,9 +68,9 @@ describe('createBrowserTransform', () => {
 
   it('repoSourceResolver maps source-tree ids to the package identity', () => {
     const packageRoot = ['/repo', 'packages', 'client', 'x'].join('/')
-    const resolver = repoSourceResolver('@deepseek-ai/dsh-client-x', packageRoot, '0.0.1')
+    const resolver = repoSourceResolver('@example/client-x', packageRoot, '0.0.1')
     expect(resolver(`${packageRoot}/src/client/index.ts`))
-      .toEqual({ name: '@deepseek-ai/dsh-client-x', version: '0.0.1', path: 'src/client/index.ts' })
+      .toEqual({ name: '@example/client-x', version: '0.0.1', path: 'src/client/index.ts' })
     expect(resolver(`${['/repo', 'packages', 'client', 'y'].join('/')}/src/client/index.ts`)).toBeUndefined()
   })
 
@@ -84,7 +84,7 @@ describe('createBrowserTransform', () => {
     const source = readFileSync(id, 'utf8')
     const output = transform(source, id)
     expect(output).not.toBeNull()
-    expect(output!.code).toContain('globalThis["__dshFabricBridge"]')
+    expect(output!.code).toContain('globalThis["__fabricBridge"]')
   })
 
   it('strips TypeScript annotations and JSX before transforming .tsx sources', () => {
@@ -102,7 +102,7 @@ describe('createBrowserTransform', () => {
     const source = readFileSync(id, 'utf8')
     const output = transform(source, id)
     expect(output).not.toBeNull()
-    expect(output!.code).toContain('globalThis["__dshFabricBridge"]')
+    expect(output!.code).toContain('globalThis["__fabricBridge"]')
     expect(output!.code).not.toContain('<div>')
     // The source has no React import: the automatic runtime must keep the
     // emitted JSX self-contained instead of referencing an undefined React.
@@ -125,7 +125,7 @@ describe('createBrowserTransform', () => {
     const source = readFileSync(id, 'utf8')
     const output = transform(source, id)
     expect(output).not.toBeNull()
-    expect(output!.code).toContain('globalThis["__dshFabricBridge"]')
+    expect(output!.code).toContain('globalThis["__fabricBridge"]')
     expect(output!.code).not.toContain(': number')
     // The original body survives inside the traced closure.
     expect(output!.code).toContain('return a + b')
@@ -177,16 +177,16 @@ describe('createBrowserTransform', () => {
     const transform = createBrowserTransform([patchInstrumentation(patchCollision)], nodeModulesResolver())
     const id = `${fixtureDir}collision.js`
     const source = [
-      'const dshFabricCall = "outer"',
-      'export function readOuter() { return dshFabricCall }',
+      'const fabricCall = "outer"',
+      'export function readOuter() { return fabricCall }',
     ].join('\n')
     const output = transform(source, id)
     expect(output).not.toBeNull()
     // The injected record variable must not shadow the module-level binding
     // the moved body still resolves.
-    expect(output!.code).toContain('dshFabricCall_1')
-    expect(output!.code).toContain('const dshFabricCall = "outer"')
-    expect(output!.code).toContain('return dshFabricCall')
+    expect(output!.code).toContain('fabricCall_1')
+    expect(output!.code).toContain('const fabricCall = "outer"')
+    expect(output!.code).toContain('return fabricCall')
   })
 
   it('preserves an arrow body reading the enclosing arguments object', () => {
@@ -203,7 +203,7 @@ describe('createBrowserTransform', () => {
     // The arrow is transformed, and the outer `arguments` reference is
     // preserved through a capture statement before the traced body.
     expect(output!.code).toContain('id: "web/args-keep"')
-    expect(output!.code).toContain('dshFabricOuterArguments = arguments')
+    expect(output!.code).toContain('fabricOuterArguments = arguments')
     expect(output!.code).not.toContain('return arguments')
   })
 })

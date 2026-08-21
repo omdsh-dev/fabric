@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Fabric/Mixin-style extension layer over Orchestrion-JS for trusted Cordis plugins. The service is opt-in: nothing in the default DSH composition mounts it, and patches register through trusted code.
+Fabric/Mixin-style extension layer over Orchestrion-JS for trusted Cordis plugins. The service is opt-in: nothing in the default host composition mounts it, and patches register through trusted code.
 
 ## What it does
 
@@ -15,7 +15,7 @@ A trusted plugin (A) can change the behavior of another plugin's function (B) **
 | `around` | Decide whether the original body runs and optionally replace its result (call `invoke()` to delegate). |
 | `replace` | Own the call entirely; the original body only runs if the handler calls `invoke()`. |
 
-The source is layered inside the three packages rather than adding another package. `cordis-fabric/src/transform` owns platform-neutral instrumentation configuration and AST rewriting; `src/node` owns Node hooks, module identity, and loader-thread wire transport; `src/browser` owns browser transforms and runtime bundle serving; `src/hmr` owns HMR generation ownership and Node cache re-transformation; `src/testing` owns child-process fixtures. `cordis-fabric-api/src/compat` separates the cooperative contract, instrumentation builder, and service. `cordis-fabric-dsh/src/host`, `src/browser`, and `src/bootstrap` separate DSH facades, browser services, and profile assembly. The DSH catalog adapter is mounted by `cordis-fabric-dsh`, so the pure Fabric service has no catalog dependency.
+The source is layered inside the three packages rather than adding another package. `cordis-fabric/src/transform` owns platform-neutral instrumentation configuration and AST rewriting; `src/node` owns Node hooks, module identity, and loader-thread wire transport; `src/browser` owns browser transforms and runtime bundle serving; `src/hmr` owns HMR generation ownership and Node cache re-transformation; `src/testing` owns child-process fixtures. `cordis-fabric-api/src/compat` separates the cooperative contract, instrumentation builder, and service. The companion integration package's `src/host`, `src/browser`, and `src/bootstrap` entries provide host facades, browser services, and profile assembly. Its catalog adapter is mounted by that companion package, so the pure Fabric service has no catalog dependency.
 
 
 ## Installation and bootstrap
@@ -30,13 +30,13 @@ await ctx.plugin(FabricService)
 disposeHooks()
 ```
 
-`bootstrapFabric` validates the patches, builds their Orchestrion instrumentations, and installs the transformation hooks. In the `dsh` host, a `cordis-fabric` composition row carrying static descriptors under `config.fabric.patches` (id/target/operation — handlers are trusted code bound at registration) is bootstrapped automatically during `boot()` preparation, before any config-tree entry mounts; the deprecated `config.patches` key is still honored with a warning. `installFabricHooks` is the lower-level form when instrumentations are already built.
+`bootstrapFabric` validates the patches, builds their Orchestrion instrumentations, and installs the transformation hooks. In the host, a `cordis-fabric` composition row carrying static descriptors under `config.fabric.patches` (id/target/operation — handlers are trusted code bound at registration) is bootstrapped automatically during `boot()` preparation, before any config-tree entry mounts. `installFabricHooks` is the lower-level form when instrumentations are already built.
 
-A patch may set `required: true`: once the application boots and every target module has been imported, `checkRequiredPatches(patches)` fails loud, naming the patch id and its target, when a required patch's transform never rewrote anything — the `filePath` may be the wrong launch form (`src/index.ts` vs `lib/index.js`) or the function may have moved. The `dsh` host runs this check automatically after `boot()` completes. Several launch forms under one patch id are covered either by a RegExp `filePath` (e.g. `/^(src\/index\.ts|lib\/index\.js)$/`) or by the `filePaths` array convenience (each entry expands into its own instrumentation under the same id, one binding record per matched file). The load-time bindings the check is built on are recorded per transformed file and visible through `ctx.fabric.bindings(id?)` and each `list()` entry.
+A patch may set `required: true`: once the application boots and every target module has been imported, `checkRequiredPatches(patches)` fails loud, naming the patch id and its target, when a required patch's transform never rewrote anything — the `filePath` may be the wrong launch form (`src/index.ts` vs `lib/index.js`) or the function may have moved. The host runs this check automatically after `boot()` completes. Several launch forms under one patch id are covered either by a RegExp `filePath` (e.g. `/^(src\/index\.ts|lib\/index\.js)$/`) or by the `filePaths` array convenience (each entry expands into its own instrumentation under the same id, one binding record per matched file). The load-time bindings the check is built on are recorded per transformed file and visible through `ctx.fabric.bindings(id?)` and each `list()` entry.
 
 ```yaml
 # User overlay: keep the pure service row as the descriptor carrier. Its
-# package root has no Loader `apply`; enable the DSH integration row separately.
+# package root has no Loader `apply`; enable the host integration row separately.
 - id: cordis-fabric
   disabled: true
   config:
@@ -54,8 +54,8 @@ A patch may set `required: true`: once the application boots and every target mo
   disabled: false
 ```
 
-The DSH integration row mounts the Host facades. The core package's browser
-half (`./client`, implemented by `src/browser/client`) is a separate dshClient
+The host integration row mounts the Host facades. The core package's browser
+half (`./client`, implemented by `src/browser/client`) is a separate client
 artifact that installs `ctx.fabric` when its browser entry materializes; it does
 not turn the package root into a Loader plugin.
 
@@ -104,18 +104,18 @@ The registration is a fiber effect owned by the registering plugin: disposing th
 
 ## Browser build usage
 
-The host build seam (`clientBundle`) is owned by the DSH version selected by the profile; this package only provides the transform. A host integration wires the transform into its bundle step:
+The host build seam (`clientBundle`) is owned by the host version selected by the profile; this package only provides the transform. A host integration wires the transform into its bundle step:
 
 ```ts ignore-check
 import { createWatchedBrowserTransform, repoSourceResolver } from '@oh-my-dsh/cordis-fabric'
 
 const fabric = createWatchedBrowserTransform(
   new URL('./fabric.patches.json', import.meta.url).pathname,
-  repoSourceResolver('@deepseek-ai/dsh-client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
+  repoSourceResolver('@example/client-my-plugin', new URL('..', import.meta.url).pathname, '0.0.1'),
 )
 ```
 
-The patches file holds a JSON array of static patch stubs (the same shape the launcher's `config.patches` row carries; JSON cannot express a `RegExp` `filePath`, so file paths are strings), and a malformed file fails the build loudly. The transform registers the file in the bundler's watch graph on every module, so under `tsdown --watch` (`pnpm run dev:web`) an edit rebuilds the bundle with the new patch set — the build trigger — and the client-hmr chain (stat poll, `rebuilt` frame, invalidate/prefetch/fiber swap) delivers it to the browser. A static in-memory patch set can still use `createBrowserTransform` directly.
+The patches file holds a JSON array of static patch stubs (the same shape the profile row's `config.fabric.patches` carries; JSON cannot express a `RegExp` `filePath`, so file paths are strings), and a malformed file fails the build loudly. The transform registers the file in the bundler's watch graph on every module, so under `tsdown --watch` (`pnpm run dev:web`) an edit rebuilds the bundle with the new patch set — the build trigger — and the client-hmr chain (stat poll, `rebuilt` frame, invalidate/prefetch/fiber swap) delivers it to the browser. A static in-memory patch set can still use `createBrowserTransform` directly.
 
 The resolver maps the package's own source tree to its package identity; the upstream adapter is not used because it requires a `node_modules` boundary that repository source builds do not have. TypeScript sources are stripped to plain JavaScript before transformation (the transformer parses emitted JavaScript).
 

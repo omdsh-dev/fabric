@@ -25,7 +25,7 @@ describe('createWatchedBrowserTransform', () => {
   })
 
   function patchesFile(entries: unknown): string {
-    const root = mkdtempSync(join(tmpdir(), 'dsh-fabric-watched-'))
+    const root = mkdtempSync(join(tmpdir(), 'fabric-watched-'))
     roots.push(root)
     const path = join(root, 'fabric.patches.json')
     writeFileSync(path, typeof entries === 'string' ? entries : JSON.stringify(entries))
@@ -38,7 +38,7 @@ describe('createWatchedBrowserTransform', () => {
     const id = `${fixtureDir}index.mjs`
     const output = transform(readFileSync(id, 'utf8'), id)
     expect(output).not.toBeNull()
-    expect(output!.code).toContain('globalThis["__dshFabricBridge"]')
+    expect(output!.code).toContain('globalThis["__fabricBridge"]')
     expect(output!.code).toContain('id: "web/before-add"')
     expect(output!.code).toContain('operation: "before"')
     expect(output!.code).toContain('return a + b')
@@ -80,7 +80,7 @@ describe('createWatchedBrowserTransform', () => {
   })
 
   it('fails loud on an unreadable or malformed patches file', () => {
-    const root = mkdtempSync(join(tmpdir(), 'dsh-fabric-watched-'))
+    const root = mkdtempSync(join(tmpdir(), 'fabric-watched-'))
     roots.push(root)
     const missing = createWatchedBrowserTransform(join(root, 'absent.json'), nodeModulesResolver())
     expect(() => missing('export const x = 1', '/tmp/x/index.js')).toThrow(/cannot read watched patches file/)

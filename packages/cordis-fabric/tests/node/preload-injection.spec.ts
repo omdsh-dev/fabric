@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 
 /**
- * Preload injection equivalence: the fabric-dsh launcher runs the host CLI as
- * `node --import tsx/esm --import <fabric-dsh-preload.ts> bin.ts` with
- * DSH_FABRIC_CONFIG pointing at the composed descriptors. These cases spawn
+ * Preload injection equivalence: the Fabric launcher runs the host CLI as
+ * `node --import tsx/esm --import <Fabric preload> bin.ts` with
+ * `FABRIC_CONFIG` pointing at the composed descriptors. These cases spawn
  * that exact launcher shape and verify the preload bootstraps the Fabric
  * hooks before the entry module imports its targets — the same guarantee the
  * removed host patch (profile-boot installFabricBootstrap) used to provide.
@@ -28,7 +28,7 @@ const patch = {
   required: true,
 }
 
-const tempDir = mkdtempSync(join(tmpdir(), 'dsh-fabric-preload-'))
+const tempDir = mkdtempSync(join(tmpdir(), 'fabric-preload-'))
 const configPath = join(tempDir, 'fabric-config.json')
 writeFileSync(configPath, JSON.stringify([patch]))
 
@@ -39,10 +39,10 @@ function run(configEnv: string | undefined, profileEnv?: string): { stdout: stri
   // tsconfig (whose paths lack these packages); children must resolve
   // against this repo's own tsconfig so source-mode imports stay on src.
   const childEnv: NodeJS.ProcessEnv = { ...process.env }
-  if (configEnv === undefined) delete childEnv.DSH_FABRIC_CONFIG
-  else childEnv.DSH_FABRIC_CONFIG = configEnv
-  if (profileEnv === undefined) delete childEnv.DSH_FABRIC_PROFILE
-  else childEnv.DSH_FABRIC_PROFILE = profileEnv
+  if (configEnv === undefined) delete childEnv.FABRIC_CONFIG
+  else childEnv.FABRIC_CONFIG = configEnv
+  if (profileEnv === undefined) delete childEnv.FABRIC_PROFILE
+  else childEnv.FABRIC_PROFILE = profileEnv
   const result = spawnSync(process.execPath, ['--import', 'tsx/esm', '--import', preload, entry], {
     cwd: fileURLToPath(new URL('../../..', import.meta.url)),
     encoding: 'utf8',
@@ -52,25 +52,25 @@ function run(configEnv: string | undefined, profileEnv?: string): { stdout: stri
   return { stdout: result.stdout, stderr: result.stderr }
 }
 
-describe('cordis-fabric preload injection (fabric-dsh launcher shape)', () => {
+describe('cordis-fabric preload injection (Fabric launcher shape)', () => {
   it('bootstraps the hooks before the entry imports its targets', () => {
     const out = run(configPath)
     expect(out.stdout).toContain('BEFORE add(2,3)=5 AFTER add(2,3)=23')
   })
 
-  it('stays inert without DSH_FABRIC_CONFIG (host runs unmodified)', () => {
+  it('stays inert without FABRIC_CONFIG (host runs unmodified)', () => {
     const out = run(undefined)
     expect(out.stdout).toContain('NO-CONFIG bindings=0 add(2,3)=5')
   })
 
   it('prints the fabric-enabled launch marker only when the hooks install', () => {
     const enabled = run(configPath)
-    expect(enabled.stderr).toContain('fabric-dsh: Fabric hooks installed (1 descriptor(s))')
+    expect(enabled.stderr).toContain('fabric: Fabric hooks installed (1 descriptor(s))')
     const inert = run(undefined)
-    expect(inert.stderr).not.toContain('fabric-dsh:')
+    expect(inert.stderr).not.toContain('fabric:')
   })
 
-  it('resolves the trio from the profile when DSH_FABRIC_PROFILE is set', () => {
+  it('resolves the trio from the profile when FABRIC_PROFILE is set', () => {
     // A stub "cordis-fabric" under the profile dir records the descriptor
     // count its bootstrapFabric received; the preload must import THIS copy
     // (the profile's installed copy is authoritative at runtime) rather

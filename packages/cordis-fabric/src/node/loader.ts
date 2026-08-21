@@ -150,13 +150,13 @@ function moduleIdentity(urlOrPath: string): PackageIdentity | undefined {
  * tracking issue).
  */
 function supportsSyncHooks(): boolean {
-  // DSH_FABRIC_FORCE_ASYNC_HOOKS exercises the async `module.register`
+  // FABRIC_FORCE_ASYNC_HOOKS exercises the async `module.register`
   // fallback on runtimes that do have `registerHooks` (test seam).
-  if (process.env.DSH_FABRIC_FORCE_ASYNC_HOOKS === '1') return false
-  // DSH_FABRIC_FORCE_SYNC_HOOKS exercises the synchronous hooks on runtimes
+  if (process.env.FABRIC_FORCE_ASYNC_HOOKS === '1') return false
+  // FABRIC_FORCE_SYNC_HOOKS exercises the synchronous hooks on runtimes
   // without a competing loader-thread hook (test seam, symmetric with the
   // async override above; source-mode tests have no tsx `module.register`).
-  if (process.env.DSH_FABRIC_FORCE_SYNC_HOOKS === '1') return true
+  if (process.env.FABRIC_FORCE_SYNC_HOOKS === '1') return true
   if (typeof registerHooks !== 'function') return false
   const [major = 0, minor = 0, patch = 0] = process.versions.node.split('.').map(Number)
   if (major === 22) return minor > 22 || (minor === 22 && patch >= 3)
@@ -310,7 +310,7 @@ export function installFabricHooks(instrumentations: FabricInstrumentationConfig
   const syncHooks = supportsSyncHooks()
   if (!syncHooks) {
     if (asyncConfigPath === undefined) {
-      asyncConfigPath = join(tmpdir(), `dsh-fabric-config-${process.pid}.json`)
+      asyncConfigPath = join(tmpdir(), `fabric-config-${process.pid}.json`)
       scheduleAsyncConfigCleanup(asyncConfigPath)
     }
     installAsyncHooks(asyncConfigPath)

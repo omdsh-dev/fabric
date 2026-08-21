@@ -37,7 +37,7 @@ export default [
       client: 'src/browser/client/index.ts',
     },
     outDir: 'lib',
-    // Browser half ships in the dsh closure-factory artifact: the web shell
+    // Browser half ships in the host closure-factory artifact: the web shell
     // loads /plugins/<id>/client.js as a classic script and resolves value
     // imports through the loader module table (require), so the bundle
     // registers window.__ModuleLoader__.load({id, factory}) and keeps

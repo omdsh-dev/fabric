@@ -209,7 +209,7 @@ export function composeFabricConfig({
   for (const [id, row] of rows) {
     const config = isRecord(row.config) ? row.config : undefined
     const fabric = config !== undefined && isRecord(config.fabric) ? config.fabric : undefined
-    const declared = fabric?.patches ?? config?.patches
+    const declared = fabric?.patches
     if (!Array.isArray(declared)) continue
     for (const patch of declared) {
       if (isRecord(patch) && typeof patch.id === 'string') byId.set(patch.id, patch as IdentifiedPatch)
@@ -218,7 +218,7 @@ export function composeFabricConfig({
   }
   const patches = [...byId.values()]
 
-  const temp = mkdtempSync(join(tmpdir(), 'dsh-fabric-config-'))
+  const temp = mkdtempSync(join(tmpdir(), 'fabric-config-'))
   const configPath = join(temp, 'config.json')
   writeFileSync(configPath, JSON.stringify(patches))
   const enablePath = join(temp, 'enable.yaml')
