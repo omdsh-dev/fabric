@@ -1,11 +1,11 @@
-# RFC: dsh-external-fabric — repository purpose, architecture, and decision record
+# RFC: dsh-external-stent — repository purpose, architecture, and decision record
 
 English | [中文](README.zh.md)
 
 - Status: **living document** (each section records the decision and its history)
-- Scope: this standalone Fabric extension workspace
+- Scope: this standalone Stent extension workspace
 - Upstream anchors: deepseek-harness snapshots `7b9644f2` (0812) / `9f9e2782a4` (0813),
-  fork tip `65bcaf9902` (`feat-fabric`)
+  fork tip `65bcaf9902` (`feat-stent`)
 
 This document explains *why* this repository is shaped the way it is. Every
 non-obvious arrangement below was reached through a concrete failure recorded
@@ -14,22 +14,22 @@ than its file layout.
 
 ---
 
-## 1. Purpose: an external Fabric extension, not a fork
+## 1. Purpose: an external Stent extension, not a fork
 
-deepseek-harness is a private monorepo. The Fabric/Mixin extension layer lives
+deepseek-harness is a private monorepo. The Stent/Mixin extension layer lives
 there as three implementation packages, but a consumer cannot install them from
 the registry. This repository externalizes those three packages and publishes
-the `@oh-my-dsh/cordis-fabric-pack` carrier so consumers can install the complete bundle
+the `@oh-my-dsh/stent-pack` carrier so consumers can install the complete bundle
 through the official plugin channel:
 
 ```
-dsh plugin --profile <p> add @oh-my-dsh/cordis-fabric-pack
+dsh plugin --profile <p> add @oh-my-dsh/stent-pack
 ```
 
 **Boundary (hard rule):** the workspace contains exactly three complete
-implementation packages — `cordis-fabric` (pure transformation service),
-`cordis-fabric-api` (pure compat facade), and `cordis-fabric-dsh` (DSH-facing
-facades, invariant, profile bootstrap). The root `@oh-my-dsh/cordis-fabric-pack` is a
+implementation packages — `stent` (pure transformation service),
+`stent-api` (pure compat facade), and `stent-dsh` (DSH-facing
+facades, invariant, profile bootstrap). The root `@oh-my-dsh/stent-pack` is a
 separately publishable carrier, not a fourth implementation package. Anything
 else — including the official `@deepseek-ai/dsh-tool-cordis` toolset — remains
 an upstream dependency and is not republished here.
@@ -37,8 +37,8 @@ an upstream dependency and is not republished here.
 ## 2. Host integration: launcher-provided wiring
 
 The three packages install hooks and mount facades through the compiled launcher.
-`src/fabric-dsh.ts` compiles to `lib/fabric-dsh.js`, while
-`src/fabric-dsh-preload.ts` compiles to `lib/fabric-dsh-preload.js`; the launcher
+`src/stent-dsh.ts` compiles to `lib/stent-dsh.js`, while
+`src/stent-dsh-preload.ts` compiles to `lib/stent-dsh-preload.js`; the launcher
 injects that compiled preload before the official CLI loads. No host patch
 checkout is required.
 
@@ -47,15 +47,15 @@ installing the trio (`dsh plugin add`), bundle roster rows and dependencies,
 catalog generation, invariant/gate exemptions for trio-in-workspace, and all
 documentation (`README*`, `docs/`, `.agents/`). What remains is what no channel
 can provide: launcher bootstrap (`apps/cli/src/profile-boot.ts` calls
-`installFabricBootstrap` before any target import and
-`checkFabricRequiredPatches` after boot), the `clientBundle` source-transform
+`installStentBootstrap` before any target import and
+`checkStentRequiredPatches` after boot), the `clientBundle` source-transform
 build seam (`packages/client/tsdown.client.ts`), catalog entries compiled into
 the official `tool-cordis` package, their tests, and the pnpm-policy seams.
 
 ### 2.1 The disabled opt-in rows
 
-The web-app bundle layer inserts `cordis-fabric` / `cordis-fabric-dsh` rows as
-**disabled opt-ins**: the pure `cordis-fabric` package is a library with no
+The web-app bundle layer inserts `stent` / `stent-dsh` rows as
+**disabled opt-ins**: the pure `stent` package is a library with no
 plugin `apply`, so an enabled row fails every boot ("invalid plugin"). A
 profile opts in by enabling the rows; the bundle layer applies on every boot,
 so pre-existing profiles are covered without edits.
@@ -73,13 +73,13 @@ host-specific workaround is required.
 
 ## 3. Install model: npm bundle
 
-The publishable root bundle `@oh-my-dsh/cordis-fabric-pack` declares the three published
+The publishable root bundle `@oh-my-dsh/stent-pack` declares the three published
 npm implementation packages:
 
 ```
-@oh-my-dsh/cordis-fabric@^0.1.1
-@oh-my-dsh/cordis-fabric-api@^0.1.1
-@oh-my-dsh/cordis-fabric-dsh@^0.1.1
+@oh-my-dsh/stent@^0.1.1
+@oh-my-dsh/stent-api@^0.1.1
+@oh-my-dsh/stent-dsh@^0.1.1
 ```
 
 The same tag workflow publishes the root carrier after those three packages,
@@ -88,16 +88,16 @@ so its semver dependencies already exist on npm.
 This keeps installation to one npm package:
 
 ```sh
-dsh plugin --profile web add @oh-my-dsh/cordis-fabric-pack
+dsh plugin --profile web add @oh-my-dsh/stent-pack
 ```
 
-At installation, pnpm resolves those npm semver dependencies. At launch, `fabric-dsh` asks DSH's module-fallback healer to map the bundle's dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the preload resolve the same trio copies.
+At installation, pnpm resolves those npm semver dependencies. At launch, `stent-dsh` asks DSH's module-fallback healer to map the bundle's dependency closure into `$DSH_HOME/profiles/node_modules`, so the Profile and the preload resolve the same trio copies.
 
 - Host source installs declare the bundle in `apps/cli/package.json`; run the
   harness workspace's `pnpm install` and `pnpm run build`, then install the
-  published npm bundle through the plugin channel (joining `@oh-my-dsh/cordis-fabric-pack` to
-  `dsh.profile.bundles`) and enable the `cordis-fabric-dsh` row. Launches go
-  through the compiled `lib/fabric-dsh.js`.
+  published npm bundle through the plugin channel (joining `@oh-my-dsh/stent-pack` to
+  `dsh.profile.bundles`) and enable the `stent-dsh` row. Launches go
+  through the compiled `lib/stent-dsh.js`.
 - Consumer-side builds use the explicit root `build` script. The trio and the
   launcher are built with tsdown before packing; no install-time prepare build
   is required.
@@ -156,11 +156,11 @@ the factory). Plain ESM bundles cannot load there at all. Consequently both
 trio browser halves ship as closure factories:
 
 ```js
-window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require) => { ...; return module.exports; } })
+window.__ModuleLoader__.load({ id: "@oh-my-dsh/stent", factory: (require) => { ...; return module.exports; } })
 ```
 
 with `@deepseek-ai/cordis` external (a platform seed) and everything else
-inlined. `cordis-fabric` was converted first; `cordis-fabric-dsh` followed
+inlined. `stent` was converted first; `stent-dsh` followed
 (the same gap, fixed after the ex-setting install exposed the first one).
 Upstream never notices this — its monorepo builds both through the shared
 `clientBundle()` preset.
@@ -175,7 +175,7 @@ The sibling `omdsh-dev/ex-setting` bundle hit the same contract three times:
    one, or git installs serve the old artifact;
 3. cross-bundle value imports must not rely on a disabled row's factory —
    ex-setting inlines/avoids what the module table cannot answer, and installs
-   static styles directly instead of routing them through a Fabric publish the
+   static styles directly instead of routing them through a Stent publish the
    transform could not produce (browser-transform cannot match inside the
    closure artifact).
 
@@ -195,7 +195,7 @@ has registry `lib` artifacts, which drove the evolution below.
   the runtime rc.1 tree was uninstallable and the bundles are closure
   factories. After rc.6 became installable the real reason remained the
   factory format, so the specs now mount the **real services** through a test
-  module loader (`packages/cordis-fabric-dsh/tests/browser/module-loader.ts`): happy-dom provides `window`; the
+  module loader (`packages/stent-dsh/tests/browser/module-loader.ts`): happy-dom provides `window`; the
   `__ModuleLoader__` sink installs at helper module load; platform seeds
   (`cordis`, `ui-slots`, `react`) preload as ESM namespaces (the factory
   `require` is synchronous and node cannot `require` ESM);
@@ -215,7 +215,7 @@ The carrier root's `pnpm run lint` is scoped to its own `src/` launcher and runs
 
 | Commit | Decision |
 |---|---|
-| `1e04b1a`..`2a42254` | externalization: standalone Fabric bundle, self-contained template |
+| `1e04b1a`..`2a42254` | externalization: standalone Stent bundle, self-contained template |
 | `4018661`, `8ffaac4` | port the upstream three-package split + full host patch; HMR e2e |
 | `d9228c4`, `40600d4` | official plugin channel install; source-host install script |
 | `1ba7077`, `3331b80` | web-app bundle composes the rows; rows become disabled opt-ins |

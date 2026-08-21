@@ -1,42 +1,42 @@
-# RFC:dsh-external-fabric — 仓库目的、架构与决策记录
+# RFC:dsh-external-stent — 仓库目的、架构与决策记录
 
 [English](README.md) | 中文
 
 - 状态:**活文档**(每节记录决策及其历史)
-- 范围:本独立 Fabric 扩展仓库
-- 上游锚点:deepseek-harness 快照 `7b9644f2`(0812)/ `9f9e2782a4`(0813)、fork tip `65bcaf9902`(`feat-fabric`)
+- 范围:本独立 Stent 扩展仓库
+- 上游锚点:deepseek-harness 快照 `7b9644f2`(0812)/ `9f9e2782a4`(0813)、fork tip `65bcaf9902`(`feat-stent`)
 
 本文解释这个仓库**为什么**长成现在的样子。下面每一处非常规安排都来自提交历史中一次具体的事故;各节按仓库演化顺序组织,而不是按文件布局。
 
 ---
 
-## 1. 目的:外部化的 Fabric 扩展,而非 fork
+## 1. 目的:外部化的 Stent 扩展,而非 fork
 
-deepseek-harness 是私有 monorepo。Fabric/Mixin 扩展层在其中以三个实现包
+deepseek-harness 是私有 monorepo。Stent/Mixin 扩展层在其中以三个实现包
 存在,但消费者无法从 registry 安装它们。本仓库外部化这三个包,并发布
-`@oh-my-dsh/cordis-fabric-pack` carrier,使消费者能通过官方插件通道安装完整 bundle:
+`@oh-my-dsh/stent-pack` carrier,使消费者能通过官方插件通道安装完整 bundle:
 
 ```
-dsh plugin --profile <p> add @oh-my-dsh/cordis-fabric-pack
+dsh plugin --profile <p> add @oh-my-dsh/stent-pack
 ```
 
-**边界(硬规则):** 工作区包含恰好三个完整实现包——`cordis-fabric`(纯转换服务)、
-`cordis-fabric-api`(纯 compat facade)、`cordis-fabric-dsh`(DSH 面 facade、invariant、
-profile bootstrap)。根包 `@oh-my-dsh/cordis-fabric-pack` 是单独发布的 carrier,不是第四个实现包。
+**边界(硬规则):** 工作区包含恰好三个完整实现包——`stent`(纯转换服务)、
+`stent-api`(纯 compat facade)、`stent-dsh`(DSH 面 facade、invariant、
+profile bootstrap)。根包 `@oh-my-dsh/stent-pack` 是单独发布的 carrier,不是第四个实现包。
 官方 `@deepseek-ai/dsh-tool-cordis` 保持为上游依赖,不在此重新发布。
 
 ## 2. Host 集成:由 launcher 提供接线
 
-三个包通过编译后的 launcher 安装 hooks 并挂载 facade。`src/fabric-dsh.ts`
-编译为 `lib/fabric-dsh.js`，`src/fabric-dsh-preload.ts` 编译为
-`lib/fabric-dsh-preload.js`；launcher 在官方 CLI 加载前注入这个编译后的
+三个包通过编译后的 launcher 安装 hooks 并挂载 facade。`src/stent-dsh.ts`
+编译为 `lib/stent-dsh.js`，`src/stent-dsh-preload.ts` 编译为
+`lib/stent-dsh-preload.js`；launcher 在官方 CLI 加载前注入这个编译后的
 preload，不需要 host patch checkout。
 
-官方通道已经覆盖的内容被刻意排除:安装 trio(`dsh plugin add`)、bundle 行名册与依赖、catalog 生成、trio-in-workspace 的 invariant/gate 豁免、以及全部文档(`README*`、`docs/`、`.agents/`)。剩下的是任何通道都提供不了的:launcher bootstrap(`apps/cli/src/profile-boot.ts` 在任何目标导入之前调用 `installFabricBootstrap`、boot 后调用 `checkFabricRequiredPatches`)、`clientBundle` 源码 transform 构建接缝(`packages/client/tsdown.client.ts`)、编译进官方 `tool-cordis` 包的 catalog 条目、它们的测试、以及 pnpm 策略接缝。
+官方通道已经覆盖的内容被刻意排除:安装 trio(`dsh plugin add`)、bundle 行名册与依赖、catalog 生成、trio-in-workspace 的 invariant/gate 豁免、以及全部文档(`README*`、`docs/`、`.agents/`)。剩下的是任何通道都提供不了的:launcher bootstrap(`apps/cli/src/profile-boot.ts` 在任何目标导入之前调用 `installStentBootstrap`、boot 后调用 `checkStentRequiredPatches`)、`clientBundle` 源码 transform 构建接缝(`packages/client/tsdown.client.ts`)、编译进官方 `tool-cordis` 包的 catalog 条目、它们的测试、以及 pnpm 策略接缝。
 
 ### 2.1 disabled opt-in 行
 
-web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disabled opt-in**:纯 `cordis-fabric` 包是没有插件 `apply` 的库,enabled 的行每次 boot 都失败("invalid plugin")。profile 通过启用这些行 opt-in;bundle 层每次 boot 都应用,因此既有的 profile 无需编辑即被覆盖。
+web-app bundle 层把 `stent` / `stent-dsh` 行插入为 **disabled opt-in**:纯 `stent` 包是没有插件 `apply` 的库,enabled 的行每次 boot 都失败("invalid plugin")。profile 通过启用这些行 opt-in;bundle 层每次 boot 都应用,因此既有的 profile 无需编辑即被覆盖。
 
 ### 2.2 TSX 死胡同(已记录并撤销)
 
@@ -44,12 +44,12 @@ web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disab
 
 ## 3. 安装模型:npm bundle
 
-可发布的根 bundle `@oh-my-dsh/cordis-fabric-pack` 声明三个已发布的 npm 实现包：
+可发布的根 bundle `@oh-my-dsh/stent-pack` 声明三个已发布的 npm 实现包：
 
 ```
-@oh-my-dsh/cordis-fabric@^0.1.1
-@oh-my-dsh/cordis-fabric-api@^0.1.1
-@oh-my-dsh/cordis-fabric-dsh@^0.1.1
+@oh-my-dsh/stent@^0.1.1
+@oh-my-dsh/stent-api@^0.1.1
+@oh-my-dsh/stent-dsh@^0.1.1
 ```
 
 同一个 tag workflow 会在这三个包之后发布根 carrier,确保它的 semver 依赖已经存在于 npm。
@@ -57,12 +57,12 @@ web-app bundle 层把 `cordis-fabric` / `cordis-fabric-dsh` 行插入为 **disab
 这样安装只需一个 npm 包:
 
 ```sh
-dsh plugin --profile web add @oh-my-dsh/cordis-fabric-pack
+dsh plugin --profile web add @oh-my-dsh/stent-pack
 ```
 
-安装时由 pnpm 解析这些 npm semver 依赖;启动时 `fabric-dsh` 调用 DSH 的 module-fallback healer,把 bundle 的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 preload 解析到同一套 trio 副本。
+安装时由 pnpm 解析这些 npm semver 依赖;启动时 `stent-dsh` 调用 DSH 的 module-fallback healer,把 bundle 的依赖闭包映射到 `$DSH_HOME/profiles/node_modules`,使 Profile 和 preload 解析到同一套 trio 副本。
 
-- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装已发布的 npm bundle(把 `@oh-my-dsh/cordis-fabric-pack` 并入 `dsh.profile.bundles`)、启用 `cordis-fabric-dsh` 行——启动一律走编译后的 `lib/fabric-dsh.js`。
+- host 源码安装在 `apps/cli/package.json` 中声明 bundle;先执行 harness workspace 的 `pnpm install` 和 `pnpm run build`,再通过插件通道安装已发布的 npm bundle(把 `@oh-my-dsh/stent-pack` 并入 `dsh.profile.bundles`)、启用 `stent-dsh` 行——启动一律走编译后的 `lib/stent-dsh.js`。
 - 消费侧构建使用根目录显式的 `build` 脚本;trio 与 launcher 在打包前由 tsdown 构建,不需要安装期 `prepare`。
 
 ### 3.1 pnpm 11 供应链接缝
@@ -97,10 +97,10 @@ trio 一度声明 `host-contracts.ts` facade 加一个全局 `@deepseek-ai/cordi
 web shell 以 classic script 加载 `/plugins/<id>/client.js`,值导入通过 loader 模块表(factory 内的同步 `require`)解析。纯 ESM 产物在那里完全加载不起来。因此 trio 的两个浏览器半边都发布为 closure factory:
 
 ```js
-window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require) => { ...; return module.exports; } })
+window.__ModuleLoader__.load({ id: "@oh-my-dsh/stent", factory: (require) => { ...; return module.exports; } })
 ```
 
-`@deepseek-ai/cordis` 保持 external(平台 seed),其余全部内联。先改的是 `cordis-fabric`;随后 `cordis-fabric-dsh`(同样的缺口,在 ex-setting 安装暴露第一个之后修复)。上游从不察觉——其 monorepo 通过共享的 `clientBundle()` 预设构建两者。
+`@deepseek-ai/cordis` 保持 external(平台 seed),其余全部内联。先改的是 `stent`;随后 `stent-dsh`(同样的缺口,在 ex-setting 安装暴露第一个之后修复)。上游从不察觉——其 monorepo 通过共享的 `clientBundle()` 预设构建两者。
 
 ### 5.1 ex-setting 的三条教训(同一契约,外部仓库)
 
@@ -108,7 +108,7 @@ window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require
 
 1. 它的 `dsh.client` manifest 必须**嵌套**(`"dsh": { "client": ... }`),而非顶层 `dshClient` 字段——client-modules 扫描的是嵌套形式;
 2. 消费侧构建必须用 **prepare 配置**,而不是只改本地配置,否则 git 安装仍在供应旧产物;
-3. 跨 bundle 值导入不能指望 disabled 行的 factory——ex-setting 内联/避开模块表回答不了的东西,并把静态样式改为直接安装,而不是经由 Fabric publish(transform 无法匹配 closure 产物内部)。
+3. 跨 bundle 值导入不能指望 disabled 行的 factory——ex-setting 内联/避开模块表回答不了的东西,并把静态样式改为直接安装,而不是经由 Stent publish(transform 无法匹配 closure 产物内部)。
 
 ## 6. 测试策略
 
@@ -116,7 +116,7 @@ window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require
 
 - **serve.spec** 使用测试内置的 `node:http` 适配器提供 host `webServer` 服务,保留 exact/prefix 路由和真实 HTTP 响应覆盖,不再依赖 DSH host-webserver 测试包。
 - **hmr-e2e-runner** 通过翻转 `cordis.yml` 里行的 `disabled` 标志驱动 config HMR:vendor fork 的 `hmr.registerConfig` 与 include `internal/update` 是 fork 私有,**任何** registry 版本都没有(对照最新 1.0.16/1.0.6 验证过)。
-- **client spec** 最初 fake `CommandUiRuntime`/`SlotRegistry`,因为 runtime rc.1 依赖树装不了且 bundle 是 closure factory。rc.6 可装后真实原因只剩 factory 格式,于是 spec 通过测试模块加载器(`packages/cordis-fabric-dsh/tests/browser/module-loader.ts`)挂载**真实服务**:happy-dom 提供 `window`;`__ModuleLoader__` sink 在 helper 模块顶层安装;平台 seed(`cordis`、`ui-slots`、`react`)以 ESM namespace 预载(factory 的 `require` 是同步的,node 无法 require ESM);渲染专用的重型包 `ui-primitives` 用 stub;`materialize()` 以模块表 require 执行 factory(递归进入其他已注册 bundle、记忆化、`stripClientSuffix` 归一化 `pkg/client`)。Loader `baseUrl` 与 fixture URL 钉死为文件路径,因为 happy-dom 的 `location` 是 `http://localhost:3000`。
+- **client spec** 最初 fake `CommandUiRuntime`/`SlotRegistry`,因为 runtime rc.1 依赖树装不了且 bundle 是 closure factory。rc.6 可装后真实原因只剩 factory 格式,于是 spec 通过测试模块加载器(`packages/stent-dsh/tests/browser/module-loader.ts`)挂载**真实服务**:happy-dom 提供 `window`;`__ModuleLoader__` sink 在 helper 模块顶层安装;平台 seed(`cordis`、`ui-slots`、`react`)以 ESM namespace 预载(factory 的 `require` 是同步的,node 无法 require ESM);渲染专用的重型包 `ui-primitives` 用 stub;`materialize()` 以模块表 require 执行 factory(递归进入其他已注册 bundle、记忆化、`stripClientSuffix` 归一化 `pkg/client`)。Loader `baseUrl` 与 fixture URL 钉死为文件路径,因为 happy-dom 的 `location` 是 `http://localhost:3000`。
 
 ## 7. Lint 检查
 
@@ -128,7 +128,7 @@ Oxlint 从独立 workspace 根目录运行，使用与 DSH 一致的固定工具
 
 | 提交 | 决策 |
 |---|---|
-| `1e04b1a`..`2a42254` | 外部化:独立 Fabric bundle、自包含模板 |
+| `1e04b1a`..`2a42254` | 外部化:独立 Stent bundle、自包含模板 |
 | `4018661`、`8ffaac4` | 移植上游三包拆分 + 全量 host patch;HMR e2e |
 | `d9228c4`、`40600d4` | 官方插件通道安装;source-host 安装脚本 |
 | `1ba7077`、`3331b80` | web-app bundle 组合行;行改为 disabled opt-in |

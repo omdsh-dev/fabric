@@ -16,7 +16,7 @@
     "**/*.js",
     "**/*.mjs",
     "**/*.config.ts",
-    "packages/cordis-fabric/tests/fixtures/**"
+    "packages/stent/tests/fixtures/**"
   ],
   "overrides": [
     {

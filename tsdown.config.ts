@@ -7,8 +7,8 @@ import { defineConfig } from 'tsdown'
  */
 export default defineConfig({
   entry: {
-    'fabric-dsh': 'src/fabric-dsh.ts',
-    'fabric-dsh-preload': 'src/fabric-dsh-preload.ts',
+    'stent-dsh': 'src/stent-dsh.ts',
+    'stent-dsh-preload': 'src/stent-dsh-preload.ts',
   },
   outDir: 'lib',
   format: 'esm',

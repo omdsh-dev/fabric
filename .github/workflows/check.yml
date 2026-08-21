@@ -36,8 +36,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm run typecheck
+      - name: Lint
+        run: |
+          pnpm run lint
+          pnpm --filter @oh-my-dsh/stent run lint
+          pnpm --filter @oh-my-dsh/stent-api run lint
+          pnpm --filter @oh-my-dsh/stent-dsh run lint
 
       - name: Build
         run: pnpm run build

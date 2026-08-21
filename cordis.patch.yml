@@ -1,19 +1,19 @@
 # The bundle is explicit opt-in. The bundle carrier mounts the pure
-# transformation service (`cordis-fabric`) and the DSH integration package
-# (`cordis-fabric-dsh`) as profile rows, both disabled by default; enabling
-# them opts a profile into the Fabric/Mixin extension layer. Browser code is
+# transformation service (`stent`) and the DSH integration package
+# (`stent-dsh`) as profile rows, both disabled by default; enabling
+# them opts a profile into the Stent/Mixin extension layer. Browser code is
 # supplied by each package's own dshClient face. The DSH integration row also
 # owns the host catalog adapter; the pure service remains host-independent.
-# The pure `cordis-fabric-api` package is peer-only: Mods mount its compat
+# The pure `stent-api` package is peer-only: Mods mount its compat
 # facade themselves.
 #
 # The launcher/bootstrap and browser build seams must come from the DSH
 # version selected by the profile.
 - insert:
-    - id: cordis-fabric
-      name: '@oh-my-dsh/cordis-fabric'
+    - id: stent
+      name: '@oh-my-dsh/stent'
       disabled: true
 
-    - id: cordis-fabric-dsh
-      name: '@oh-my-dsh/cordis-fabric-dsh'
+    - id: stent-dsh
+      name: '@oh-my-dsh/stent-dsh'
       disabled: true

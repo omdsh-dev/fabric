@@ -5,23 +5,23 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@oh-my-dsh/cordis-fabric': workspace:*
-  '@oh-my-dsh/cordis-fabric-api': workspace:*
-  '@oh-my-dsh/cordis-fabric-dsh': workspace:*
+  '@oh-my-dsh/stent': workspace:*
+  '@oh-my-dsh/stent-api': workspace:*
+  '@oh-my-dsh/stent-dsh': workspace:*
 
 importers:
 
   .:
     dependencies:
-      '@oh-my-dsh/cordis-fabric':
+      '@oh-my-dsh/stent':
         specifier: workspace:*
-        version: link:packages/cordis-fabric
-      '@oh-my-dsh/cordis-fabric-api':
+        version: link:packages/stent
+      '@oh-my-dsh/stent-api':
         specifier: workspace:*
-        version: link:packages/cordis-fabric-api
-      '@oh-my-dsh/cordis-fabric-dsh':
+        version: link:packages/stent-api
+      '@oh-my-dsh/stent-dsh':
         specifier: workspace:*
-        version: link:packages/cordis-fabric-dsh
+        version: link:packages/stent-dsh
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
@@ -54,7 +54,7 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@22.20.1)(esbuild@0.28.2)(happy-dom@20.11.2)(tsx@4.23.12)
 
-  packages/cordis-fabric:
+  packages/stent:
     dependencies:
       '@apm-js-collab/code-transformer':
         specifier: ^0.18.1
@@ -100,14 +100,14 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@22.20.1)(esbuild@0.28.2)(happy-dom@20.11.2)(tsx@4.23.12)
 
-  packages/cordis-fabric-api:
+  packages/stent-api:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1-0
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
-      '@oh-my-dsh/cordis-fabric':
+      '@oh-my-dsh/stent':
         specifier: workspace:*
-        version: link:../cordis-fabric
+        version: link:../stent
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
@@ -124,7 +124,7 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@types/node@22.20.1)(esbuild@0.28.2)(happy-dom@20.11.2)(tsx@4.23.12)
 
-  packages/cordis-fabric-dsh:
+  packages/stent-dsh:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1-0
@@ -177,9 +177,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: ^0.1.0-rc.0
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))
-      '@oh-my-dsh/cordis-fabric':
+      '@oh-my-dsh/stent':
         specifier: workspace:*
-        version: link:../cordis-fabric
+        version: link:../stent
       react:
         specifier: ^18.2.0
         version: 18.2.0

@@ -1,6 +1,6 @@
 {
-  "name": "@oh-my-dsh/cordis-fabric-pack",
-  "description": "Fabric/Mixin extension workspace: installable profile bundle carrier over the cordis-fabric package trio",
+  "name": "@oh-my-dsh/stent-pack",
+  "description": "Stent/Mixin extension workspace: installable profile bundle carrier over the stent package trio",
   "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
@@ -10,21 +10,21 @@
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "https://github.com/omdsh-dev/fabric.git"
+    "url": "https://github.com/omdsh-dev/stent.git"
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "lib/fabric-dsh.js",
-    "lib/fabric-dsh.js.map",
-    "lib/fabric-dsh-preload.js",
-    "lib/fabric-dsh-preload.js.map",
+    "lib/stent-dsh.js",
+    "lib/stent-dsh.js.map",
+    "lib/stent-dsh-preload.js",
+    "lib/stent-dsh-preload.js.map",
     "cordis.patch.yml",
     "README.md"
   ],
   "scripts": {
-    "build": "pnpm --filter @oh-my-dsh/cordis-fabric run build && pnpm --filter @oh-my-dsh/cordis-fabric-api run build && pnpm --filter @oh-my-dsh/cordis-fabric-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
+    "build": "pnpm --filter @oh-my-dsh/stent run build && pnpm --filter @oh-my-dsh/stent-api run build && pnpm --filter @oh-my-dsh/stent-dsh run build && pnpm exec tsdown --config-loader unrun --config tsdown.config.ts",
     "lint": "oxlint --config .oxlintrc.json --type-check --deny-warnings src",
     "test": "vitest run"
   },
@@ -34,9 +34,9 @@
     }
   },
   "dependencies": {
-    "@oh-my-dsh/cordis-fabric": "^0.1.1",
-    "@oh-my-dsh/cordis-fabric-api": "^0.1.1",
-    "@oh-my-dsh/cordis-fabric-dsh": "^0.1.1"
+    "@oh-my-dsh/stent": "^0.1.1",
+    "@oh-my-dsh/stent-api": "^0.1.1",
+    "@oh-my-dsh/stent-dsh": "^0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
@@ -51,6 +51,6 @@
     "oxlint-tsgolint": "7.0.2001"
   },
   "bin": {
-    "fabric-dsh": "lib/fabric-dsh.js"
+    "stent-dsh": "lib/stent-dsh.js"
   }
 }

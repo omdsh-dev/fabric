@@ -7,5 +7,5 @@
     "incremental": false,
     "noEmit": true
   },
-  "include": ["src/fabric-dsh.ts", "src/fabric-dsh-preload.ts", "src/fabric-dsh/**/*.ts", "packages/*/src", "packages/*/tests"]
+  "include": ["src/stent-dsh.ts", "src/stent-dsh-preload.ts", "src/stent-dsh/**/*.ts", "packages/*/src", "packages/*/tests"]
 }

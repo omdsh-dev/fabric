@@ -1,6 +1,6 @@
 name: npm-publish
 
-# Publish the three Fabric implementation packages and the root bundle through
+# Publish the three Stent implementation packages and the root bundle through
 # npm Trusted Publishing (GitHub Actions OIDC). Configure this exact workflow
 # filename as the trusted publisher for each of the four npm packages on
 # npmjs.com. The Trusted Publisher owner and repository must be the GitHub
@@ -51,9 +51,9 @@ jobs:
           version="${RELEASE_TAG#v}"
           manifests=(
             package.json
-            packages/cordis-fabric/package.json
-            packages/cordis-fabric-api/package.json
-            packages/cordis-fabric-dsh/package.json
+            packages/stent/package.json
+            packages/stent-api/package.json
+            packages/stent-dsh/package.json
           )
 
           for manifest in "${manifests[@]}"; do
@@ -66,8 +66,12 @@ jobs:
             echo "verified ${name}@${package_version}"
           done
 
-      - name: Typecheck
-        run: pnpm run typecheck
+      - name: Lint
+        run: |
+          pnpm run lint
+          pnpm --filter @oh-my-dsh/stent run lint
+          pnpm --filter @oh-my-dsh/stent-api run lint
+          pnpm --filter @oh-my-dsh/stent-dsh run lint
 
       - name: Build
         run: pnpm run build
@@ -75,7 +79,7 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Publish Fabric packages and root bundle with OIDC
+      - name: Publish Stent packages and root bundle with OIDC
         run: |
           set -euo pipefail
           # No registry secret is configured. pnpm exchanges the GitHub
@@ -83,9 +87,9 @@ jobs:
           # Publish the implementation packages first so the root bundle's
           # semver dependencies already exist when its package is published.
           for dir in \
-            packages/cordis-fabric \
-            packages/cordis-fabric-api \
-            packages/cordis-fabric-dsh \
+            packages/stent \
+            packages/stent-api \
+            packages/stent-dsh \
             .
           do
             echo "publishing ${dir}"

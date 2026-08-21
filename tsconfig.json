@@ -20,14 +20,14 @@
     "noUnusedParameters": true,
     "types": ["node"],
     "paths": {
-      "@oh-my-dsh/cordis-fabric": ["./packages/cordis-fabric/src"],
-      "@oh-my-dsh/cordis-fabric-api": ["./packages/cordis-fabric-api/src"],
-      "@oh-my-dsh/cordis-fabric-dsh": ["./packages/cordis-fabric-dsh/src"]
+      "@oh-my-dsh/stent": ["./packages/stent/src"],
+      "@oh-my-dsh/stent-api": ["./packages/stent-api/src"],
+      "@oh-my-dsh/stent-dsh": ["./packages/stent-dsh/src"]
     }
   },
   "include": [
-    "src/fabric-dsh.ts",
-    "src/fabric-dsh-preload.ts",
-    "src/fabric-dsh/**/*.ts"
+    "src/stent-dsh.ts",
+    "src/stent-dsh-preload.ts",
+    "src/stent-dsh/**/*.ts"
   ]
 }

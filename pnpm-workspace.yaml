@@ -8,9 +8,9 @@ nodeLinker: hoisted
 # this workspace, overrides resolve the trio to local packages instead of
 # downloading or unpacking them.
 overrides:
-  '@oh-my-dsh/cordis-fabric': workspace:*
-  '@oh-my-dsh/cordis-fabric-api': workspace:*
-  '@oh-my-dsh/cordis-fabric-dsh': workspace:*
+  '@oh-my-dsh/stent': workspace:*
+  '@oh-my-dsh/stent-api': workspace:*
+  '@oh-my-dsh/stent-dsh': workspace:*
 
 allowBuilds:
   esbuild: true
