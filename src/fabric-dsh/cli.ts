@@ -14,7 +14,7 @@ export interface ResolvedHost {
   bin: string
   realBin: string
   cliPkgJson: string
-  fromCli: NodeRequire
+  fromCli: NodeJS.Require
 }
 
 /** Look up an executable on PATH (first hit), tolerating empty segments. */

@@ -118,7 +118,13 @@ window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require
 - **hmr-e2e-runner** 通过翻转 `cordis.yml` 里行的 `disabled` 标志驱动 config HMR:vendor fork 的 `hmr.registerConfig` 与 include `internal/update` 是 fork 私有,**任何** registry 版本都没有(对照最新 1.0.16/1.0.6 验证过)。
 - **client spec** 最初 fake `CommandUiRuntime`/`SlotRegistry`,因为 runtime rc.1 依赖树装不了且 bundle 是 closure factory。rc.6 可装后真实原因只剩 factory 格式,于是 spec 通过测试模块加载器(`packages/cordis-fabric-dsh/tests/browser/module-loader.ts`)挂载**真实服务**:happy-dom 提供 `window`;`__ModuleLoader__` sink 在 helper 模块顶层安装;平台 seed(`cordis`、`ui-slots`、`react`)以 ESM namespace 预载(factory 的 `require` 是同步的,node 无法 require ESM);渲染专用的重型包 `ui-primitives` 用 stub;`materialize()` 以模块表 require 执行 factory(递归进入其他已注册 bundle、记忆化、`stripClientSuffix` 归一化 `pkg/client`)。Loader `baseUrl` 与 fixture URL 钉死为文件路径,因为 happy-dom 的 `location` 是 `http://localhost:3000`。
 
-## 7. 时间线(节选)
+## 7. Lint 检查
+
+Oxlint 从独立 workspace 根目录运行，使用与 DSH 一致的固定工具链（`oxlint` 与 `oxlint-tsgolint`），启用选定的 TypeScript 类型感知规则，并将 warning 视为失败。生成的 `lib/` 产物、JavaScript fixture launcher 和构建配置不属于本 TypeScript lint 面。
+
+根 carrier 的 `pnpm run lint` 只检查自身的 `src/` launcher，并运行 Oxlint-tsgolint 的实验性 `--type-check` 诊断。三个实现包各自只暴露一个针对自身 source 的 `lint` 命令；测试由 `pnpm test` 负责，不再提供独立的 `typecheck` 或 `lint:fix` 命令。
+
+## 8. 时间线(节选)
 
 | 提交 | 决策 |
 |---|---|
@@ -134,7 +140,7 @@ window.__ModuleLoader__.load({ id: "@oh-my-dsh/cordis-fabric", factory: (require
 | `62ced22` | 撤销 TSX workaround(环境误诊) |
 | `3fd1a56` | happy-dom + ModuleLoader materializer;测试挂真实浏览器服务 |
 
-## 8. 后续工作
+## 9. 后续工作
 
 - 若 registry 将来发布 node 可导入的构建(纯 ESM 或 `src` 半边),测试模块加载器可删除,spec 直接 import 包。
 - 上游把 `createSnapshotStore` 移出 `dsh-client-runtime` 会缩小 seed 表。

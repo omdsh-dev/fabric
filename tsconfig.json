@@ -25,5 +25,9 @@
       "@oh-my-dsh/cordis-fabric-dsh": ["./packages/cordis-fabric-dsh/src"]
     }
   },
-  "files": []
+  "include": [
+    "src/fabric-dsh.ts",
+    "src/fabric-dsh-preload.ts",
+    "src/fabric-dsh/**/*.ts"
+  ]
 }

@@ -85,7 +85,7 @@
   },
   "scripts": {
     "build": "tsdown --config-loader unrun --config tsdown.config.ts",
-    "typecheck": "tsc --noEmit --pretty false"
+    "lint": "oxlint --config ../../.oxlintrc.json --type-check --deny-warnings src"
   },
   "dsh": {
     "client": {

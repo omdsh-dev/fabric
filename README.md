@@ -205,7 +205,13 @@ has registry `lib` artifacts, which drove the evolution below.
   Loader `baseUrl` and fixture URLs are pinned to file paths because
   happy-dom's `location` is `http://localhost:3000`.
 
-## 7. Timeline (abridged)
+## 7. Linting
+
+Oxlint runs from the standalone root with the pinned DSH toolchain (`oxlint` plus `oxlint-tsgolint`), enables the selected type-aware TypeScript rules, and treats warnings as failures. Generated `lib/` output, JavaScript fixture launchers, and build configs stay outside this TypeScript lint face.
+
+The carrier root's `pnpm run lint` is scoped to its own `src/` launcher and runs Oxlint-tsgolint's experimental `--type-check` diagnostics. Each implementation package exposes one source-scoped `lint` command for its own source; tests remain covered by `pnpm test`, and there is no separate `typecheck` or `lint:fix` command.
+
+## 8. Timeline (abridged)
 
 | Commit | Decision |
 |---|---|
@@ -221,7 +227,7 @@ has registry `lib` artifacts, which drove the evolution below.
 | `62ced22` | revert the TSX workarounds (environment misdiagnosis) |
 | `3fd1a56` | happy-dom + ModuleLoader materializer; real browser services in tests |
 
-## 8. Future work
+## 9. Future work
 
 - If the registry ever publishes node-importable builds (plain ESM or the
   `src` halves), the test module loader disappears and the specs import

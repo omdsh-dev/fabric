@@ -99,7 +99,7 @@ export function resolveProfile({
 }
 
 /** Resolve js-yaml from the profile first, then from the CLI package. */
-export function resolveYaml(profileDir: string, fromCli: NodeRequire): { requireFromProfile: NodeRequire; yaml: YamlApi } {
+export function resolveYaml(profileDir: string, fromCli: NodeJS.Require): { requireFromProfile: NodeJS.Require; yaml: YamlApi } {
   const requireFromProfile = createRequire(join(profileDir, 'package.json'))
   let yaml: YamlApi | undefined
   try { yaml = requireFromProfile('js-yaml') as YamlApi } catch { /* not in the profile */ }
@@ -166,7 +166,7 @@ export function composeFabricConfig({
   args: LauncherArgs
   dshHome: string
   profileDir: string
-  requireFromProfile: NodeRequire
+  requireFromProfile: NodeJS.Require
   yaml: YamlApi
 }): FabricConfig {
   const loadPatchLayer = createPatchLoader(yaml)
